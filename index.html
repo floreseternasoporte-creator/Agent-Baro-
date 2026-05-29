@@ -211,6 +211,14 @@ html,body{
 .cblock pre::-webkit-scrollbar{height:2px}
 .cblock pre::-webkit-scrollbar-thumb{background:var(--border2);border-radius:1px}
 
+/* Diff syntax coloring inside code blocks */
+.cblock pre .dl,.cblock pre span.r{color:#f87171}
+.cblock pre span.a{color:#4ade80}
+/* Rendered diff lines */
+.diff-del{display:block;background:rgba(248,113,113,.08);color:#f87171;padding:0 2px;border-left:2px solid #f87171;margin-left:-2px}
+.diff-add{display:block;background:rgba(74,222,128,.08);color:#4ade80;padding:0 2px;border-left:2px solid #4ade80;margin-left:-2px}
+.diff-ctx{display:block;color:var(--text2);padding:0 2px}
+
 /* Action chips */
 .chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
 .chip{
@@ -641,10 +649,22 @@ function md(text) {
   if (!text) return '';
   let h = esc(text);
 
-  // Fenced code blocks
+  // Fenced code blocks — diff gets colored lines
   h = h.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
     const id = 'c' + Math.random().toString(36).slice(2,7);
-    return `<div class="cblock"><div class="cblock-head"><span class="clang">${esc(lang||'code')}</span><button class="ccopy" id="${id}" onclick="cpCode(this)">Copiar</button></div><pre>${code.trimEnd()}</pre></div>`;
+    const trimmed = code.trimEnd();
+    let rendered;
+    if (lang === 'diff') {
+      rendered = trimmed.split('\n').map(line => {
+        if (line.startsWith('+')) return `<span class="diff-add">${line}</span>`;
+        if (line.startsWith('-')) return `<span class="diff-del">${line}</span>`;
+        if (line.startsWith('@@') || line.startsWith('---') || line.startsWith('+++')) return `<span style="color:var(--accent2)">${line}</span>`;
+        return `<span class="diff-ctx">${line}</span>`;
+      }).join('\n');
+    } else {
+      rendered = trimmed;
+    }
+    return `<div class="cblock"><div class="cblock-head"><span class="clang">${esc(lang||'code')}</span><button class="ccopy" id="${id}" onclick="cpCode(this)">Copiar</button></div><pre>${rendered}</pre></div>`;
   });
 
   // Inline code
@@ -1024,8 +1044,7 @@ function buildSysPrompt() {
 - Nombre: ${S.repoData.full_name}
 - Lenguaje: ${S.repoData.language || 'varios'}
 - Rama: ${S.branch}
-- Total de archivos: ${S.files.length}
-- Estructura:
+- Archivos indexados (${S.files.length}):
 \`\`\`
 ${S.files.map(f=>f.path).join('\n')}
 \`\`\`
@@ -1033,32 +1052,64 @@ ${S.files.map(f=>f.path).join('\n')}
 
   const instr = S.instructions ? `## Instrucciones del proyecto\n${S.instructions}\n` : '';
 
-  return `Eres DevAgent, un agente de software autonomo de maxima capacidad. Tu modelo de referencia es Manus AI.
+  return `Eres DevAgent, un agente de edicion de codigo de precision maxima, como Claude Code o Codex.
 
 ${repo}${instr}
 
-## Como operas
-- Eres completamente autonomo: ejecutas tareas sin pedir permiso
-- Cuando detectas problemas, los corriges directamente con codigo real y completo
-- Muestras cada archivo modificado con su path exacto como bloque de codigo
-- Eres directo, tecnico y eficiente
-- No usas frases vagas como "podrias" o "deberias" — tu lo haces
+## REGLA ABSOLUTA — EDICIONES QUIRURGICAS
+NUNCA reescribas un archivo completo. SIEMPRE haz ediciones minimas y precisas.
+
+Cuando modifiques codigo, usa EXACTAMENTE este formato para cada cambio:
+
+### Archivo: \`ruta/del/archivo.ext\`
+**Que cambia:** [descripcion en 1 linea de lo que hace este cambio]
+
+\`\`\`diff
+- linea que se elimina (copia exacta del original)
+- otra linea que se elimina
++ linea nueva que reemplaza
++ otra linea nueva
+\`\`\`
+
+O si el cambio es una insercion/reemplazo de bloque:
+
+**Busca este codigo** (lineas ~N):
+\`\`\`javascript
+[codigo exacto que existe actualmente en el archivo, con 2-3 lineas de contexto arriba y abajo]
+\`\`\`
+
+**Reemplaza por:**
+\`\`\`javascript
+[codigo nuevo que va en su lugar]
+\`\`\`
+
+## Reglas de formato de edicion
+- Muestra SOLO las lineas que cambian + 2-3 lineas de contexto alrededor
+- Si el cambio es en una funcion, muestra solo esa funcion, no todo el archivo
+- Si hay multiples cambios en el mismo archivo, agrupa todos bajo el mismo header de archivo
+- Cuando el cambio es pequeno (< 10 lineas), usa formato diff con + y -
+- Cuando el cambio es un bloque (funcion, clase, componente), usa "Busca / Reemplaza"
+- Jamas pongas [archivo completo] ni [resto del codigo sin cambios] ni comentarios similares
+- Si necesitas agregar codigo nuevo (no reemplazar), indica claramente DESPUES DE QUE LINEA va
+
+## Como analizar antes de editar
+Cuando el usuario pide un cambio:
+1. Identifica exactamente en que archivo(s) esta el codigo a modificar
+2. Localiza la funcion/componente/seccion especifica dentro del archivo
+3. Propone solo el cambio minimo necesario
+4. Explica en 1-2 lineas por que ese cambio resuelve el problema
 
 ## Capacidades
-- Analisis profundo de codigo: bugs, anti-patterns, vulnerabilidades, complejidad
-- Refactorizacion y optimizacion de rendimiento  
-- Escritura de tests unitarios e integracion
-- Documentacion tecnica y JSDoc
-- Migracion de tecnologias
-- Analisis de dependencias y seguridad OWASP
-- Creacion de Pull Requests con descripcion profesional
+- Edicion quirurgica de cualquier lenguaje
+- Deteccion precisa de bugs con su ubicacion exacta (archivo + linea aproximada)
+- Refactorizacion incremental sin romper el resto del codigo
+- Escritura de tests para funciones especificas
+- Analisis de seguridad con ubicacion exacta de vulnerabilidades
 
-## Formato
-- Usa Markdown completo: headers, listas, codigo
-- Para cada archivo modificado: bloque de codigo con el lenguaje
-- Estructura: contexto breve → problema identificado → solucion → codigo completo
-- Idioma: espanol, tono tecnico profesional
-- Sin emojis en las respuestas`;
+## Formato general
+- Idioma: espanol, tono tecnico directo
+- Sin emojis
+- Sin reescribir archivos completos bajo ninguna circunstancia`;
 }
 
 async function callAI(msg, onChunk) {
@@ -1104,19 +1155,19 @@ ${S.files.map(f=>f.path).join('\n')}
 \`\`\`
 ${codeCtx}
 
-Responde con:
+Responde con estas secciones exactas:
 
 ## Que hace este proyecto
-[1-2 lineas]
+[1-2 lineas de descripcion]
 
 ## Stack tecnologico
-[lista con las tecnologias detectadas]
+[lista puntual de tecnologias detectadas]
 
 ## Problemas criticos detectados
-[maximo 3 problemas con nombre del archivo y codigo afectado si aplica]
+Para cada problema indica: archivo exacto, linea aproximada, y fragmento del codigo afectado (no el archivo completo, solo el fragmento).
 
-## Accion prioritaria recomendada
-[la mejora mas importante con implementacion directa]`;
+## Edicion prioritaria recomendada
+La mejora mas importante. Usa formato "Busca / Reemplaza" mostrando SOLO las lineas a cambiar, no el archivo completo.`;
 
   const streamEl = mkStream();
 
@@ -1142,6 +1193,98 @@ Responde con:
 }
 
 // ═══════════════════════════════════════════
+// SMART FILE DISCOVERY
+// ═══════════════════════════════════════════
+
+// Extract semantic keywords from user message
+function extractKeywords(msg) {
+  const lower = msg.toLowerCase();
+  const keywords = new Set();
+
+  // Direct filename mentions (e.g. "app.js", "UserModel")
+  const fileMatch = lower.match(/[\w-]+\.\w{1,6}/g) || [];
+  fileMatch.forEach(m => keywords.add(m.replace(/\./g, '')));
+
+  // Strip common words, extract meaningful nouns
+  const stopWords = new Set(['el','la','los','las','de','del','en','un','una','que','por','para','con','sin','como','pero','arregla','corrige','busca','mira','revisa','cambia','agrega','quita','mueve','mejora','analiza','donde','esta','estan','esto','ese','esa','tiene','hace','hacer','haz','debe','quiero','necesito','ayuda','todo','nada','algo','siempre','nunca']);
+  const words = lower.replace(/[^\w\s]/g,' ').split(/\s+/).filter(w => w.length > 3 && !stopWords.has(w));
+  words.forEach(w => keywords.add(w));
+
+  return [...keywords];
+}
+
+// Score a file path against keywords (semantic matching)
+function scoreFile(filePath, keywords) {
+  const parts = filePath.toLowerCase().split(/[\/\.\-\_]/);
+  let score = 0;
+  for (const kw of keywords) {
+    for (const part of parts) {
+      if (part === kw) score += 10;           // exact match
+      else if (part.includes(kw)) score += 5; // substring
+      else if (kw.includes(part) && part.length > 3) score += 3; // reverse substring
+    }
+  }
+  return score;
+}
+
+// Search file content for keywords (requires content loaded)
+function scoreContent(content, keywords) {
+  if (!content) return 0;
+  const lower = content.toLowerCase();
+  let score = 0;
+  for (const kw of keywords) {
+    const count = (lower.match(new RegExp(kw, 'g')) || []).length;
+    score += Math.min(count, 5); // cap at 5 per keyword
+  }
+  return score;
+}
+
+// Main file discovery: find up to N most relevant files for a task
+async function findRelevantFiles(msg, maxFiles = 4) {
+  if (!S.ok || !S.files.length) return [];
+  const keywords = extractKeywords(msg);
+  if (!keywords.length) return pickKeyFiles(S.files).slice(0, 2);
+
+  // Phase 1: score by filename
+  const scored = S.files.map(f => ({ f, score: scoreFile(f.path, keywords) }));
+  scored.sort((a, b) => b.score - a.score);
+
+  // Always include files with score > 0, up to 8 candidates
+  const candidates = scored.filter(x => x.score > 0).slice(0, 8).map(x => x.f);
+
+  // If nothing found by name, try extension-based heuristics
+  if (!candidates.length) {
+    const extMap = {
+      style: ['.css','.scss','.sass','.less'], html: ['.html','.htm','.ejs','.hbs'],
+      route: ['route','controller','handler'], model: ['model','schema','entity'],
+      auth: ['auth','login','session','jwt','token'], api: ['api','endpoint','service'],
+      test: ['.test.','.spec.','__test__'], config: ['config','settings','env'],
+    };
+    const msgL = msg.toLowerCase();
+    for (const [key, patterns] of Object.entries(extMap)) {
+      if (msgL.includes(key)) {
+        const matches = S.files.filter(f => patterns.some(p => f.path.toLowerCase().includes(p)));
+        candidates.push(...matches.slice(0, 3));
+      }
+    }
+  }
+
+  // If still nothing, fall back to key files
+  if (!candidates.length) return pickKeyFiles(S.files).slice(0, 2);
+
+  // Phase 2: fetch top candidates and score by content
+  const withContent = [];
+  for (const f of candidates.slice(0, 5)) {
+    const content = await fetchFile(f.path);
+    const cs = content ? scoreContent(content, keywords) : 0;
+    withContent.push({ f, content, totalScore: scoreFile(f.path, keywords) * 2 + cs });
+  }
+  withContent.sort((a, b) => b.totalScore - a.totalScore);
+
+  return withContent.slice(0, maxFiles).map(x => ({ path: x.f.path, content: x.content }));
+}
+
+// ═══════════════════════════════════════════
 // SEND
 // ═══════════════════════════════════════════
 async function send() {
@@ -1156,44 +1299,47 @@ async function send() {
   addMsg('me', msg);
   S.history.push({ role: 'user', content: msg });
 
-  showActivity(true, 'Procesando tarea...');
+  showActivity(true, 'Analizando tarea...');
 
-  // Smart file fetching: detect mentioned files
   let enriched = msg;
+
   if (S.ok && S.files.length) {
-    const mentioned = S.files.filter(f => {
-      const name = f.path.toLowerCase();
-      const nm = f.path.split('/').pop().toLowerCase();
-      return msg.toLowerCase().includes(nm) || msg.toLowerCase().includes(name);
-    }).slice(0, 4);
+    // Step 1: find relevant files using semantic search
+    log('run', 'Buscando archivos relevantes', 'analizando palabras clave...');
+    const relevant = await findRelevantFiles(msg, 4);
 
-    if (mentioned.length) {
-      for (const f of mentioned) {
-        log('run', `Leyendo ${f.path}`, 'accediendo...');
-        const c = await fetchFile(f.path);
-        if (c) {
-          enriched += `\n\n### Contenido de ${f.path}\n\`\`\`\n${c.slice(0,3000)}\n\`\`\``;
-          updateLastLog('ok', `Archivo leido: ${f.path}`, `${c.split('\n').length} lineas`);
+    if (relevant.length) {
+      updateLastLog('ok', `${relevant.length} archivo(s) relevante(s) encontrado(s)`, relevant.map(r => r.path.split('/').pop()).join(', '));
+
+      // Step 2: fetch content for files we don't have yet
+      let fileContext = '';
+      for (const r of relevant) {
+        const content = r.content || await fetchFile(r.path);
+        if (content) {
+          log('run', `Leyendo ${r.path}`, `${content.split('\n').length} lineas`);
+          // Include full content if small, truncated if large
+          const lines = content.split('\n');
+          const snippet = lines.length > 200 ? lines.slice(0, 200).join('\n') + `\n... [${lines.length - 200} lineas mas]` : content;
+          fileContext += `\n\n---\n### ARCHIVO: ${r.path}\n\`\`\`\n${snippet}\n\`\`\``;
+          updateLastLog('ok', `Leido: ${r.path}`, `${lines.length} lineas`);
         }
       }
-    }
 
-    // If task mentions bug fixing or analysis, fetch key files
-    const isBigTask = /bug|fix|error|corrig|analiz|optimiz|refactor|secur|segur|test|audit/i.test(msg);
-    if (isBigTask && mentioned.length === 0) {
-      log('run', 'Buscando archivos relevantes', 'analizando tarea...');
-      const kf = pickKeyFiles(S.files);
-      for (const f of kf.slice(0,2)) {
-        const c = await fetchFile(f.path);
-        if (c) {
-          enriched += `\n\n### ${f.path}\n\`\`\`\n${c.slice(0,2000)}\n\`\`\``;
-          updateLastLog('ok', `Contexto: ${f.path}`, `${c.split('\n').length} lineas`);
-        }
+      if (fileContext) {
+        enriched = `${msg}
+
+## Contenido actual de los archivos relevantes
+${fileContext}
+
+## Instruccion de formato
+Ahora que tienes el codigo real, haz SOLO los cambios necesarios para resolver la tarea. NO reescribas archivos completos. Usa el formato "Busca / Reemplaza" o diff (+/-) mostrando unicamente las lineas que cambian con 2-3 lineas de contexto.`;
       }
+    } else {
+      log('info', 'Sin archivos especificos detectados', 'respuesta sin contexto de archivo');
     }
   }
 
-  log('run', 'Generando respuesta', 'procesando con IA...');
+  log('run', 'Generando edicion', 'procesando con IA...');
 
   const streamEl = mkStream();
   let result = '';
@@ -1202,11 +1348,10 @@ async function send() {
     result = await callAI(enriched, (text) => {
       result = text;
       patchStream(streamEl, text);
-      updateLastLog('run', 'Generando respuesta...', `${text.split(' ').length} palabras`);
     });
 
     finalStream(streamEl, result);
-    updateLastLog('ok', 'Tarea completada', '');
+    updateLastLog('ok', 'Listo', '');
     showActivity(false);
   } catch (e) {
     finalStream(streamEl, `**Error:** ${e.message}\n\nIntenta de nuevo.`);
