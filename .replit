@@ -1,4 +1,4 @@
-modules = ["web", "python-3.11"]
+modules = ["web"]
 [agent]
 expertMode = true
 stack = "BEST_EFFORT_FALLBACK"
@@ -37,3 +37,8 @@ externalPort = 80
 [deployment]
 deploymentTarget = "static"
 publicDir = "."
+
+[userenv]
+
+[userenv.shared]
+PORT = "3000"
