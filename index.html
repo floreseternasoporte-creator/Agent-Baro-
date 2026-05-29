@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d0f12">
+<title>DevAgent</title>
+<script src="https://js.puter.com/v2/"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0b;
+  --bg2:#111114;
+  --bg3:#18181c;
+  --bg4:#202026;
+  --border:#252529;
+  --border2:#32323a;
+  --text:#ececee;
+  --text2:#8a8a96;
+  --text3:#46464f;
+  --accent:#7c5cfc;
+  --accent2:#9b80ff;
+  --accent-glow:rgba(124,92,252,0.12);
+  --green:#22c55e;
+  --green-bg:rgba(34,197,94,0.08);
+  --red:#f87171;
+  --amber:#fbbf24;
+  --blue:#60a5fa;
+  --font:'Geist',sans-serif;
+  --font-display:'Playfair Display',serif;
+  --r:12px;
+  --r-lg:18px;
+  --r-xl:24px;
+}
+html,body{
+  height:100%;height:100dvh;
+  background:var(--bg);color:var(--text);
+  font-family:var(--font);font-size:14px;line-height:1.6;
+  overflow:hidden;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+}
+
+/* ══ SHELL ══ */
+#app{display:flex;flex-direction:column;height:100dvh;width:100vw;overflow:hidden}
+
+/* ══ TOPBAR ══ */
+#topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;
+  padding-top:env(safe-area-inset-top);
+  height:calc(52px + env(safe-area-inset-top));
+  background:var(--bg);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;z-index:10;
+}
+.top-left{display:flex;align-items:center;gap:10px}
+.logo-pill{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 14px;border-radius:30px;
+  background:var(--bg3);border:1px solid var(--border2);
+  font-size:14px;font-weight:500;letter-spacing:-.2px;
+}
+.logo-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--accent);flex-shrink:0;
+  box-shadow:0 0 6px var(--accent);
+}
+.logo-dot.connected{background:var(--green);box-shadow:0 0 6px var(--green)}
+.top-right{display:flex;align-items:center;gap:8px}
+.repo-pill{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 12px;border-radius:20px;
+  background:var(--bg3);border:1px solid var(--border2);
+  font-size:11px;color:var(--text2);cursor:pointer;
+  transition:all .15s;max-width:130px;overflow:hidden;
+}
+.repo-pill:active{border-color:var(--accent);color:var(--accent2)}
+.repo-pill svg{width:12px;height:12px;flex-shrink:0;opacity:.6}
+.repo-pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ══ MAIN CHAT ══ */
+#chat-wrap{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative}
+
+/* Empty state — centered greeting */
+#empty-state{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  pointer-events:none;
+  padding-bottom:80px;
+}
+#empty-state h1{
+  font-family:var(--font-display);
+  font-size:26px;font-weight:500;
+  color:var(--text);text-align:center;
+  line-height:1.3;letter-spacing:-.3px;
+}
+#empty-state.hidden{display:none}
+
+/* Messages */
+#messages{
+  flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:16px 14px 8px;
+  display:flex;flex-direction:column;gap:14px;
+}
+#messages::-webkit-scrollbar{width:0}
+
+.msg{display:flex;flex-direction:column;gap:5px}
+.msg-meta{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text3)}
+.msg-avatar{
+  width:22px;height:22px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:700;flex-shrink:0;
+}
+.msg-avatar.agent{background:var(--accent);color:#fff}
+.msg-avatar.user{background:var(--bg4);border:1px solid var(--border2);color:var(--text2)}
+.msg-body{
+  font-size:14px;line-height:1.7;color:var(--text);
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:12px 15px;
+  word-break:break-word;
+}
+.msg.user .msg-body{
+  background:var(--bg3);border-color:var(--border2);
+  margin-left:28px;
+}
+.msg-body strong{color:var(--text);font-weight:600}
+.msg-body code{
+  font-size:11.5px;background:var(--bg4);
+  padding:2px 6px;border-radius:5px;
+  border:1px solid var(--border2);color:var(--accent2);
+  font-family:'JetBrains Mono','Courier New',monospace;
+}
+.msg-body pre{
+  background:var(--bg);border:1px solid var(--border2);
+  border-radius:var(--r);padding:12px;margin:10px 0;
+  overflow-x:auto;font-family:'JetBrains Mono','Courier New',monospace;
+  font-size:11.5px;line-height:1.65;color:var(--text2);
+}
+.msg-body pre::-webkit-scrollbar{height:3px}
+.msg-body pre::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.msg-body ul,.msg-body ol{padding-left:18px;margin:6px 0}
+.msg-body li{margin:3px 0}
+
+/* Action chips on agent messages */
+.msg-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;padding-left:2px}
+.chip{
+  display:flex;align-items:center;gap:5px;
+  padding:5px 12px;border-radius:20px;
+  border:1px solid var(--border2);background:var(--bg3);
+  color:var(--text2);font:inherit;font-size:11.5px;cursor:pointer;
+  transition:all .15s;
+}
+.chip:active{border-color:var(--accent);color:var(--accent2);background:var(--accent-glow)}
+
+/* Thinking bubble */
+.thinking{
+  display:flex;align-items:center;gap:9px;
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:12px 15px;
+  font-size:13px;color:var(--text3);
+}
+.dots{display:flex;gap:4px}
+.dots span{
+  width:5px;height:5px;border-radius:50%;background:var(--accent2);
+  animation:pulse 1.4s infinite;
+}
+.dots span:nth-child(2){animation-delay:.2s}
+.dots span:nth-child(3){animation-delay:.4s}
+@keyframes pulse{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+
+/* Agent status bar — shows what agent is doing */
+#status-bar{
+  display:none;align-items:center;gap:8px;
+  padding:7px 14px;background:rgba(124,92,252,.06);
+  border-top:1px solid rgba(124,92,252,.15);
+  font-size:11.5px;color:var(--accent2);flex-shrink:0;
+}
+#status-bar.show{display:flex}
+#status-bar svg{width:13px;height:13px;animation:spin 1.5s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ══ INPUT BAR — Manus style ══ */
+#input-bar{
+  padding:10px 12px;
+  padding-bottom:calc(10px + env(safe-area-inset-bottom));
+  background:var(--bg);border-top:1px solid var(--border);
+  flex-shrink:0;
+}
+.input-box{
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:var(--r-xl);overflow:hidden;
+  transition:border-color .2s;
+}
+.input-box:focus-within{border-color:var(--accent)}
+#chat-input{
+  width:100%;padding:13px 15px 4px;
+  background:transparent;border:none;outline:none;
+  color:var(--text);font:inherit;font-size:14.5px;
+  resize:none;line-height:1.5;max-height:140px;
+  scrollbar-width:none;
+}
+#chat-input::placeholder{color:var(--text3)}
+#chat-input::-webkit-scrollbar{display:none}
+.input-actions{
+  display:flex;align-items:center;
+  padding:6px 8px 8px;gap:6px;
+}
+/* + button */
+.act-btn{
+  width:34px;height:34px;border-radius:50%;
+  border:1px solid var(--border2);background:transparent;
+  color:var(--text3);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+.act-btn:active{background:var(--bg3);color:var(--text)}
+.act-btn svg{width:18px;height:18px}
+/* GitHub icon button */
+#gh-btn{
+  width:34px;height:34px;border-radius:50%;
+  border:1px solid var(--border2);background:transparent;
+  color:var(--text3);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .2s;flex-shrink:0;
+}
+#gh-btn:active{background:var(--bg3)}
+#gh-btn.connected{
+  border-color:var(--green);color:var(--green);
+  background:var(--green-bg);
+}
+#gh-btn svg{width:17px;height:17px}
+.spacer{flex:1}
+/* Send */
+#send-btn{
+  width:36px;height:36px;border-radius:50%;
+  border:none;background:var(--accent);
+  color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+#send-btn:active{background:var(--accent2);transform:scale(.92)}
+#send-btn:disabled{opacity:.25;cursor:not-allowed;transform:none}
+#send-btn svg{width:15px;height:15px}
+
+/* ══ CONNECTORS SHEET ══ */
+#sheet-overlay{
+  position:fixed;inset:0;z-index:50;pointer-events:none;
+}
+#sheet-backdrop{
+  position:absolute;inset:0;background:rgba(0,0,0,.6);
+  opacity:0;transition:opacity .2s;
+}
+#sheet{
+  position:absolute;bottom:0;left:0;right:0;
+  background:var(--bg2);
+  border-radius:20px 20px 0 0;
+  border-top:1px solid var(--border2);
+  transform:translateY(100%);
+  transition:transform .28s cubic-bezier(.4,0,.2,1);
+  max-height:80dvh;overflow-y:auto;
+  padding-bottom:calc(16px + env(safe-area-inset-bottom));
+}
+#sheet-overlay.open{pointer-events:all}
+#sheet-overlay.open #sheet-backdrop{opacity:1}
+#sheet-overlay.open #sheet{transform:translateY(0)}
+
+.sheet-handle{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:10px auto 0}
+.sheet-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px 10px;
+}
+.sheet-title{font-size:15px;font-weight:600}
+.sheet-close{
+  width:28px;height:28px;border-radius:50%;
+  border:none;background:var(--bg4);color:var(--text2);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+.sheet-close svg{width:14px;height:14px}
+
+/* Manage row */
+.sheet-manage-row{padding:0 14px 8px;display:flex;flex-direction:column;gap:2px}
+.manage-btn{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:13px 14px;border-radius:var(--r);
+  background:var(--bg3);border:none;color:var(--text);font:inherit;
+  font-size:13px;cursor:pointer;width:100%;transition:background .15s;
+}
+.manage-btn:active{background:var(--bg4)}
+.manage-btn svg{width:14px;height:14px;color:var(--text3)}
+.manage-btn-left{display:flex;align-items:center;gap:10px}
+.manage-btn-icon{width:26px;height:26px;border-radius:7px;background:var(--bg4);display:flex;align-items:center;justify-content:center}
+.manage-btn-icon svg{width:14px;height:14px;color:var(--text2)}
+.chevron{opacity:.4}
+
+/* Connectors list */
+.sheet-section-label{
+  font-size:11px;font-weight:600;color:var(--text3);
+  text-transform:uppercase;letter-spacing:.7px;
+  padding:8px 18px 4px;
+}
+.connector-item{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 18px;border-bottom:1px solid var(--border);
+  cursor:pointer;transition:background .12s;
+}
+.connector-item:last-child{border-bottom:none}
+.connector-item:active{background:var(--bg3)}
+.conn-icon{
+  width:38px;height:38px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;border:1px solid var(--border2);
+}
+.conn-icon.gh{background:#24292e}
+.conn-icon.outlook-cal{background:#0072c6}
+.conn-icon.outlook-mail{background:#0078d4}
+.conn-icon.instagram{background:linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)}
+.conn-icon.gcal{background:#fff}
+.conn-icon svg{width:20px;height:20px}
+.conn-info{flex:1}
+.conn-name{font-size:13px;font-weight:500}
+.conn-sub{font-size:11px;color:var(--text3);margin-top:1px}
+.conn-action{flex-shrink:0}
+/* Toggle */
+.toggle{
+  width:44px;height:26px;border-radius:13px;
+  background:var(--bg4);border:1px solid var(--border2);
+  position:relative;cursor:pointer;transition:background .2s;
+  flex-shrink:0;
+}
+.toggle.on{background:var(--accent);border-color:var(--accent)}
+.toggle::after{
+  content:'';position:absolute;width:20px;height:20px;
+  border-radius:50%;background:#fff;top:2px;left:2px;
+  transition:transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.3);
+}
+.toggle.on::after{transform:translateX(18px)}
+/* Connect link */
+.connect-link{font-size:12px;color:var(--text3)}
+.beta-badge{
+  font-size:9px;padding:1px 6px;border-radius:4px;
+  background:var(--bg4);border:1px solid var(--border2);
+  color:var(--text3);margin-left:4px;
+}
+
+/* ══ CONNECT MODAL ══ */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);
+  display:none;align-items:flex-end;justify-content:center;
+  z-index:100;backdrop-filter:blur(6px);
+}
+.modal-overlay.open{display:flex}
+.modal{
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:20px 20px 0 0;width:100%;max-height:88dvh;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.modal-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 18px;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.modal-title{font-size:15px;font-weight:600}
+.modal-x{background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;border-radius:6px;display:flex}
+.modal-x:active{background:var(--bg3)}
+.modal-body{padding:18px;overflow-y:auto;flex:1}
+.modal-foot{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;border-top:1px solid var(--border);background:var(--bg3);flex-shrink:0;
+  padding-bottom:calc(14px + env(safe-area-inset-bottom));
+}
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:500}
+.form-input{
+  width:100%;padding:10px 13px;background:var(--bg3);
+  border:1px solid var(--border);border-radius:var(--r);
+  color:var(--text);font:inherit;font-size:13px;outline:none;
+  transition:border-color .15s;
+}
+.form-input:focus{border-color:var(--accent)}
+.form-input::placeholder{color:var(--text3)}
+.form-hint{font-size:11px;color:var(--text3);margin-top:4px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.btn{padding:9px 20px;border-radius:var(--r);border:none;font:inherit;font-size:13px;cursor:pointer;transition:all .15s}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.btn-ghost:active{border-color:var(--border2);background:var(--bg3)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:active{background:var(--accent2)}
+.steps{display:flex;margin-bottom:18px}
+.step{flex:1;text-align:center;padding:8px;border-bottom:2px solid var(--border);font-size:11px;color:var(--text3)}
+.step.done{border-bottom-color:var(--green);color:var(--green)}
+.step.active{border-bottom-color:var(--accent);color:var(--accent2)}
+.step-n{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:10px;font-weight:600;background:var(--bg4);margin-bottom:4px}
+.step.active .step-n{background:var(--accent);color:#fff}
+.step.done .step-n{background:var(--green-bg);color:var(--green)}
+.note{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:5px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOPBAR -->
+  <header id="topbar">
+    <div class="top-left">
+      <div class="logo-pill">
+        <div class="logo-dot" id="status-dot"></div>
+        DevAgent
+      </div>
+    </div>
+    <div class="top-right">
+      <div class="repo-pill" id="repo-pill" onclick="openConnectModal()" style="display:none">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9z"/></svg>
+        <span id="repo-pill-name">repo</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- CHAT -->
+  <div id="chat-wrap">
+    <!-- Empty greeting -->
+    <div id="empty-state">
+      <h1>¿En qué puedo<br>ayudarte?</h1>
+    </div>
+    <!-- Messages -->
+    <div id="messages"></div>
+    <!-- Agent doing things -->
+    <div id="status-bar">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M8 2.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM.5 8a7.5 7.5 0 1115 0 7.5 7.5 0 01-15 0z"/></svg>
+      <span id="status-text">El agente está trabajando...</span>
+    </div>
+  </div>
+
+  <!-- INPUT BAR -->
+  <div id="input-bar">
+    <div class="input-box">
+      <textarea id="chat-input" rows="1"
+        placeholder="Asigna una tarea o pregunta lo que quieras"
+        onkeydown="handleKey(event)"
+        oninput="resize(this)"></textarea>
+      <div class="input-actions">
+        <!-- + button -->
+        <button class="act-btn" onclick="toggleSheet()" aria-label="Más opciones">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>
+        </button>
+        <!-- GitHub button -->
+        <button id="gh-btn" onclick="openConnectModal()" aria-label="GitHub">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        </button>
+        <div class="spacer"></div>
+        <!-- Send -->
+        <button id="send-btn" onclick="send()" disabled aria-label="Enviar">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1.5l13 6.5-13 6.5V9l9-2.5L1.5 4V1.5z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONNECTORS SHEET (+ button) -->
+  <div id="sheet-overlay">
+    <div id="sheet-backdrop" onclick="closeSheet()"></div>
+    <div id="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <span class="sheet-title">Conectores</span>
+        <button class="sheet-close" onclick="closeSheet()">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+        </button>
+      </div>
+
+      <div class="sheet-manage-row">
+        <button class="manage-btn" onclick="closeSheet();openConnectModal()">
+          <span class="manage-btn-left">
+            <span class="manage-btn-icon">
+              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>
+            </span>
+            Agregar conectores
+          </span>
+          <svg class="chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06L7.28 12.78a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+        </button>
+        <button class="manage-btn" style="margin-top:2px">
+          <span class="manage-btn-left">
+            <span class="manage-btn-icon">
+              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 7.5a1 1 0 100 2 1 1 0 000-2zm0-3a1 1 0 100 2 1 1 0 000-2zM3.5 12.5a1 1 0 112 0 1 1 0 01-2 0zM9 7.25a.75.75 0 000 1.5h5.25a.75.75 0 000-1.5H9zm0-3a.75.75 0 000 1.5h5.25a.75.75 0 000-1.5H9zm0 6a.75.75 0 000 1.5h5.25a.75.75 0 000-1.5H9z"/></svg>
+            </span>
+            Gestionar conectores
+          </span>
+          <svg class="chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06L7.28 12.78a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+        </button>
+      </div>
+
+      <div class="sheet-section-label">Conectores disponibles</div>
+
+      <!-- GitHub -->
+      <div class="connector-item" onclick="closeSheet();openConnectModal()">
+        <div class="conn-icon gh">
+          <svg viewBox="0 0 16 16" fill="#fff"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        </div>
+        <div class="conn-info">
+          <div class="conn-name">GitHub</div>
+          <div class="conn-sub" id="gh-sub">Toca para conectar</div>
+        </div>
+        <div class="conn-action">
+          <div class="toggle" id="gh-toggle" onclick="event.stopPropagation();toggleGH()"></div>
+        </div>
+      </div>
+
+      <!-- Outlook Calendar -->
+      <div class="connector-item">
+        <div class="conn-icon outlook-cal">
+          <svg viewBox="0 0 24 24" fill="#fff"><rect x="3" y="4" width="18" height="17" rx="2" fill="none" stroke="#fff" stroke-width="1.5"/><path d="M16 2v4M8 2v4M3 10h18" stroke="#fff" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <div class="conn-info">
+          <div class="conn-name">Calendario de Outlook</div>
+        </div>
+        <div class="conn-action"><span class="connect-link">Conectar</span></div>
+      </div>
+
+      <!-- Outlook Mail -->
+      <div class="connector-item">
+        <div class="conn-icon outlook-mail">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M2 8l10 6 10-6" stroke="#fff" stroke-width="1.5"/></svg>
+        </div>
+        <div class="conn-info">
+          <div class="conn-name">Correo de Outlook</div>
+        </div>
+        <div class="conn-action"><span class="connect-link">Conectar</span></div>
+      </div>
+
+      <!-- Instagram -->
+      <div class="connector-item">
+        <div class="conn-icon instagram">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="5" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="12" r="5" stroke="#fff" stroke-width="1.5"/><circle cx="17.5" cy="6.5" r="1" fill="#fff"/></svg>
+        </div>
+        <div class="conn-info">
+          <div class="conn-name">Instagram Creator Mar...<span class="beta-badge">Beta</span></div>
+        </div>
+        <div class="conn-action"><span class="connect-link">Conectar</span></div>
+      </div>
+
+      <!-- Google Calendar -->
+      <div class="connector-item">
+        <div class="conn-icon gcal">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2" fill="#fff" stroke="#ddd" stroke-width="1"/><path d="M16 2v4M8 2v4M3 10h18" stroke="#999" stroke-width="1.5" fill="none"/><text x="12" y="19" text-anchor="middle" font-size="8" fill="#4285f4" font-weight="bold">G</text></svg>
+        </div>
+        <div class="conn-info">
+          <div class="conn-name">Google Calendar</div>
+        </div>
+        <div class="conn-action"><span class="connect-link">Conectar</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONNECT MODAL -->
+  <div class="modal-overlay" id="connect-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <span class="modal-title">Conectar repositorio GitHub</span>
+        <button class="modal-x" onclick="closeModal()">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="steps">
+          <div class="step active" id="step1"><div class="step-n">1</div><div>Credenciales</div></div>
+          <div class="step" id="step2"><div class="step-n">2</div><div>Repositorio</div></div>
+          <div class="step" id="step3"><div class="step-n">3</div><div>Configurar</div></div>
+        </div>
+        <div id="modal-s1">
+          <div class="form-group">
+            <label class="form-label">GitHub Token (Personal Access Token)</label>
+            <input type="password" class="form-input" id="gh-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+            <div class="form-hint">Para repos privados. <a href="https://github.com/settings/tokens" style="color:var(--accent2)">Generar token →</a></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Usuario de GitHub</label>
+            <input type="text" class="form-input" id="gh-user" placeholder="tu-usuario">
+          </div>
+        </div>
+        <div id="modal-s2" style="display:none">
+          <div class="form-group">
+            <label class="form-label">Nombre del repositorio</label>
+            <input type="text" class="form-input" id="gh-repo" placeholder="nombre-del-repo">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Rama</label>
+              <input type="text" class="form-input" id="gh-branch" placeholder="main" value="main">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Profundidad</label>
+              <select class="form-input" id="gh-depth">
+                <option value="shallow">Rápida</option>
+                <option value="medium" selected>Media</option>
+                <option value="deep">Profunda</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div id="modal-s3" style="display:none">
+          <div class="form-group">
+            <label class="form-label">Instrucciones del agente</label>
+            <textarea class="form-input" rows="4" id="gh-instructions" placeholder="Ej: Proyecto React con TypeScript. Airbnb style. TailwindCSS..."></textarea>
+            <div class="form-hint">Contexto que el agente usará en todo momento.</div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Modelo de IA</label>
+              <select class="form-input" id="gh-model">
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="gpt-4o-mini">GPT-4o mini</option>
+                <option value="claude-sonnet-4-5">Claude Sonnet</option>
+                <option value="o3-mini">o3-mini</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Auto-commit</label>
+              <select class="form-input" id="gh-autocommit">
+                <option value="ask">Preguntar</option>
+                <option value="auto">Automático</option>
+                <option value="never">Nunca</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span class="note">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="var(--green)"><circle cx="8" cy="8" r="8"/></svg>
+          Token solo en local
+        </span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" id="btn-back" style="display:none" onclick="modalBack()">Atrás</button>
+          <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+          <button class="btn btn-primary" id="btn-next" onclick="modalNext()">Siguiente →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script>
+// ═══ STATE ═══
+const S = {
+  connected:false, token:'', user:'', repo:'', branch:'main',
+  repoData:null, files:[], model:'gpt-4o', instructions:'',
+  modalStep:1, ghToggle:false
+};
+
+// ═══ TEXTAREA RESIZE ═══
+function resize(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,140)+'px';
+  document.getElementById('send-btn').disabled=!el.value.trim();
+}
+
+// ═══ SHEET ═══
+let sheetOpen=false;
+function toggleSheet(){sheetOpen=!sheetOpen;document.getElementById('sheet-overlay').classList.toggle('open',sheetOpen)}
+function closeSheet(){sheetOpen=false;document.getElementById('sheet-overlay').classList.remove('open')}
+
+function toggleGH(){
+  if(!S.connected){closeSheet();openConnectModal();return}
+  S.ghToggle=!S.ghToggle;
+  document.getElementById('gh-toggle').classList.toggle('on',S.ghToggle);
+}
+
+// ═══ MODAL ═══
+function openConnectModal(){closeSheet();document.getElementById('connect-modal').classList.add('open')}
+function closeModal(){document.getElementById('connect-modal').classList.remove('open')}
+
+function modalNext(){
+  if(S.modalStep===1){
+    S.token=document.getElementById('gh-token').value;
+    S.user=document.getElementById('gh-user').value;
+    if(!S.user){alert('Ingresa tu usuario de GitHub');return}
+    document.getElementById('modal-s1').style.display='none';
+    document.getElementById('modal-s2').style.display='block';
+    document.getElementById('btn-back').style.display='inline-flex';
+    document.getElementById('step1').className='step done';
+    document.getElementById('step2').className='step active';
+    S.modalStep=2;
+  } else if(S.modalStep===2){
+    S.repo=document.getElementById('gh-repo').value;
+    S.branch=document.getElementById('gh-branch').value||'main';
+    if(!S.repo){alert('Ingresa el nombre del repositorio');return}
+    document.getElementById('modal-s2').style.display='none';
+    document.getElementById('modal-s3').style.display='block';
+    document.getElementById('step2').className='step done';
+    document.getElementById('step3').className='step active';
+    document.getElementById('btn-next').textContent='✓ Conectar';
+    S.modalStep=3;
+  } else {
+    S.instructions=document.getElementById('gh-instructions').value;
+    S.model=document.getElementById('gh-model').value;
+    connectRepo();
+  }
+}
+function modalBack(){
+  if(S.modalStep===2){
+    document.getElementById('modal-s2').style.display='none';
+    document.getElementById('modal-s1').style.display='block';
+    document.getElementById('btn-back').style.display='none';
+    document.getElementById('step1').className='step active';
+    document.getElementById('step2').className='step';
+    S.modalStep=1;
+  } else if(S.modalStep===3){
+    document.getElementById('modal-s3').style.display='none';
+    document.getElementById('modal-s2').style.display='block';
+    document.getElementById('step2').className='step active';
+    document.getElementById('step3').className='step';
+    document.getElementById('btn-next').textContent='Siguiente →';
+    S.modalStep=2;
+  }
+}
+
+// ═══ CONNECT ═══
+async function connectRepo(){
+  closeModal();
+  setStatus(true,'Conectando con GitHub...');
+  const headers={'Accept':'application/vnd.github.v3+json'};
+  if(S.token) headers['Authorization']=`token ${S.token}`;
+  try{
+    const rr=await fetch(`https://api.github.com/repos/${S.user}/${S.repo}`,{headers});
+    if(!rr.ok) throw new Error(`${rr.status} ${rr.statusText}`);
+    S.repoData=await rr.json();
+    const tr=await fetch(`https://api.github.com/repos/${S.user}/${S.repo}/git/trees/${S.branch}?recursive=1`,{headers});
+    const td=await tr.json();
+    S.files=(td.tree||[]).filter(f=>f.type==='blob').slice(0,80);
+    S.connected=true;
+    onConnected();
+    setStatus(false);
+    addMsg('agent',`✅ Conectado a **${S.repoData.full_name}** (${S.files.length} archivos, ${S.repoData.language||'varios lenguajes'}).\n\nSoy tu agente autónomo. Dime qué quieres que haga: analizar, corregir bugs, refactorizar, crear un Pull Request, agregar tests... lo que necesites.`);
+    setTimeout(()=>autoAnalyze(),600);
+  } catch(e){
+    setStatus(false);
+    loadDemo();
+  }
+}
+
+function loadDemo(){
+  S.connected=true;
+  S.repoData={full_name:`${S.user||'demo'}/${S.repo||'mi-proyecto'}`,stargazers_count:42,language:'JavaScript'};
+  S.files=[{path:'src/app.js'},{path:'src/routes/users.js'},{path:'src/models/User.js'},{path:'tests/app.test.js'},{path:'package.json'},{path:'README.md'}];
+  onConnected();
+  setStatus(false);
+  addMsg('agent',`Conectado en **modo demo** (sin token válido). Tengo acceso al código de ejemplo.\n\nDime qué quieres que haga con el proyecto.`);
+}
+
+function onConnected(){
+  document.getElementById('status-dot').classList.add('connected');
+  document.getElementById('gh-btn').classList.add('connected');
+  document.getElementById('gh-toggle').classList.add('on');
+  S.ghToggle=true;
+  const pill=document.getElementById('repo-pill');
+  pill.style.display='flex';
+  document.getElementById('repo-pill-name').textContent=S.repoData.full_name.split('/')[1];
+  document.getElementById('gh-sub').textContent=`${S.repoData.full_name} · ${S.branch}`;
+}
+
+// ═══ AI ═══
+function sysPrompt(){
+  const repo=S.repoData?`Repositorio: ${S.repoData.full_name}\nLenguaje: ${S.repoData.language||'varios'}\nRama: ${S.branch}\nArchivos disponibles:\n${S.files.map(f=>f.path).join('\n')}\n\n`:'';
+  const instr=S.instructions?`Instrucciones del proyecto:\n${S.instructions}\n\n`:'';
+  return `Eres DevAgent, un agente de IA autónomo especializado en desarrollo de software, similar a Manus AI. Trabajas directamente con repositorios de GitHub.
+
+${repo}${instr}
+
+Eres AUTÓNOMO. Cuando el usuario te pide algo, lo haces tú completamente:
+- Analizas el código y detectas bugs, vulnerabilidades, mejoras
+- Escribes o corriges código y lo muestras en bloques de código
+- Creas commits y Pull Requests con descripciones profesionales
+- Refactorizas, optimizas rendimiento y seguridad
+- Agregas tests unitarios e integración
+- Generas documentación
+
+IMPORTANTE: No pidas permiso para hacer cosas. Hazlas y muestra el resultado.
+No hables de "terminales" ni "editores" — eres un agente que opera directamente.
+Cuando hagas cambios en código, muéstralos como bloques de código con el archivo completo o la sección relevante.
+Responde siempre en español. Sé directo y técnico.`;
+}
+
+async function callAI(msg,ctx=''){
+  const full=ctx?`${ctx}\n\nSolicitud: ${msg}`:msg;
+  try{
+    const r=await puter.ai.chat(full,{model:S.model,stream:false,systemPrompt:sysPrompt()});
+    return typeof r==='string'?r:(r?.message?.content||r?.content||JSON.stringify(r));
+  } catch(e){throw e}
+}
+
+// ═══ CHAT ═══
+function addMsg(role,content,chips=[]){
+  hideEmpty();
+  const msgs=document.getElementById('messages');
+  const el=document.createElement('div');
+  el.className=`msg ${role}`;
+  const html=content
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/`([^`\n]+)`/g,'<code>$1</code>')
+    .replace(/```(\w+)?\n([\s\S]+?)```/g,'<pre>$2</pre>')
+    .replace(/\n/g,'<br>');
+  el.innerHTML=`
+    <div class="msg-meta">
+      <div class="msg-avatar ${role}">${role==='agent'?'AI':'Tú'}</div>
+      <span>${role==='agent'?'DevAgent':'Tú'}</span>
+    </div>
+    <div class="msg-body">${html}</div>
+    ${chips.length?`<div class="msg-chips">${chips.map(c=>`<button class="chip" onclick="${c.fn}">${c.label}</button>`).join('')}</div>`:''}`;
+  msgs.appendChild(el);
+  msgs.scrollTop=msgs.scrollHeight;
+}
+
+function addThinking(){
+  hideEmpty();
+  const msgs=document.getElementById('messages');
+  const el=document.createElement('div');
+  el.className='msg agent';el.id='thinking';
+  el.innerHTML=`<div class="msg-meta"><div class="msg-avatar agent">AI</div><span>DevAgent</span></div><div class="thinking"><div class="dots"><span></span><span></span><span></span></div><span>Pensando...</span></div>`;
+  msgs.appendChild(el);msgs.scrollTop=msgs.scrollHeight;
+}
+function removeThinking(){document.getElementById('thinking')?.remove()}
+
+function hideEmpty(){document.getElementById('empty-state').classList.add('hidden')}
+
+function setStatus(on,text=''){
+  const bar=document.getElementById('status-bar');
+  bar.classList.toggle('show',on);
+  if(text) document.getElementById('status-text').textContent=text;
+}
+
+async function send(){
+  const inp=document.getElementById('chat-input');
+  const msg=inp.value.trim();
+  if(!msg) return;
+  inp.value='';inp.style.height='auto';
+  document.getElementById('send-btn').disabled=true;
+  addMsg('user',msg);
+  addThinking();
+  setStatus(true,'El agente está trabajando...');
+  try{
+    const ctx=S.connected&&S.files.length
+      ?`Archivos del proyecto: ${S.files.map(f=>f.path).join(', ')}`:'';
+    const res=await callAI(msg,ctx);
+    removeThinking();
+    setStatus(false);
+    addMsg('agent',res);
+  } catch(e){
+    removeThinking();
+    setStatus(false);
+    addMsg('agent',`Hubo un error: ${e.message}. Intenta de nuevo.`);
+  }
+  document.getElementById('send-btn').disabled=false;
+}
+
+function handleKey(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}
+}
+
+async function autoAnalyze(){
+  setStatus(true,'Analizando el proyecto...');
+  try{
+    const files=S.files.map(f=>f.path).join('\n');
+    const res=await callAI(`Analiza este proyecto. Archivos:\n${files}\n\nDame un resumen ejecutivo rápido: qué hace el proyecto, 2-3 problemas que detectas y tu recomendación prioritaria.`);
+    setStatus(false);
+    addMsg('agent',res,[
+      {label:'🐛 Corregir todos los bugs',fn:"quickAction('Encuentra y corrige TODOS los bugs del proyecto. Muéstrame el código corregido.')"},
+      {label:'🔒 Análisis de seguridad',fn:"quickAction('Haz un análisis de seguridad completo y corrige las vulnerabilidades.')"},
+      {label:'⚡ Optimizar rendimiento',fn:"quickAction('Optimiza el rendimiento del proyecto.')"},
+      {label:'📋 Crear Pull Request',fn:"quickAction('Crea un Pull Request profesional con mejoras para el proyecto.')"}
+    ]);
+  } catch(e){setStatus(false)}
+}
+
+function quickAction(text){
+  document.getElementById('chat-input').value=text;
+  send();
+}
+
+// ═══ INIT ═══
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){closeSheet();closeModal()}
+});
+document.getElementById('connect-modal').addEventListener('click',e=>{
+  if(e.target===document.getElementById('connect-modal')) closeModal();
+});
+</script>
+</body>
+</html>
