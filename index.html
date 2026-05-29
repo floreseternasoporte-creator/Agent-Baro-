@@ -6,12 +6,12 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0d0f12">
+<meta name="theme-color" content="#0a0a0b">
 <title>DevAgent</title>
 <script src="https://js.puter.com/v2/"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -19,172 +19,367 @@
   --bg2:#111114;
   --bg3:#18181c;
   --bg4:#202026;
-  --border:#252529;
-  --border2:#32323a;
-  --text:#ececee;
-  --text2:#8a8a96;
-  --text3:#46464f;
-  --accent:#7c5cfc;
-  --accent2:#9b80ff;
-  --accent-glow:rgba(124,92,252,0.12);
+  --bg5:#28282f;
+  --border:#1e1e24;
+  --border2:#2a2a33;
+  --border3:#35353f;
+  --text:#e8e8ec;
+  --text2:#8a8a9a;
+  --text3:#44444f;
+  --text4:#6a6a7a;
+  --accent:#6d56f0;
+  --accent2:#8b72ff;
+  --accent3:#a992ff;
+  --accent-glow:rgba(109,86,240,0.15);
+  --accent-border:rgba(109,86,240,0.3);
   --green:#22c55e;
-  --green-bg:rgba(34,197,94,0.08);
+  --green-bg:rgba(34,197,94,0.1);
+  --green-border:rgba(34,197,94,0.25);
   --red:#f87171;
+  --red-bg:rgba(248,113,113,0.1);
   --amber:#fbbf24;
+  --amber-bg:rgba(251,191,36,0.1);
   --blue:#60a5fa;
-  --font:'Geist',sans-serif;
-  --font-display:'Playfair Display',serif;
-  --r:12px;
-  --r-lg:18px;
-  --r-xl:24px;
+  --blue-bg:rgba(96,165,250,0.08);
+  --font:'Inter',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+  --r:10px;
+  --r-lg:14px;
+  --r-xl:20px;
+  --shadow:0 4px 24px rgba(0,0,0,0.4);
+  --shadow-sm:0 2px 8px rgba(0,0,0,0.3);
 }
 html,body{
   height:100%;height:100dvh;
   background:var(--bg);color:var(--text);
   font-family:var(--font);font-size:14px;line-height:1.6;
-  overflow:hidden;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+  overflow:hidden;-webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
 }
 
-/* ══ SHELL ══ */
-#app{display:flex;flex-direction:column;height:100dvh;width:100vw;overflow:hidden}
+/* ══ LAYOUT ══ */
+#app{display:flex;flex-direction:column;height:100dvh;width:100vw;overflow:hidden;position:relative}
 
 /* ══ TOPBAR ══ */
 #topbar{
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 16px;
+  padding:0 14px;
   padding-top:env(safe-area-inset-top);
-  height:calc(52px + env(safe-area-inset-top));
+  height:calc(50px + env(safe-area-inset-top));
   background:var(--bg);
   border-bottom:1px solid var(--border);
-  flex-shrink:0;z-index:10;
+  flex-shrink:0;z-index:20;
+  backdrop-filter:blur(12px);
 }
-.top-left{display:flex;align-items:center;gap:10px}
-.logo-pill{
-  display:flex;align-items:center;gap:8px;
-  padding:6px 14px;border-radius:30px;
+.top-left{display:flex;align-items:center;gap:8px}
+.logo-wrap{display:flex;align-items:center;gap:8px}
+.logo-icon{
+  width:28px;height:28px;border-radius:8px;
+  background:var(--accent);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;position:relative;overflow:hidden;
+}
+.logo-icon::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,255,255,0.15),transparent);
+}
+.logo-icon svg{width:15px;height:15px;color:#fff;position:relative}
+.logo-name{font-size:14px;font-weight:600;letter-spacing:-.3px;color:var(--text)}
+.status-pill{
+  display:flex;align-items:center;gap:5px;
+  padding:3px 8px;border-radius:20px;
   background:var(--bg3);border:1px solid var(--border2);
-  font-size:14px;font-weight:500;letter-spacing:-.2px;
+  font-size:10.5px;color:var(--text2);
+  transition:all .2s;
 }
-.logo-dot{
-  width:8px;height:8px;border-radius:50%;
-  background:var(--accent);flex-shrink:0;
-  box-shadow:0 0 6px var(--accent);
+.status-pill.connected{
+  background:var(--green-bg);border-color:var(--green-border);color:var(--green);
 }
-.logo-dot.connected{background:var(--green);box-shadow:0 0 6px var(--green)}
-.top-right{display:flex;align-items:center;gap:8px}
-.repo-pill{
-  display:flex;align-items:center;gap:6px;
-  padding:5px 12px;border-radius:20px;
+.status-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--text3);flex-shrink:0;transition:background .2s;
+}
+.status-dot.connected{background:var(--green);box-shadow:0 0 5px var(--green)}
+.status-dot.thinking{background:var(--accent2);animation:dotPulse 1s infinite}
+@keyframes dotPulse{0%,100%{opacity:.4;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+
+.top-right{display:flex;align-items:center;gap:6px}
+.repo-chip{
+  display:flex;align-items:center;gap:5px;
+  padding:4px 10px;border-radius:8px;
   background:var(--bg3);border:1px solid var(--border2);
   font-size:11px;color:var(--text2);cursor:pointer;
-  transition:all .15s;max-width:130px;overflow:hidden;
+  transition:all .15s;max-width:120px;overflow:hidden;
 }
-.repo-pill:active{border-color:var(--accent);color:var(--accent2)}
-.repo-pill svg{width:12px;height:12px;flex-shrink:0;opacity:.6}
-.repo-pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.repo-chip:active{border-color:var(--accent-border);color:var(--accent2)}
+.repo-chip svg{width:11px;height:11px;flex-shrink:0;opacity:.5}
+.repo-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.icon-btn{
+  width:32px;height:32px;border-radius:8px;
+  border:1px solid var(--border2);background:transparent;
+  color:var(--text3);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+.icon-btn:hover{background:var(--bg3);color:var(--text2)}
+.icon-btn:active{background:var(--bg4);transform:scale(.94)}
+.icon-btn svg{width:15px;height:15px}
+.icon-btn.active{
+  border-color:var(--green-border);color:var(--green);background:var(--green-bg);
+}
+.model-select{
+  padding:4px 8px;border-radius:8px;
+  border:1px solid var(--border2);background:var(--bg3);
+  color:var(--text2);font:inherit;font-size:11px;
+  cursor:pointer;outline:none;transition:border-color .15s;
+}
+.model-select:focus{border-color:var(--accent-border);color:var(--text)}
 
-/* ══ MAIN CHAT ══ */
-#chat-wrap{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative}
+/* ══ BODY ══ */
+#body{display:flex;flex:1;overflow:hidden;position:relative}
 
-/* Empty state — centered greeting */
+/* ══ SIDEBAR (file tree) ══ */
+#sidebar{
+  width:0;overflow:hidden;
+  background:var(--bg2);border-right:1px solid var(--border);
+  transition:width .25s cubic-bezier(.4,0,.2,1);
+  flex-shrink:0;display:flex;flex-direction:column;
+}
+#sidebar.open{width:220px}
+.sidebar-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.sidebar-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.6px}
+#file-tree{flex:1;overflow-y:auto;padding:6px 0}
+#file-tree::-webkit-scrollbar{width:3px}
+#file-tree::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.tree-folder{
+  display:flex;align-items:center;gap:6px;
+  padding:4px 12px;font-size:11.5px;color:var(--text2);
+  font-weight:500;user-select:none;
+}
+.tree-folder svg{width:12px;height:12px;flex-shrink:0;opacity:.5}
+.tree-file{
+  display:flex;align-items:center;gap:6px;
+  padding:3px 12px 3px 22px;font-size:11px;color:var(--text3);
+  cursor:pointer;transition:all .1s;border-radius:4px;margin:0 4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.tree-file:hover{background:var(--bg3);color:var(--text2)}
+.tree-file.active{background:var(--accent-glow);color:var(--accent2)}
+.tree-file svg{width:11px;height:11px;flex-shrink:0;opacity:.4}
+.file-ext{
+  font-size:9px;padding:1px 4px;border-radius:3px;
+  background:var(--bg4);color:var(--text3);margin-left:auto;flex-shrink:0;
+  font-family:var(--mono);
+}
+
+/* ══ CHAT AREA ══ */
+#chat-wrap{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative;min-width:0}
+
+/* Empty state */
 #empty-state{
   position:absolute;inset:0;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  pointer-events:none;
-  padding-bottom:80px;
-}
-#empty-state h1{
-  font-family:var(--font-display);
-  font-size:26px;font-weight:500;
-  color:var(--text);text-align:center;
-  line-height:1.3;letter-spacing:-.3px;
+  pointer-events:none;padding-bottom:60px;gap:20px;
 }
 #empty-state.hidden{display:none}
+.empty-icon{
+  width:52px;height:52px;border-radius:16px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 32px rgba(109,86,240,.3);
+}
+.empty-icon svg{width:26px;height:26px;color:#fff}
+.empty-title{font-size:20px;font-weight:600;letter-spacing:-.4px;text-align:center}
+.empty-sub{font-size:13px;color:var(--text2);text-align:center;max-width:280px;line-height:1.5}
+.empty-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:340px;pointer-events:all;margin-top:4px}
+.empty-chip{
+  padding:6px 13px;border-radius:20px;
+  border:1px solid var(--border2);background:var(--bg2);
+  color:var(--text2);font-size:12px;cursor:pointer;
+  transition:all .15s;
+}
+.empty-chip:hover{border-color:var(--accent-border);color:var(--accent2);background:var(--accent-glow)}
 
 /* Messages */
 #messages{
   flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
-  padding:16px 14px 8px;
-  display:flex;flex-direction:column;gap:14px;
+  padding:14px 14px 6px;
+  display:flex;flex-direction:column;gap:16px;
+  scroll-behavior:smooth;
 }
-#messages::-webkit-scrollbar{width:0}
+#messages::-webkit-scrollbar{width:3px}
+#messages::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 
-.msg{display:flex;flex-direction:column;gap:5px}
-.msg-meta{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text3)}
+.msg{display:flex;flex-direction:column;gap:7px;animation:msgIn .2s ease}
+@keyframes msgIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+.msg-meta{display:flex;align-items:center;gap:7px}
 .msg-avatar{
-  width:22px;height:22px;border-radius:6px;
+  width:24px;height:24px;border-radius:7px;
   display:flex;align-items:center;justify-content:center;
-  font-size:9px;font-weight:700;flex-shrink:0;
+  font-size:9.5px;font-weight:700;flex-shrink:0;letter-spacing:-.2px;
 }
-.msg-avatar.agent{background:var(--accent);color:#fff}
-.msg-avatar.user{background:var(--bg4);border:1px solid var(--border2);color:var(--text2)}
+.msg-avatar.agent{
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff;box-shadow:0 2px 8px rgba(109,86,240,.3);
+}
+.msg-avatar.user{
+  background:var(--bg4);border:1px solid var(--border2);
+  color:var(--text2);
+}
+.msg-name{font-size:11.5px;font-weight:500;color:var(--text2)}
+.msg-time{font-size:10px;color:var(--text3);margin-left:2px}
+
 .msg-body{
-  font-size:14px;line-height:1.7;color:var(--text);
-  background:var(--bg2);border:1px solid var(--border);
-  border-radius:var(--r-lg);padding:12px 15px;
+  font-size:13.5px;line-height:1.75;color:var(--text);
   word-break:break-word;
 }
 .msg.user .msg-body{
-  background:var(--bg3);border-color:var(--border2);
-  margin-left:28px;
+  background:var(--bg3);border:1px solid var(--border2);
+  border-radius:var(--r-lg);padding:10px 14px;
+  margin-left:30px;
 }
-.msg-body strong{color:var(--text);font-weight:600}
-.msg-body code{
-  font-size:11.5px;background:var(--bg4);
-  padding:2px 6px;border-radius:5px;
-  border:1px solid var(--border2);color:var(--accent2);
-  font-family:'JetBrains Mono','Courier New',monospace;
-}
-.msg-body pre{
-  background:var(--bg);border:1px solid var(--border2);
-  border-radius:var(--r);padding:12px;margin:10px 0;
-  overflow-x:auto;font-family:'JetBrains Mono','Courier New',monospace;
-  font-size:11.5px;line-height:1.65;color:var(--text2);
-}
-.msg-body pre::-webkit-scrollbar{height:3px}
-.msg-body pre::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-.msg-body ul,.msg-body ol{padding-left:18px;margin:6px 0}
-.msg-body li{margin:3px 0}
 
-/* Action chips on agent messages */
-.msg-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;padding-left:2px}
+/* Markdown styles */
+.msg-body p{margin:6px 0}
+.msg-body p:first-child{margin-top:0}
+.msg-body p:last-child{margin-bottom:0}
+.msg-body strong{color:var(--text);font-weight:600}
+.msg-body em{color:var(--text2);font-style:italic}
+.msg-body h1,.msg-body h2,.msg-body h3{
+  font-weight:600;color:var(--text);
+  margin:14px 0 6px;letter-spacing:-.3px;
+}
+.msg-body h1{font-size:17px}
+.msg-body h2{font-size:15px}
+.msg-body h3{font-size:13.5px;color:var(--text2)}
+.msg-body ul,.msg-body ol{padding-left:16px;margin:6px 0}
+.msg-body li{margin:3px 0;color:var(--text)}
+.msg-body li::marker{color:var(--text3)}
+.msg-body hr{border:none;border-top:1px solid var(--border2);margin:12px 0}
+.msg-body a{color:var(--accent2);text-decoration:none}
+.msg-body a:hover{text-decoration:underline}
+.msg-body blockquote{
+  border-left:3px solid var(--accent-border);
+  padding:4px 12px;margin:8px 0;
+  color:var(--text2);font-style:italic;
+}
+
+/* Inline code */
+.msg-body code{
+  font-family:var(--mono);font-size:11.5px;
+  background:var(--bg4);padding:2px 6px;
+  border-radius:5px;border:1px solid var(--border2);
+  color:var(--accent2);
+}
+
+/* Code block */
+.code-block{
+  position:relative;margin:10px 0;
+  background:var(--bg);border:1px solid var(--border2);
+  border-radius:var(--r-lg);overflow:hidden;
+}
+.code-block-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 12px;background:var(--bg3);
+  border-bottom:1px solid var(--border);
+}
+.code-lang{font-family:var(--mono);font-size:10.5px;color:var(--text3);font-weight:500;text-transform:lowercase}
+.code-file{font-family:var(--mono);font-size:10.5px;color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.copy-btn{
+  display:flex;align-items:center;gap:4px;
+  padding:3px 8px;border-radius:5px;
+  border:1px solid var(--border2);background:transparent;
+  color:var(--text3);font-family:var(--font);font-size:10.5px;
+  cursor:pointer;transition:all .15s;flex-shrink:0;
+}
+.copy-btn:hover{color:var(--text2);background:var(--bg4);border-color:var(--border3)}
+.copy-btn.copied{color:var(--green);border-color:var(--green-border)}
+.code-block pre{
+  padding:12px 14px;margin:0;
+  overflow-x:auto;font-family:var(--mono);
+  font-size:12px;line-height:1.65;color:var(--text2);
+  background:transparent;border:none;border-radius:0;
+}
+.code-block pre::-webkit-scrollbar{height:3px}
+.code-block pre::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* Agent tool step */
+.agent-step{
+  display:flex;align-items:flex-start;gap:9px;
+  padding:8px 12px;
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);margin:6px 0;
+  font-size:12px;color:var(--text2);
+  animation:msgIn .15s ease;
+}
+.step-icon{
+  width:20px;height:20px;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:1px;
+}
+.step-icon.running{background:var(--accent-glow);color:var(--accent2)}
+.step-icon.done{background:var(--green-bg);color:var(--green)}
+.step-icon.error{background:var(--red-bg);color:var(--red)}
+.step-icon.info{background:var(--blue-bg);color:var(--blue)}
+.step-icon svg{width:12px;height:12px}
+.step-icon.running svg{animation:spin .8s linear infinite}
+.step-content{flex:1;min-width:0}
+.step-title{font-weight:500;color:var(--text);margin-bottom:1px}
+.step-detail{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Action chips */
+.msg-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;padding-left:2px}
 .chip{
   display:flex;align-items:center;gap:5px;
   padding:5px 12px;border-radius:20px;
   border:1px solid var(--border2);background:var(--bg3);
-  color:var(--text2);font:inherit;font-size:11.5px;cursor:pointer;
+  color:var(--text2);font:inherit;font-size:12px;cursor:pointer;
   transition:all .15s;
 }
-.chip:active{border-color:var(--accent);color:var(--accent2);background:var(--accent-glow)}
+.chip:hover{border-color:var(--accent-border);color:var(--accent2);background:var(--accent-glow)}
 
-/* Thinking bubble */
+/* Thinking */
 .thinking{
-  display:flex;align-items:center;gap:9px;
+  display:flex;align-items:center;gap:10px;
+  padding:10px 14px;
   background:var(--bg2);border:1px solid var(--border);
-  border-radius:var(--r-lg);padding:12px 15px;
-  font-size:13px;color:var(--text3);
+  border-radius:var(--r-lg);font-size:13px;color:var(--text3);
 }
 .dots{display:flex;gap:4px}
 .dots span{
   width:5px;height:5px;border-radius:50%;background:var(--accent2);
-  animation:pulse 1.4s infinite;
+  animation:bounce 1.2s infinite;
 }
-.dots span:nth-child(2){animation-delay:.2s}
-.dots span:nth-child(3){animation-delay:.4s}
-@keyframes pulse{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+.dots span:nth-child(2){animation-delay:.15s}
+.dots span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:.3}30%{transform:translateY(-4px);opacity:1}}
 
-/* Agent status bar — shows what agent is doing */
+/* Streaming cursor */
+.stream-cursor{
+  display:inline-block;width:2px;height:14px;
+  background:var(--accent2);border-radius:1px;
+  animation:blink .7s infinite;vertical-align:text-bottom;margin-left:2px;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* Status bar */
 #status-bar{
   display:none;align-items:center;gap:8px;
-  padding:7px 14px;background:rgba(124,92,252,.06);
-  border-top:1px solid rgba(124,92,252,.15);
+  padding:6px 14px;
+  background:linear-gradient(to right,rgba(109,86,240,.06),transparent);
+  border-top:1px solid var(--accent-border);
   font-size:11.5px;color:var(--accent2);flex-shrink:0;
 }
 #status-bar.show{display:flex}
-#status-bar svg{width:13px;height:13px;animation:spin 1.5s linear infinite;flex-shrink:0}
+#status-bar svg{width:12px;height:12px;flex-shrink:0}
+#status-bar svg.spin{animation:spin 1.2s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ══ INPUT BAR — Manus style ══ */
+/* ══ INPUT BAR ══ */
 #input-bar{
   padding:10px 12px;
   padding-bottom:calc(10px + env(safe-area-inset-bottom));
@@ -194,66 +389,56 @@ html,body{
 .input-box{
   background:var(--bg2);border:1px solid var(--border2);
   border-radius:var(--r-xl);overflow:hidden;
-  transition:border-color .2s;
+  transition:border-color .2s,box-shadow .2s;
 }
-.input-box:focus-within{border-color:var(--accent)}
+.input-box:focus-within{border-color:var(--accent-border);box-shadow:0 0 0 3px var(--accent-glow)}
 #chat-input{
-  width:100%;padding:13px 15px 4px;
+  width:100%;padding:12px 14px 4px;
   background:transparent;border:none;outline:none;
-  color:var(--text);font:inherit;font-size:14.5px;
-  resize:none;line-height:1.5;max-height:140px;
+  color:var(--text);font:inherit;font-size:14px;
+  resize:none;line-height:1.55;max-height:150px;
   scrollbar-width:none;
 }
 #chat-input::placeholder{color:var(--text3)}
 #chat-input::-webkit-scrollbar{display:none}
 .input-actions{
   display:flex;align-items:center;
-  padding:6px 8px 8px;gap:6px;
+  padding:6px 8px 8px;gap:5px;
 }
-/* + button */
-.act-btn{
-  width:34px;height:34px;border-radius:50%;
+.ia-btn{
+  width:32px;height:32px;border-radius:8px;
   border:1px solid var(--border2);background:transparent;
   color:var(--text3);cursor:pointer;
   display:flex;align-items:center;justify-content:center;
   transition:all .15s;flex-shrink:0;
 }
-.act-btn:active{background:var(--bg3);color:var(--text)}
-.act-btn svg{width:18px;height:18px}
-/* GitHub icon button */
-#gh-btn{
-  width:34px;height:34px;border-radius:50%;
-  border:1px solid var(--border2);background:transparent;
-  color:var(--text3);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  transition:all .2s;flex-shrink:0;
+.ia-btn:hover{background:var(--bg3);color:var(--text2);border-color:var(--border3)}
+.ia-btn:active{transform:scale(.93)}
+.ia-btn svg{width:15px;height:15px}
+.ia-btn.gh-active{
+  border-color:var(--green-border);color:var(--green);background:var(--green-bg);
 }
-#gh-btn:active{background:var(--bg3)}
-#gh-btn.connected{
-  border-color:var(--green);color:var(--green);
-  background:var(--green-bg);
-}
-#gh-btn svg{width:17px;height:17px}
 .spacer{flex:1}
-/* Send */
+.char-count{font-size:10px;color:var(--text3);padding:0 4px;font-variant-numeric:tabular-nums}
 #send-btn{
-  width:36px;height:36px;border-radius:50%;
-  border:none;background:var(--accent);
+  width:34px;height:34px;border-radius:10px;
+  border:none;
+  background:var(--accent);
   color:#fff;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
   transition:all .15s;flex-shrink:0;
+  box-shadow:0 2px 8px rgba(109,86,240,.4);
 }
-#send-btn:active{background:var(--accent2);transform:scale(.92)}
-#send-btn:disabled{opacity:.25;cursor:not-allowed;transform:none}
-#send-btn svg{width:15px;height:15px}
+#send-btn:hover{background:var(--accent2)}
+#send-btn:active{transform:scale(.91);box-shadow:none}
+#send-btn:disabled{opacity:.3;cursor:not-allowed;transform:none;box-shadow:none}
+#send-btn svg{width:14px;height:14px}
 
 /* ══ CONNECTORS SHEET ══ */
-#sheet-overlay{
-  position:fixed;inset:0;z-index:50;pointer-events:none;
-}
+#sheet-overlay{position:fixed;inset:0;z-index:50;pointer-events:none}
 #sheet-backdrop{
-  position:absolute;inset:0;background:rgba(0,0,0,.6);
-  opacity:0;transition:opacity .2s;
+  position:absolute;inset:0;background:rgba(0,0,0,.65);
+  opacity:0;transition:opacity .22s;
 }
 #sheet{
   position:absolute;bottom:0;left:0;right:0;
@@ -261,142 +446,175 @@ html,body{
   border-radius:20px 20px 0 0;
   border-top:1px solid var(--border2);
   transform:translateY(100%);
-  transition:transform .28s cubic-bezier(.4,0,.2,1);
-  max-height:80dvh;overflow-y:auto;
-  padding-bottom:calc(16px + env(safe-area-inset-bottom));
+  transition:transform .26s cubic-bezier(.32,0,.12,1);
+  max-height:78dvh;overflow-y:auto;
+  padding-bottom:calc(14px + env(safe-area-inset-bottom));
 }
 #sheet-overlay.open{pointer-events:all}
 #sheet-overlay.open #sheet-backdrop{opacity:1}
 #sheet-overlay.open #sheet{transform:translateY(0)}
 
-.sheet-handle{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:10px auto 0}
+.sheet-handle{width:32px;height:4px;border-radius:2px;background:var(--border2);margin:10px auto 0}
 .sheet-head{
   display:flex;align-items:center;justify-content:space-between;
-  padding:14px 18px 10px;
+  padding:12px 16px 8px;
 }
-.sheet-title{font-size:15px;font-weight:600}
+.sheet-title{font-size:14px;font-weight:600}
 .sheet-close{
-  width:28px;height:28px;border-radius:50%;
+  width:26px;height:26px;border-radius:50%;
   border:none;background:var(--bg4);color:var(--text2);
   cursor:pointer;display:flex;align-items:center;justify-content:center;
 }
-.sheet-close svg{width:14px;height:14px}
+.sheet-close svg{width:13px;height:13px}
 
-/* Manage row */
-.sheet-manage-row{padding:0 14px 8px;display:flex;flex-direction:column;gap:2px}
-.manage-btn{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:13px 14px;border-radius:var(--r);
-  background:var(--bg3);border:none;color:var(--text);font:inherit;
-  font-size:13px;cursor:pointer;width:100%;transition:background .15s;
-}
-.manage-btn:active{background:var(--bg4)}
-.manage-btn svg{width:14px;height:14px;color:var(--text3)}
-.manage-btn-left{display:flex;align-items:center;gap:10px}
-.manage-btn-icon{width:26px;height:26px;border-radius:7px;background:var(--bg4);display:flex;align-items:center;justify-content:center}
-.manage-btn-icon svg{width:14px;height:14px;color:var(--text2)}
-.chevron{opacity:.4}
-
-/* Connectors list */
-.sheet-section-label{
-  font-size:11px;font-weight:600;color:var(--text3);
+.conn-section-label{
+  font-size:10.5px;font-weight:600;color:var(--text3);
   text-transform:uppercase;letter-spacing:.7px;
-  padding:8px 18px 4px;
+  padding:8px 16px 4px;
 }
 .connector-item{
-  display:flex;align-items:center;gap:12px;
-  padding:12px 18px;border-bottom:1px solid var(--border);
-  cursor:pointer;transition:background .12s;
+  display:flex;align-items:center;gap:11px;
+  padding:11px 16px;cursor:pointer;transition:background .1s;
 }
-.connector-item:last-child{border-bottom:none}
-.connector-item:active{background:var(--bg3)}
+.connector-item:hover{background:var(--bg3)}
 .conn-icon{
-  width:38px;height:38px;border-radius:10px;
+  width:36px;height:36px;border-radius:9px;
   display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;border:1px solid var(--border2);
+  flex-shrink:0;border:1px solid var(--border2);overflow:hidden;
 }
-.conn-icon.gh{background:#24292e}
-.conn-icon.outlook-cal{background:#0072c6}
-.conn-icon.outlook-mail{background:#0078d4}
-.conn-icon.instagram{background:linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)}
+.conn-icon.gh{background:#1a1f26}
+.conn-icon.outlook{background:#0072c6}
+.conn-icon.mail{background:#0078d4}
+.conn-icon.ig{background:linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)}
 .conn-icon.gcal{background:#fff}
-.conn-icon svg{width:20px;height:20px}
+.conn-icon svg{width:18px;height:18px}
 .conn-info{flex:1}
 .conn-name{font-size:13px;font-weight:500}
 .conn-sub{font-size:11px;color:var(--text3);margin-top:1px}
-.conn-action{flex-shrink:0}
-/* Toggle */
+.conn-badge{
+  font-size:9px;padding:1px 5px;border-radius:3px;
+  background:var(--amber-bg);border:1px solid rgba(251,191,36,.2);
+  color:var(--amber);margin-left:5px;
+}
 .toggle{
-  width:44px;height:26px;border-radius:13px;
+  width:40px;height:23px;border-radius:12px;
   background:var(--bg4);border:1px solid var(--border2);
-  position:relative;cursor:pointer;transition:background .2s;
-  flex-shrink:0;
+  position:relative;cursor:pointer;transition:all .2s;flex-shrink:0;
 }
 .toggle.on{background:var(--accent);border-color:var(--accent)}
 .toggle::after{
-  content:'';position:absolute;width:20px;height:20px;
+  content:'';position:absolute;width:17px;height:17px;
   border-radius:50%;background:#fff;top:2px;left:2px;
-  transition:transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.3);
+  transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3);
 }
-.toggle.on::after{transform:translateX(18px)}
-/* Connect link */
-.connect-link{font-size:12px;color:var(--text3)}
-.beta-badge{
-  font-size:9px;padding:1px 6px;border-radius:4px;
-  background:var(--bg4);border:1px solid var(--border2);
-  color:var(--text3);margin-left:4px;
-}
+.toggle.on::after{transform:translateX(17px)}
+.conn-link{font-size:11.5px;color:var(--text3)}
 
-/* ══ CONNECT MODAL ══ */
+/* ══ MODAL ══ */
 .modal-overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.75);
+  position:fixed;inset:0;background:rgba(0,0,0,.8);
   display:none;align-items:flex-end;justify-content:center;
-  z-index:100;backdrop-filter:blur(6px);
+  z-index:100;backdrop-filter:blur(8px);
 }
-.modal-overlay.open{display:flex}
+.modal-overlay.open{display:flex;animation:fadeIn .15s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .modal{
   background:var(--bg2);border:1px solid var(--border2);
-  border-radius:20px 20px 0 0;width:100%;max-height:88dvh;
+  border-radius:20px 20px 0 0;width:100%;max-height:90dvh;
   display:flex;flex-direction:column;overflow:hidden;
+  animation:slideUp .2s cubic-bezier(.32,0,.12,1);
 }
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 .modal-head{
   display:flex;align-items:center;justify-content:space-between;
   padding:16px 18px;border-bottom:1px solid var(--border);flex-shrink:0;
 }
 .modal-title{font-size:15px;font-weight:600}
-.modal-x{background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;border-radius:6px;display:flex}
-.modal-x:active{background:var(--bg3)}
+.modal-x{background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;border-radius:6px;display:flex;transition:color .1s}
+.modal-x:hover{color:var(--text)}
 .modal-body{padding:18px;overflow-y:auto;flex:1}
 .modal-foot{
   display:flex;align-items:center;justify-content:space-between;
-  padding:14px 18px;border-top:1px solid var(--border);background:var(--bg3);flex-shrink:0;
-  padding-bottom:calc(14px + env(safe-area-inset-bottom));
+  padding:12px 18px;border-top:1px solid var(--border);background:var(--bg3);flex-shrink:0;
+  padding-bottom:calc(12px + env(safe-area-inset-bottom));
 }
 .form-group{margin-bottom:14px}
 .form-label{display:block;font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:500}
 .form-input{
-  width:100%;padding:10px 13px;background:var(--bg3);
-  border:1px solid var(--border);border-radius:var(--r);
+  width:100%;padding:9px 12px;background:var(--bg3);
+  border:1px solid var(--border2);border-radius:var(--r);
   color:var(--text);font:inherit;font-size:13px;outline:none;
   transition:border-color .15s;
 }
-.form-input:focus{border-color:var(--accent)}
+.form-input:focus{border-color:var(--accent-border)}
 .form-input::placeholder{color:var(--text3)}
-.form-hint{font-size:11px;color:var(--text3);margin-top:4px}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.btn{padding:9px 20px;border-radius:var(--r);border:none;font:inherit;font-size:13px;cursor:pointer;transition:all .15s}
-.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
-.btn-ghost:active{border-color:var(--border2);background:var(--bg3)}
-.btn-primary{background:var(--accent);color:#fff}
-.btn-primary:active{background:var(--accent2)}
-.steps{display:flex;margin-bottom:18px}
-.step{flex:1;text-align:center;padding:8px;border-bottom:2px solid var(--border);font-size:11px;color:var(--text3)}
+.form-hint{font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{padding:8px 18px;border-radius:var(--r);border:none;font:inherit;font-size:13px;cursor:pointer;transition:all .15s;font-weight:500}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+.btn-ghost:hover{border-color:var(--border3);background:var(--bg3)}
+.btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(109,86,240,.3)}
+.btn-primary:hover{background:var(--accent2)}
+.btn-primary:active{transform:scale(.96)}
+.btn-danger{background:var(--red-bg);border:1px solid rgba(248,113,113,.25);color:var(--red)}
+.steps{display:flex;margin-bottom:18px;gap:4px}
+.step{
+  flex:1;text-align:center;padding:7px 4px;
+  border-bottom:2px solid var(--border);font-size:11px;color:var(--text3);
+  transition:all .2s;
+}
 .step.done{border-bottom-color:var(--green);color:var(--green)}
 .step.active{border-bottom-color:var(--accent);color:var(--accent2)}
-.step-n{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:10px;font-weight:600;background:var(--bg4);margin-bottom:4px}
+.step-n{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;border-radius:50%;font-size:10px;font-weight:600;
+  background:var(--bg4);margin-bottom:4px;
+}
 .step.active .step-n{background:var(--accent);color:#fff}
-.step.done .step-n{background:var(--green-bg);color:var(--green)}
+.step.done .step-n{background:var(--green-bg);color:var(--green);font-size:11px}
 .note{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:5px}
+
+/* File viewer panel */
+#file-panel{
+  position:fixed;inset:0;z-index:80;
+  display:none;align-items:flex-end;
+}
+#file-panel.open{display:flex;animation:fadeIn .15s}
+.file-panel-bg{position:absolute;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px)}
+.file-panel-box{
+  position:relative;width:100%;max-height:85dvh;
+  background:var(--bg2);border-radius:20px 20px 0 0;
+  border:1px solid var(--border2);border-bottom:none;
+  display:flex;flex-direction:column;overflow:hidden;
+  animation:slideUp .2s cubic-bezier(.32,0,.12,1);
+}
+.file-panel-head{
+  display:flex;align-items:center;gap:8px;
+  padding:12px 16px;border-bottom:1px solid var(--border);
+}
+.file-panel-name{font-size:13px;font-weight:500;font-family:var(--mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-panel-close{
+  width:26px;height:26px;border-radius:50%;
+  border:none;background:var(--bg4);color:var(--text2);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.file-panel-content{flex:1;overflow-y:auto;padding:14px}
+.file-panel-content pre{
+  font-family:var(--mono);font-size:12px;line-height:1.65;
+  color:var(--text2);white-space:pre-wrap;word-break:break-all;
+}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:calc(80px + env(safe-area-inset-bottom));left:50%;
+  transform:translateX(-50%) translateY(12px);
+  background:var(--bg3);border:1px solid var(--border2);
+  color:var(--text);font-size:12.5px;padding:8px 16px;
+  border-radius:20px;z-index:200;
+  opacity:0;transition:all .2s;pointer-events:none;
+  box-shadow:var(--shadow);white-space:nowrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
@@ -405,60 +623,119 @@ html,body{
   <!-- TOPBAR -->
   <header id="topbar">
     <div class="top-left">
-      <div class="logo-pill">
-        <div class="logo-dot" id="status-dot"></div>
-        DevAgent
+      <div class="logo-wrap">
+        <div class="logo-icon">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 8h2l2-4 2 8 2-4h2"/>
+          </svg>
+        </div>
+        <span class="logo-name">DevAgent</span>
+      </div>
+      <div class="status-pill" id="status-pill">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-pill-text">Desconectado</span>
       </div>
     </div>
     <div class="top-right">
-      <div class="repo-pill" id="repo-pill" onclick="openConnectModal()" style="display:none">
+      <div class="repo-chip" id="repo-chip" onclick="openConnectModal()" style="display:none">
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9z"/></svg>
-        <span id="repo-pill-name">repo</span>
+        <span id="repo-chip-name">repo</span>
       </div>
+      <select class="model-select" id="model-select" onchange="S.model=this.value">
+        <option value="gpt-4o">GPT-4o</option>
+        <option value="gpt-4o-mini">GPT-4o mini</option>
+        <option value="claude-sonnet-4-5">Claude 3.5</option>
+        <option value="o3-mini">o3-mini</option>
+      </select>
+      <button class="icon-btn" id="files-btn" onclick="toggleSidebar()" title="Archivos" style="display:none">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 018 4.25V1.5H3.75zm5 .056V4.25c0 .138.112.25.25.25h2.694l-.437-.437L8.75 1.556z"/></svg>
+      </button>
+      <button class="icon-btn" id="gh-btn" onclick="openConnectModal()" title="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </button>
+      <button class="icon-btn" onclick="clearChat()" title="Nueva conversación">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 1h10.5c.966 0 1.75.784 1.75 1.75v6.5A1.75 1.75 0 0113.25 11H8.06l-2.573 2.573A1.457 1.457 0 013 12.543V11H2.75A1.75 1.75 0 011 9.25v-6.5C1 1.784 1.784 1 2.75 1zM2.5 2.75v6.5c0 .138.112.25.25.25h1a.75.75 0 01.75.75v2.19l2.72-2.72a.75.75 0 01.53-.22h5.5a.25.25 0 00.25-.25v-6.5a.25.25 0 00-.25-.25H2.75a.25.25 0 00-.25.25z"/></svg>
+      </button>
+      <button class="icon-btn" onclick="toggleSheet()" title="Conectores">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>
+      </button>
     </div>
   </header>
 
-  <!-- CHAT -->
-  <div id="chat-wrap">
-    <!-- Empty greeting -->
-    <div id="empty-state">
-      <h1>¿En qué puedo<br>ayudarte?</h1>
+  <!-- BODY -->
+  <div id="body">
+
+    <!-- SIDEBAR (file tree) -->
+    <div id="sidebar">
+      <div class="sidebar-head">
+        <span class="sidebar-title">Archivos</span>
+        <button class="icon-btn" onclick="toggleSidebar()" style="width:24px;height:24px;border-radius:6px">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+        </button>
+      </div>
+      <div id="file-tree"></div>
     </div>
-    <!-- Messages -->
-    <div id="messages"></div>
-    <!-- Agent doing things -->
-    <div id="status-bar">
-      <svg viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M8 2.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM.5 8a7.5 7.5 0 1115 0 7.5 7.5 0 01-15 0z"/></svg>
-      <span id="status-text">El agente está trabajando...</span>
+
+    <!-- CHAT -->
+    <div id="chat-wrap">
+      <!-- Empty state -->
+      <div id="empty-state">
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+          </svg>
+        </div>
+        <div>
+          <div class="empty-title">¿En qué puedo ayudarte?</div>
+          <div class="empty-sub" style="margin-top:5px">Conecta un repositorio de GitHub o hazme cualquier pregunta de desarrollo</div>
+        </div>
+        <div class="empty-chips">
+          <button class="empty-chip" onclick="quickPrompt('Analiza el proyecto y muéstrame los problemas principales')">🔍 Analizar proyecto</button>
+          <button class="empty-chip" onclick="quickPrompt('Encuentra y corrige todos los bugs del código')">🐛 Corregir bugs</button>
+          <button class="empty-chip" onclick="quickPrompt('Haz un análisis de seguridad completo')">🔒 Seguridad</button>
+          <button class="empty-chip" onclick="quickPrompt('Optimiza el rendimiento del proyecto')">⚡ Rendimiento</button>
+          <button class="empty-chip" onclick="openConnectModal()">⚙️ Conectar GitHub</button>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div id="messages"></div>
+
+      <!-- Status bar -->
+      <div id="status-bar">
+        <svg class="spin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 2a6 6 0 100 12A6 6 0 008 2z" stroke-dasharray="25" stroke-dashoffset="0"/>
+        </svg>
+        <span id="status-text">El agente está trabajando...</span>
+      </div>
     </div>
+
   </div>
 
   <!-- INPUT BAR -->
   <div id="input-bar">
     <div class="input-box">
       <textarea id="chat-input" rows="1"
-        placeholder="Asigna una tarea o pregunta lo que quieras"
+        placeholder="Asigna una tarea al agente..."
         onkeydown="handleKey(event)"
-        oninput="resize(this)"></textarea>
+        oninput="onInput(this)"></textarea>
       <div class="input-actions">
-        <!-- + button -->
-        <button class="act-btn" onclick="toggleSheet()" aria-label="Más opciones">
+        <button class="ia-btn" onclick="toggleSheet()" title="Conectores">
           <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>
         </button>
-        <!-- GitHub button -->
-        <button id="gh-btn" onclick="openConnectModal()" aria-label="GitHub">
+        <button class="ia-btn" id="ia-gh-btn" onclick="openConnectModal()" title="GitHub">
           <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         </button>
         <div class="spacer"></div>
-        <!-- Send -->
-        <button id="send-btn" onclick="send()" disabled aria-label="Enviar">
+        <span class="char-count" id="char-count"></span>
+        <button id="send-btn" onclick="send()" disabled>
           <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1.5l13 6.5-13 6.5V9l9-2.5L1.5 4V1.5z"/></svg>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- CONNECTORS SHEET (+ button) -->
+  <!-- CONNECTORS SHEET -->
   <div id="sheet-overlay">
     <div id="sheet-backdrop" onclick="closeSheet()"></div>
     <div id="sheet">
@@ -470,30 +747,8 @@ html,body{
         </button>
       </div>
 
-      <div class="sheet-manage-row">
-        <button class="manage-btn" onclick="closeSheet();openConnectModal()">
-          <span class="manage-btn-left">
-            <span class="manage-btn-icon">
-              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>
-            </span>
-            Agregar conectores
-          </span>
-          <svg class="chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06L7.28 12.78a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
-        </button>
-        <button class="manage-btn" style="margin-top:2px">
-          <span class="manage-btn-left">
-            <span class="manage-btn-icon">
-              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 7.5a1 1 0 100 2 1 1 0 000-2zm0-3a1 1 0 100 2 1 1 0 000-2zM3.5 12.5a1 1 0 112 0 1 1 0 01-2 0zM9 7.25a.75.75 0 000 1.5h5.25a.75.75 0 000-1.5H9zm0-3a.75.75 0 000 1.5h5.25a.75.75 0 000-1.5H9zm0 6a.75.75 0 000 1.5h5.25a.75.75 0 000-1.5H9z"/></svg>
-            </span>
-            Gestionar conectores
-          </span>
-          <svg class="chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06L7.28 12.78a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
-        </button>
-      </div>
+      <div class="conn-section-label">Activos</div>
 
-      <div class="sheet-section-label">Conectores disponibles</div>
-
-      <!-- GitHub -->
       <div class="connector-item" onclick="closeSheet();openConnectModal()">
         <div class="conn-icon gh">
           <svg viewBox="0 0 16 16" fill="#fff"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -502,53 +757,42 @@ html,body{
           <div class="conn-name">GitHub</div>
           <div class="conn-sub" id="gh-sub">Toca para conectar</div>
         </div>
-        <div class="conn-action">
-          <div class="toggle" id="gh-toggle" onclick="event.stopPropagation();toggleGH()"></div>
-        </div>
+        <div class="toggle" id="gh-toggle" onclick="event.stopPropagation();toggleGH()"></div>
       </div>
 
-      <!-- Outlook Calendar -->
+      <div class="conn-section-label">Próximamente</div>
+
       <div class="connector-item">
-        <div class="conn-icon outlook-cal">
+        <div class="conn-icon outlook">
           <svg viewBox="0 0 24 24" fill="#fff"><rect x="3" y="4" width="18" height="17" rx="2" fill="none" stroke="#fff" stroke-width="1.5"/><path d="M16 2v4M8 2v4M3 10h18" stroke="#fff" stroke-width="1.5" fill="none"/></svg>
         </div>
         <div class="conn-info">
-          <div class="conn-name">Calendario de Outlook</div>
+          <div class="conn-name">Outlook Calendar <span class="conn-badge">Pronto</span></div>
+          <div class="conn-sub">Gestiona tu agenda</div>
         </div>
-        <div class="conn-action"><span class="connect-link">Conectar</span></div>
+        <span class="conn-link">Conectar</span>
       </div>
 
-      <!-- Outlook Mail -->
       <div class="connector-item">
-        <div class="conn-icon outlook-mail">
+        <div class="conn-icon mail">
           <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M2 8l10 6 10-6" stroke="#fff" stroke-width="1.5"/></svg>
         </div>
         <div class="conn-info">
-          <div class="conn-name">Correo de Outlook</div>
+          <div class="conn-name">Correo <span class="conn-badge">Pronto</span></div>
+          <div class="conn-sub">Outlook / Gmail</div>
         </div>
-        <div class="conn-action"><span class="connect-link">Conectar</span></div>
+        <span class="conn-link">Conectar</span>
       </div>
 
-      <!-- Instagram -->
       <div class="connector-item">
-        <div class="conn-icon instagram">
+        <div class="conn-icon ig">
           <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="5" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="12" r="5" stroke="#fff" stroke-width="1.5"/><circle cx="17.5" cy="6.5" r="1" fill="#fff"/></svg>
         </div>
         <div class="conn-info">
-          <div class="conn-name">Instagram Creator Mar...<span class="beta-badge">Beta</span></div>
+          <div class="conn-name">Instagram <span class="conn-badge">Beta</span></div>
+          <div class="conn-sub">Creator tools</div>
         </div>
-        <div class="conn-action"><span class="connect-link">Conectar</span></div>
-      </div>
-
-      <!-- Google Calendar -->
-      <div class="connector-item">
-        <div class="conn-icon gcal">
-          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2" fill="#fff" stroke="#ddd" stroke-width="1"/><path d="M16 2v4M8 2v4M3 10h18" stroke="#999" stroke-width="1.5" fill="none"/><text x="12" y="19" text-anchor="middle" font-size="8" fill="#4285f4" font-weight="bold">G</text></svg>
-        </div>
-        <div class="conn-info">
-          <div class="conn-name">Google Calendar</div>
-        </div>
-        <div class="conn-action"><span class="connect-link">Conectar</span></div>
+        <span class="conn-link">Conectar</span>
       </div>
     </div>
   </div>
@@ -557,7 +801,7 @@ html,body{
   <div class="modal-overlay" id="connect-modal">
     <div class="modal">
       <div class="modal-head">
-        <span class="modal-title">Conectar repositorio GitHub</span>
+        <span class="modal-title" id="modal-title-text">Conectar repositorio GitHub</span>
         <button class="modal-x" onclick="closeModal()">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
         </button>
@@ -571,18 +815,18 @@ html,body{
         <div id="modal-s1">
           <div class="form-group">
             <label class="form-label">GitHub Token (Personal Access Token)</label>
-            <input type="password" class="form-input" id="gh-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
-            <div class="form-hint">Para repos privados. <a href="https://github.com/settings/tokens" style="color:var(--accent2)">Generar token →</a></div>
+            <input type="password" class="form-input" id="gh-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+            <div class="form-hint">Opcional para repos públicos. <a href="https://github.com/settings/tokens" target="_blank" style="color:var(--accent2)">Generar token →</a></div>
           </div>
           <div class="form-group">
-            <label class="form-label">Usuario de GitHub</label>
-            <input type="text" class="form-input" id="gh-user" placeholder="tu-usuario">
+            <label class="form-label">Usuario u organización de GitHub</label>
+            <input type="text" class="form-input" id="gh-user" placeholder="octocat" autocomplete="off">
           </div>
         </div>
         <div id="modal-s2" style="display:none">
           <div class="form-group">
             <label class="form-label">Nombre del repositorio</label>
-            <input type="text" class="form-input" id="gh-repo" placeholder="nombre-del-repo">
+            <input type="text" class="form-input" id="gh-repo" placeholder="my-awesome-project" autocomplete="off">
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -590,20 +834,20 @@ html,body{
               <input type="text" class="form-input" id="gh-branch" placeholder="main" value="main">
             </div>
             <div class="form-group">
-              <label class="form-label">Profundidad</label>
+              <label class="form-label">Contexto</label>
               <select class="form-input" id="gh-depth">
-                <option value="shallow">Rápida</option>
-                <option value="medium" selected>Media</option>
-                <option value="deep">Profunda</option>
+                <option value="shallow">Rápido (30 archivos)</option>
+                <option value="medium" selected>Completo (80 archivos)</option>
+                <option value="deep">Profundo (150 archivos)</option>
               </select>
             </div>
           </div>
         </div>
         <div id="modal-s3" style="display:none">
           <div class="form-group">
-            <label class="form-label">Instrucciones del agente</label>
-            <textarea class="form-input" rows="4" id="gh-instructions" placeholder="Ej: Proyecto React con TypeScript. Airbnb style. TailwindCSS..."></textarea>
-            <div class="form-hint">Contexto que el agente usará en todo momento.</div>
+            <label class="form-label">Instrucciones del agente (opcional)</label>
+            <textarea class="form-input" rows="3" id="gh-instructions" placeholder="Ej: Proyecto React + TypeScript. Usa Tailwind. Sigue convenciones Airbnb..."></textarea>
+            <div class="form-hint">Contexto adicional que el agente tendrá siempre presente.</div>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -611,7 +855,7 @@ html,body{
               <select class="form-input" id="gh-model">
                 <option value="gpt-4o">GPT-4o</option>
                 <option value="gpt-4o-mini">GPT-4o mini</option>
-                <option value="claude-sonnet-4-5">Claude Sonnet</option>
+                <option value="claude-sonnet-4-5">Claude 3.5 Sonnet</option>
                 <option value="o3-mini">o3-mini</option>
               </select>
             </div>
@@ -628,11 +872,11 @@ html,body{
       </div>
       <div class="modal-foot">
         <span class="note">
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="var(--green)"><circle cx="8" cy="8" r="8"/></svg>
-          Token solo en local
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="var(--green)"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm3.78 6.237l-4.5 4.5a.75.75 0 01-1.06 0l-2-2a.75.75 0 011.06-1.06l1.47 1.47 3.97-3.97a.75.75 0 011.06 1.06z"/></svg>
+          Token almacenado localmente
         </span>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-ghost" id="btn-back" style="display:none" onclick="modalBack()">Atrás</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-ghost" id="btn-back" style="display:none" onclick="modalBack()">← Atrás</button>
           <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
           <button class="btn btn-primary" id="btn-next" onclick="modalNext()">Siguiente →</button>
         </div>
@@ -640,251 +884,846 @@ html,body{
     </div>
   </div>
 
+  <!-- FILE VIEWER PANEL -->
+  <div id="file-panel">
+    <div class="file-panel-bg" onclick="closeFilePanel()"></div>
+    <div class="file-panel-box">
+      <div class="file-panel-head">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="var(--text3)"><path d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 018 4.25V1.5H3.75zm5 .056V4.25c0 .138.112.25.25.25h2.694l-.437-.437L8.75 1.556z"/></svg>
+        <span class="file-panel-name" id="file-panel-name">archivo.js</span>
+        <button class="file-panel-close" onclick="closeFilePanel()">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+        </button>
+      </div>
+      <div class="file-panel-content"><pre id="file-panel-content">Cargando...</pre></div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast"></div>
+
 </div>
 <script>
-// ═══ STATE ═══
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
 const S = {
-  connected:false, token:'', user:'', repo:'', branch:'main',
-  repoData:null, files:[], model:'gpt-4o', instructions:'',
-  modalStep:1, ghToggle:false
+  connected: false,
+  token: '', user: '', repo: '', branch: 'main',
+  repoData: null, files: [],
+  model: 'gpt-4o', instructions: '',
+  autocommit: 'ask',
+  modalStep: 1,
+  busy: false,
+  fileCache: {},
+  history: [],
+  sidebarOpen: false,
 };
 
-// ═══ TEXTAREA RESIZE ═══
-function resize(el){
-  el.style.height='auto';
-  el.style.height=Math.min(el.scrollHeight,140)+'px';
-  document.getElementById('send-btn').disabled=!el.value.trim();
+// ═══════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════
+function esc(str) {
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
 }
 
-// ═══ SHEET ═══
-let sheetOpen=false;
-function toggleSheet(){sheetOpen=!sheetOpen;document.getElementById('sheet-overlay').classList.toggle('open',sheetOpen)}
-function closeSheet(){sheetOpen=false;document.getElementById('sheet-overlay').classList.remove('open')}
-
-function toggleGH(){
-  if(!S.connected){closeSheet();openConnectModal();return}
-  S.ghToggle=!S.ghToggle;
-  document.getElementById('gh-toggle').classList.toggle('on',S.ghToggle);
+function now() {
+  return new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
 }
 
-// ═══ MODAL ═══
-function openConnectModal(){closeSheet();document.getElementById('connect-modal').classList.add('open')}
-function closeModal(){document.getElementById('connect-modal').classList.remove('open')}
+function toast(msg, duration=2200) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(()=>t.classList.remove('show'), duration);
+}
 
-function modalNext(){
-  if(S.modalStep===1){
-    S.token=document.getElementById('gh-token').value;
-    S.user=document.getElementById('gh-user').value;
-    if(!S.user){alert('Ingresa tu usuario de GitHub');return}
-    document.getElementById('modal-s1').style.display='none';
-    document.getElementById('modal-s2').style.display='block';
-    document.getElementById('btn-back').style.display='inline-flex';
-    document.getElementById('step1').className='step done';
-    document.getElementById('step2').className='step active';
-    S.modalStep=2;
-  } else if(S.modalStep===2){
-    S.repo=document.getElementById('gh-repo').value;
-    S.branch=document.getElementById('gh-branch').value||'main';
-    if(!S.repo){alert('Ingresa el nombre del repositorio');return}
-    document.getElementById('modal-s2').style.display='none';
-    document.getElementById('modal-s3').style.display='block';
-    document.getElementById('step2').className='step done';
-    document.getElementById('step3').className='step active';
-    document.getElementById('btn-next').textContent='✓ Conectar';
-    S.modalStep=3;
+// ═══════════════════════════════════════════
+// MARKDOWN RENDERER
+// ═══════════════════════════════════════════
+function renderMarkdown(text) {
+  if (!text) return '';
+  let html = esc(text);
+
+  // Code blocks with file path detection
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    const id = 'cb' + Math.random().toString(36).slice(2,8);
+    const langLabel = lang || 'code';
+    return `<div class="code-block">
+      <div class="code-block-head">
+        <span class="code-lang">${esc(langLabel)}</span>
+        <button class="copy-btn" id="${id}" onclick="copyCode(this,'${id}')">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
+          Copiar
+        </button>
+      </div>
+      <pre>${code}</pre>
+    </div>`;
+  });
+
+  // Inline code
+  html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+  // Headers
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+  // Bold / italic
+  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // Blockquote
+  html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+
+  // HR
+  html = html.replace(/^---+$/gm, '<hr>');
+
+  // Lists
+  html = html.replace(/^(\s*)[•\-\*] (.+)$/gm, (_, sp, item) => `<li>${item}</li>`);
+  html = html.replace(/^(\s*)\d+\. (.+)$/gm, (_, sp, item) => `<li>${item}</li>`);
+  // Wrap consecutive li tags
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, match => `<ul>${match}</ul>`);
+
+  // Links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+  // Paragraphs — split on double newlines
+  const parts = html.split(/\n\n+/);
+  html = parts.map(p => {
+    p = p.trim();
+    if (!p) return '';
+    if (p.startsWith('<h') || p.startsWith('<ul') || p.startsWith('<ol') ||
+        p.startsWith('<pre') || p.startsWith('<div class="code-block') ||
+        p.startsWith('<blockquote') || p.startsWith('<hr')) return p;
+    return `<p>${p.replace(/\n/g,'<br>')}</p>`;
+  }).join('\n');
+
+  return html;
+}
+
+function copyCode(btn, id) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 16 16" fill="var(--green)"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm3.78 6.237l-4.5 4.5a.75.75 0 01-1.06 0l-2-2a.75.75 0 011.06-1.06l1.47 1.47 3.97-3.97a.75.75 0 011.06 1.06z"/></svg> Copiado`;
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg> Copiar`;
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+}
+
+// ═══════════════════════════════════════════
+// INPUT
+// ═══════════════════════════════════════════
+function onInput(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+  const len = el.value.trim().length;
+  document.getElementById('send-btn').disabled = !len || S.busy;
+  const cc = document.getElementById('char-count');
+  cc.textContent = len > 50 ? len : '';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+}
+
+// ═══════════════════════════════════════════
+// SHEET
+// ═══════════════════════════════════════════
+let sheetOpen = false;
+function toggleSheet() { sheetOpen = !sheetOpen; document.getElementById('sheet-overlay').classList.toggle('open', sheetOpen); }
+function closeSheet() { sheetOpen = false; document.getElementById('sheet-overlay').classList.remove('open'); }
+function toggleGH() {
+  if (!S.connected) { closeSheet(); openConnectModal(); return; }
+  toast(S.connected ? 'GitHub conectado' : 'Conecta GitHub primero');
+}
+
+// ═══════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════
+function openConnectModal() {
+  closeSheet();
+  if (S.connected) {
+    document.getElementById('modal-title-text').textContent = 'Reconectar repositorio';
+  }
+  document.getElementById('connect-modal').classList.add('open');
+}
+function closeModal() { document.getElementById('connect-modal').classList.remove('open'); }
+
+function modalNext() {
+  if (S.modalStep === 1) {
+    const user = document.getElementById('gh-user').value.trim();
+    if (!user) { toast('⚠️ Ingresa tu usuario de GitHub'); return; }
+    S.token = document.getElementById('gh-token').value.trim();
+    S.user = user;
+    document.getElementById('modal-s1').style.display = 'none';
+    document.getElementById('modal-s2').style.display = 'block';
+    document.getElementById('btn-back').style.display = 'inline-flex';
+    document.getElementById('step1').className = 'step done';
+    document.getElementById('step1').querySelector('.step-n').textContent = '✓';
+    document.getElementById('step2').className = 'step active';
+    S.modalStep = 2;
+  } else if (S.modalStep === 2) {
+    const repo = document.getElementById('gh-repo').value.trim();
+    if (!repo) { toast('⚠️ Ingresa el nombre del repositorio'); return; }
+    S.repo = repo;
+    S.branch = document.getElementById('gh-branch').value || 'main';
+    S.depthLimit = {shallow:30, medium:80, deep:150}[document.getElementById('gh-depth').value] || 80;
+    document.getElementById('modal-s2').style.display = 'none';
+    document.getElementById('modal-s3').style.display = 'block';
+    document.getElementById('step2').className = 'step done';
+    document.getElementById('step2').querySelector('.step-n').textContent = '✓';
+    document.getElementById('step3').className = 'step active';
+    document.getElementById('btn-next').textContent = '✓ Conectar';
+    S.modalStep = 3;
   } else {
-    S.instructions=document.getElementById('gh-instructions').value;
-    S.model=document.getElementById('gh-model').value;
+    S.instructions = document.getElementById('gh-instructions').value.trim();
+    S.model = document.getElementById('gh-model').value;
+    document.getElementById('model-select').value = S.model;
+    S.autocommit = document.getElementById('gh-autocommit').value;
     connectRepo();
   }
 }
-function modalBack(){
-  if(S.modalStep===2){
-    document.getElementById('modal-s2').style.display='none';
-    document.getElementById('modal-s1').style.display='block';
-    document.getElementById('btn-back').style.display='none';
-    document.getElementById('step1').className='step active';
-    document.getElementById('step2').className='step';
-    S.modalStep=1;
-  } else if(S.modalStep===3){
-    document.getElementById('modal-s3').style.display='none';
-    document.getElementById('modal-s2').style.display='block';
-    document.getElementById('step2').className='step active';
-    document.getElementById('step3').className='step';
-    document.getElementById('btn-next').textContent='Siguiente →';
-    S.modalStep=2;
+
+function modalBack() {
+  if (S.modalStep === 2) {
+    document.getElementById('modal-s2').style.display = 'none';
+    document.getElementById('modal-s1').style.display = 'block';
+    document.getElementById('btn-back').style.display = 'none';
+    document.getElementById('step1').className = 'step active';
+    document.getElementById('step1').querySelector('.step-n').textContent = '1';
+    document.getElementById('step2').className = 'step';
+    S.modalStep = 1;
+  } else if (S.modalStep === 3) {
+    document.getElementById('modal-s3').style.display = 'none';
+    document.getElementById('modal-s2').style.display = 'block';
+    document.getElementById('step2').className = 'step active';
+    document.getElementById('step2').querySelector('.step-n').textContent = '2';
+    document.getElementById('step3').className = 'step';
+    document.getElementById('btn-next').textContent = 'Siguiente →';
+    S.modalStep = 2;
   }
 }
 
-// ═══ CONNECT ═══
-async function connectRepo(){
+// Modal reset
+function resetModal() {
+  S.modalStep = 1;
+  ['modal-s2','modal-s3'].forEach(id => document.getElementById(id).style.display = 'none');
+  document.getElementById('modal-s1').style.display = 'block';
+  document.getElementById('btn-back').style.display = 'none';
+  document.getElementById('btn-next').textContent = 'Siguiente →';
+  ['step1','step2','step3'].forEach((id,i) => {
+    document.getElementById(id).className = 'step' + (i===0?' active':'');
+    document.getElementById(id).querySelector('.step-n').textContent = i+1;
+  });
+}
+
+// ═══════════════════════════════════════════
+// GITHUB API
+// ═══════════════════════════════════════════
+function ghHeaders() {
+  const h = { 'Accept': 'application/vnd.github.v3+json' };
+  if (S.token) h['Authorization'] = `token ${S.token}`;
+  return h;
+}
+
+async function connectRepo() {
   closeModal();
-  setStatus(true,'Conectando con GitHub...');
-  const headers={'Accept':'application/vnd.github.v3+json'};
-  if(S.token) headers['Authorization']=`token ${S.token}`;
-  try{
-    const rr=await fetch(`https://api.github.com/repos/${S.user}/${S.repo}`,{headers});
-    if(!rr.ok) throw new Error(`${rr.status} ${rr.statusText}`);
-    S.repoData=await rr.json();
-    const tr=await fetch(`https://api.github.com/repos/${S.user}/${S.repo}/git/trees/${S.branch}?recursive=1`,{headers});
-    const td=await tr.json();
-    S.files=(td.tree||[]).filter(f=>f.type==='blob').slice(0,80);
-    S.connected=true;
+  resetModal();
+  setStatus(true, 'Conectando con GitHub...');
+
+  try {
+    // Step 1 — fetch repo metadata
+    addStep('running', 'Verificando repositorio', `${S.user}/${S.repo}`);
+    const rr = await fetch(`https://api.github.com/repos/${S.user}/${S.repo}`, { headers: ghHeaders() });
+    if (!rr.ok) {
+      if (rr.status === 404) throw new Error('Repositorio no encontrado. Verifica el usuario y nombre.');
+      if (rr.status === 403) throw new Error('Sin acceso. Genera un token con permisos de lectura.');
+      throw new Error(`Error ${rr.status}: ${rr.statusText}`);
+    }
+    S.repoData = await rr.json();
+    updateStep('done', 'Repositorio encontrado', `${S.repoData.full_name} · ⭐ ${S.repoData.stargazers_count}`);
+
+    // Step 2 — fetch file tree
+    addStep('running', 'Obteniendo árbol de archivos', `rama ${S.branch}`);
+    const tr = await fetch(`https://api.github.com/repos/${S.user}/${S.repo}/git/trees/${S.branch}?recursive=1`, { headers: ghHeaders() });
+    if (!tr.ok) throw new Error(`No se pudo obtener el árbol: ${tr.status}`);
+    const td = await tr.json();
+    const limit = S.depthLimit || 80;
+    S.files = (td.tree || []).filter(f => f.type === 'blob').slice(0, limit);
+    updateStep('done', 'Árbol de archivos cargado', `${S.files.length} archivos encontrados`);
+
+    // Step 3 — detect language / framework
+    addStep('running', 'Detectando tecnologías', 'Analizando estructura...');
+    const tech = detectTech(S.files);
+    updateStep('done', 'Tecnologías detectadas', tech || S.repoData.language || 'No determinado');
+
+    S.connected = true;
     onConnected();
     setStatus(false);
-    addMsg('agent',`✅ Conectado a **${S.repoData.full_name}** (${S.files.length} archivos, ${S.repoData.language||'varios lenguajes'}).\n\nSoy tu agente autónomo. Dime qué quieres que haga: analizar, corregir bugs, refactorizar, crear un Pull Request, agregar tests... lo que necesites.`);
-    setTimeout(()=>autoAnalyze(),600);
-  } catch(e){
+
+    const intro = `## ✅ Conectado a \`${S.repoData.full_name}\`
+
+**${S.files.length} archivos** cargados en rama \`${S.branch}\` · ${S.repoData.language || 'varios lenguajes'}${S.repoData.description ? `\n\n> ${S.repoData.description}` : ''}
+
+Soy tu agente de desarrollo. Puedo analizar el código, corregir bugs, refactorizar, escribir tests, crear Pull Requests y más. ¿Qué quieres que haga?`;
+
+    addMsg('agent', intro, [
+      { label: '🔍 Analizar proyecto', fn: `quickAction('Analiza el repositorio completo. Dame un resumen ejecutivo: qué hace, stack tecnológico, arquitectura, y los 3 problemas más críticos que detectas.')` },
+      { label: '🐛 Corregir bugs', fn: `quickAction('Encuentra y corrige todos los bugs del proyecto. Muéstrame el código corregido con explicación de cada fix.')` },
+      { label: '🔒 Auditoría de seguridad', fn: `quickAction('Haz una auditoría de seguridad completa: vulnerabilidades OWASP, dependencias desactualizadas, secretos expuestos.')` },
+      { label: '📋 Generar PR', fn: `quickAction('Crea un Pull Request profesional con las mejoras más importantes del proyecto.')` },
+    ]);
+
+    setTimeout(() => autoAnalyze(), 400);
+
+  } catch (e) {
     setStatus(false);
-    loadDemo();
+    updateStep('error', 'Error de conexión', e.message);
+    addMsg('agent', `**Error al conectar:** ${e.message}\n\nVerifica que el usuario, repositorio y token sean correctos.`);
   }
 }
 
-function loadDemo(){
-  S.connected=true;
-  S.repoData={full_name:`${S.user||'demo'}/${S.repo||'mi-proyecto'}`,stargazers_count:42,language:'JavaScript'};
-  S.files=[{path:'src/app.js'},{path:'src/routes/users.js'},{path:'src/models/User.js'},{path:'tests/app.test.js'},{path:'package.json'},{path:'README.md'}];
+function detectTech(files) {
+  const paths = files.map(f => f.path.toLowerCase());
+  const has = (...exts) => exts.some(ext => paths.some(p => p.endsWith(ext)));
+  const parts = [];
+  if (has('package.json')) {
+    if (has('.tsx', '.jsx')) parts.push('React');
+    else if (paths.some(p => p.includes('vue'))) parts.push('Vue');
+    else if (paths.some(p => p.includes('angular'))) parts.push('Angular');
+    else if (paths.some(p => p.includes('svelte'))) parts.push('Svelte');
+    if (has('.ts', '.tsx')) parts.push('TypeScript');
+    parts.push('Node.js');
+  }
+  if (has('requirements.txt', '.py')) parts.push('Python');
+  if (has('go.mod', '.go')) parts.push('Go');
+  if (has('cargo.toml', '.rs')) parts.push('Rust');
+  if (has('composer.json', '.php')) parts.push('PHP');
+  if (has('pom.xml', '.java')) parts.push('Java');
+  if (has('gemfile', '.rb')) parts.push('Ruby');
+  if (has('docker-compose.yml', 'dockerfile')) parts.push('Docker');
+  if (has('tailwind.config')) parts.push('Tailwind');
+  return parts.slice(0, 4).join(' · ');
+}
+
+function loadDemoMode() {
+  S.connected = true;
+  S.repoData = { full_name: `${S.user||'demo'}/${S.repo||'mi-proyecto'}`, stargazers_count: 42, language: 'JavaScript', description: 'Proyecto de demostración' };
+  S.files = [
+    {path:'src/app.js', sha:'abc'}, {path:'src/routes/users.js', sha:'def'},
+    {path:'src/models/User.js', sha:'ghi'}, {path:'src/utils/auth.js', sha:'jkl'},
+    {path:'src/middleware/validate.js', sha:'mno'}, {path:'tests/app.test.js', sha:'pqr'},
+    {path:'package.json', sha:'stu'}, {path:'README.md', sha:'vwx'},
+    {path:'.env.example', sha:'yza'}
+  ];
   onConnected();
   setStatus(false);
-  addMsg('agent',`Conectado en **modo demo** (sin token válido). Tengo acceso al código de ejemplo.\n\nDime qué quieres que haga con el proyecto.`);
+  addMsg('agent', `**Modo demo activo** — trabajando con proyecto de ejemplo.\n\n¿Qué quieres que analice o mejore?`);
 }
 
-function onConnected(){
+async function fetchFileContent(filePath) {
+  if (S.fileCache[filePath]) return S.fileCache[filePath];
+  if (!S.connected || !S.repoData) return null;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${S.user}/${S.repo}/contents/${filePath}?ref=${S.branch}`, { headers: ghHeaders() });
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (data.encoding === 'base64') {
+      const content = atob(data.content.replace(/\n/g,''));
+      S.fileCache[filePath] = content;
+      return content;
+    }
+  } catch { return null; }
+  return null;
+}
+
+function onConnected() {
   document.getElementById('status-dot').classList.add('connected');
-  document.getElementById('gh-btn').classList.add('connected');
+  document.getElementById('status-pill').classList.add('connected');
+  document.getElementById('status-pill-text').textContent = S.repoData.full_name.split('/')[1];
+  document.getElementById('gh-btn').classList.add('active');
+  document.getElementById('ia-gh-btn').classList.add('gh-active');
   document.getElementById('gh-toggle').classList.add('on');
-  S.ghToggle=true;
-  const pill=document.getElementById('repo-pill');
-  pill.style.display='flex';
-  document.getElementById('repo-pill-name').textContent=S.repoData.full_name.split('/')[1];
-  document.getElementById('gh-sub').textContent=`${S.repoData.full_name} · ${S.branch}`;
+  const chip = document.getElementById('repo-chip');
+  chip.style.display = 'flex';
+  document.getElementById('repo-chip-name').textContent = S.repoData.full_name.split('/')[1];
+  document.getElementById('gh-sub').textContent = `${S.repoData.full_name} · ${S.branch}`;
+  document.getElementById('files-btn').style.display = 'flex';
+  buildFileTree();
 }
 
-// ═══ AI ═══
-function sysPrompt(){
-  const repo=S.repoData?`Repositorio: ${S.repoData.full_name}\nLenguaje: ${S.repoData.language||'varios'}\nRama: ${S.branch}\nArchivos disponibles:\n${S.files.map(f=>f.path).join('\n')}\n\n`:'';
-  const instr=S.instructions?`Instrucciones del proyecto:\n${S.instructions}\n\n`:'';
-  return `Eres DevAgent, un agente de IA autónomo especializado en desarrollo de software, similar a Manus AI. Trabajas directamente con repositorios de GitHub.
+// ═══════════════════════════════════════════
+// FILE TREE
+// ═══════════════════════════════════════════
+function buildFileTree() {
+  const tree = document.getElementById('file-tree');
+  tree.innerHTML = '';
+  const dirs = {};
+
+  S.files.forEach(f => {
+    const parts = f.path.split('/');
+    if (parts.length === 1) {
+      dirs[''] = dirs[''] || [];
+      dirs[''].push(f);
+    } else {
+      const dir = parts.slice(0, -1).join('/');
+      dirs[dir] = dirs[dir] || [];
+      dirs[dir].push(f);
+    }
+  });
+
+  // Root files first
+  (dirs[''] || []).forEach(f => {
+    tree.appendChild(makeFileItem(f));
+  });
+
+  // Directories
+  Object.keys(dirs).filter(d => d).sort().forEach(dir => {
+    const folder = document.createElement('div');
+    folder.className = 'tree-folder';
+    folder.innerHTML = `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5L6.457 1.457A1.75 1.75 0 005.22 1H1.75zm0 1.5h3.47c.155 0 .303.062.412.172L7.086 4.5H14.25a.25.25 0 01.25.25v8.5a.25.25 0 01-.25.25H1.75a.25.25 0 01-.25-.25V2.75A.25.25 0 011.75 2.5z"/></svg>${esc(dir)}`;
+    tree.appendChild(folder);
+    dirs[dir].forEach(f => tree.appendChild(makeFileItem(f)));
+  });
+}
+
+function makeFileItem(f) {
+  const el = document.createElement('div');
+  el.className = 'tree-file';
+  const name = f.path.split('/').pop();
+  const ext = name.includes('.') ? name.split('.').pop() : '';
+  el.innerHTML = `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 018 4.25V1.5H3.75zm5 .056V4.25c0 .138.112.25.25.25h2.694l-.437-.437L8.75 1.556z"/></svg>${esc(name)}<span class="file-ext">${esc(ext)}</span>`;
+  el.onclick = () => openFile(f.path, el);
+  return el;
+}
+
+function toggleSidebar() {
+  S.sidebarOpen = !S.sidebarOpen;
+  document.getElementById('sidebar').classList.toggle('open', S.sidebarOpen);
+}
+
+async function openFile(path, el) {
+  document.querySelectorAll('.tree-file').forEach(f => f.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.getElementById('file-panel-name').textContent = path;
+  document.getElementById('file-panel-content').textContent = 'Cargando...';
+  document.getElementById('file-panel').classList.add('open');
+  const content = await fetchFileContent(path);
+  document.getElementById('file-panel-content').textContent = content || '(No se pudo cargar el archivo)';
+}
+
+function closeFilePanel() {
+  document.getElementById('file-panel').classList.remove('open');
+  document.querySelectorAll('.tree-file').forEach(f => f.classList.remove('active'));
+}
+
+// ═══════════════════════════════════════════
+// MESSAGES
+// ═══════════════════════════════════════════
+let activeStepEl = null;
+
+function hideEmpty() { document.getElementById('empty-state').classList.add('hidden'); }
+
+function addMsg(role, content, chips = []) {
+  hideEmpty();
+  const msgs = document.getElementById('messages');
+  const el = document.createElement('div');
+  el.className = `msg ${role}`;
+  const chipsHtml = chips.length ? `<div class="msg-chips">${chips.map(c =>
+    `<button class="chip" onclick="${c.fn}">${c.label}</button>`
+  ).join('')}</div>` : '';
+
+  el.innerHTML = `
+    <div class="msg-meta">
+      <div class="msg-avatar ${role}">${role === 'agent' ? 'AI' : 'Tú'}</div>
+      <span class="msg-name">${role === 'agent' ? 'DevAgent' : 'Tú'}</span>
+      <span class="msg-time">${now()}</span>
+    </div>
+    <div class="msg-body">${role === 'agent' ? renderMarkdown(content) : `<p>${esc(content)}</p>`}</div>
+    ${chipsHtml}`;
+
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  // Save to history for context
+  S.history.push({ role: role === 'agent' ? 'assistant' : 'user', content });
+  if (S.history.length > 20) S.history = S.history.slice(-20);
+
+  return el;
+}
+
+function addThinking() {
+  hideEmpty();
+  const msgs = document.getElementById('messages');
+  const el = document.createElement('div');
+  el.className = 'msg agent';
+  el.id = 'thinking-bubble';
+  el.innerHTML = `
+    <div class="msg-meta">
+      <div class="msg-avatar agent">AI</div>
+      <span class="msg-name">DevAgent</span>
+    </div>
+    <div class="thinking">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span id="thinking-text">Analizando...</span>
+    </div>`;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+  return el;
+}
+
+function removeThinking() {
+  document.getElementById('thinking-bubble')?.remove();
+}
+
+function updateThinkingText(text) {
+  const el = document.getElementById('thinking-text');
+  if (el) el.textContent = text;
+}
+
+// Agent step indicators
+function addStep(state, title, detail = '') {
+  const msgs = document.getElementById('messages');
+  const el = document.createElement('div');
+  el.className = 'agent-step';
+  el.id = 'active-step';
+  el.innerHTML = stepHTML(state, title, detail);
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+  activeStepEl = el;
+  return el;
+}
+
+function updateStep(state, title, detail = '') {
+  if (activeStepEl) {
+    activeStepEl.innerHTML = stepHTML(state, title, detail);
+    activeStepEl.id = '';
+    activeStepEl = null;
+  }
+}
+
+function stepHTML(state, title, detail) {
+  const icons = {
+    running: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6" stroke-dasharray="20"/></svg>`,
+    done: `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm3.78 6.237l-4.5 4.5a.75.75 0 01-1.06 0l-2-2a.75.75 0 011.06-1.06l1.47 1.47 3.97-3.97a.75.75 0 011.06 1.06z"/></svg>`,
+    error: `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 9a1 1 0 110-2 1 1 0 010 2zm1-3.5a1 1 0 11-2 0V5a1 1 0 012 0v.5z"/></svg>`,
+    info: `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm.75 4.5a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM7 7.5a.75.75 0 000 1.5h.25v2.25H7a.75.75 0 000 1.5h2a.75.75 0 000-1.5h-.25V8.25H9A.75.75 0 009 7.5H7z"/></svg>`,
+  };
+  return `<div class="step-icon ${state}">${icons[state]||icons.info}</div>
+    <div class="step-content">
+      <div class="step-title">${esc(title)}</div>
+      ${detail ? `<div class="step-detail">${esc(detail)}</div>` : ''}
+    </div>`;
+}
+
+// Streaming message
+function addStreamMsg() {
+  hideEmpty();
+  const msgs = document.getElementById('messages');
+  const el = document.createElement('div');
+  el.className = 'msg agent';
+  el.innerHTML = `
+    <div class="msg-meta">
+      <div class="msg-avatar agent">AI</div>
+      <span class="msg-name">DevAgent</span>
+      <span class="msg-time">${now()}</span>
+    </div>
+    <div class="msg-body" id="stream-body"><span class="stream-cursor"></span></div>`;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+  return el;
+}
+
+function updateStream(el, text) {
+  const body = el.querySelector('#stream-body') || el.querySelector('.msg-body');
+  if (body) {
+    body.innerHTML = renderMarkdown(text) + '<span class="stream-cursor"></span>';
+    document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+  }
+}
+
+function finalizeStream(el, text, chips = []) {
+  const body = el.querySelector('#stream-body') || el.querySelector('.msg-body');
+  if (body) {
+    body.id = '';
+    body.innerHTML = renderMarkdown(text);
+  }
+  if (chips.length) {
+    const chipsDiv = document.createElement('div');
+    chipsDiv.className = 'msg-chips';
+    chipsDiv.innerHTML = chips.map(c => `<button class="chip" onclick="${c.fn}">${c.label}</button>`).join('');
+    el.appendChild(chipsDiv);
+  }
+  S.history.push({ role: 'assistant', content: text });
+  if (S.history.length > 20) S.history = S.history.slice(-20);
+}
+
+function setStatus(on, text = '') {
+  const bar = document.getElementById('status-bar');
+  bar.classList.toggle('show', on);
+  if (text) document.getElementById('status-text').textContent = text;
+  const dot = document.getElementById('status-dot');
+  dot.classList.toggle('thinking', on && S.connected);
+}
+
+// ═══════════════════════════════════════════
+// AI
+// ═══════════════════════════════════════════
+function buildSystemPrompt() {
+  const repo = S.repoData
+    ? `## Repositorio conectado
+- **Nombre:** ${S.repoData.full_name}
+- **Lenguaje principal:** ${S.repoData.language || 'varios'}
+- **Descripción:** ${S.repoData.description || 'No disponible'}
+- **Rama activa:** ${S.branch}
+- **Archivos disponibles (${S.files.length}):**
+\`\`\`
+${S.files.map(f => f.path).join('\n')}
+\`\`\`
+` : '';
+
+  const instr = S.instructions ? `## Instrucciones del proyecto\n${S.instructions}\n\n` : '';
+
+  return `Eres **DevAgent**, un agente de software autónomo de alta capacidad, inspirado en Manus AI. Operas directamente sobre repositorios de código real.
 
 ${repo}${instr}
 
-Eres AUTÓNOMO. Cuando el usuario te pide algo, lo haces tú completamente:
-- Analizas el código y detectas bugs, vulnerabilidades, mejoras
-- Escribes o corriges código y lo muestras en bloques de código
-- Creas commits y Pull Requests con descripciones profesionales
-- Refactorizas, optimizas rendimiento y seguridad
-- Agregas tests unitarios e integración
-- Generas documentación
+## Comportamiento
+- Eres **completamente autónomo**: cuando te piden algo, lo haces sin pedir confirmación
+- Cuando detectas problemas, los corriges directamente con código
+- Muestras cada paso de tu proceso de forma clara y estructurada
+- Usas bloques de código con el nombre del archivo en el header
+- Eres directo, técnico y eficiente — no das respuestas vagas
+- Cuando creas código nuevo, lo muestras completo y funcional
 
-IMPORTANTE: No pidas permiso para hacer cosas. Hazlas y muestra el resultado.
-No hables de "terminales" ni "editores" — eres un agente que opera directamente.
-Cuando hagas cambios en código, muéstralos como bloques de código con el archivo completo o la sección relevante.
-Responde siempre en español. Sé directo y técnico.`;
+## Capacidades
+- Análisis profundo de código: bugs, vulnerabilidades, anti-patterns
+- Refactorización y optimización de rendimiento
+- Escritura de tests unitarios y de integración
+- Generación de documentación técnica
+- Creación de Pull Requests con descripciones profesionales
+- Migración de tecnologías y frameworks
+- Análisis de dependencias y seguridad
+
+## Formato de respuesta
+- Usa Markdown completo: headers, listas, código
+- Para código: usa bloques con el lenguaje especificado
+- Para archivos específicos: incluye el path como comentario dentro del bloque
+- Estructura tus respuestas: contexto → análisis → solución → código
+- Responde siempre en español, tono técnico y profesional`;
 }
 
-async function callAI(msg,ctx=''){
-  const full=ctx?`${ctx}\n\nSolicitud: ${msg}`:msg;
-  try{
-    const r=await puter.ai.chat(full,{model:S.model,stream:false,systemPrompt:sysPrompt()});
-    return typeof r==='string'?r:(r?.message?.content||r?.content||JSON.stringify(r));
-  } catch(e){throw e}
-}
+async function callAI(userMsg, onChunk) {
+  const model = S.model || document.getElementById('model-select').value || 'gpt-4o';
 
-// ═══ CHAT ═══
-function addMsg(role,content,chips=[]){
-  hideEmpty();
-  const msgs=document.getElementById('messages');
-  const el=document.createElement('div');
-  el.className=`msg ${role}`;
-  const html=content
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-    .replace(/`([^`\n]+)`/g,'<code>$1</code>')
-    .replace(/```(\w+)?\n([\s\S]+?)```/g,'<pre>$2</pre>')
-    .replace(/\n/g,'<br>');
-  el.innerHTML=`
-    <div class="msg-meta">
-      <div class="msg-avatar ${role}">${role==='agent'?'AI':'Tú'}</div>
-      <span>${role==='agent'?'DevAgent':'Tú'}</span>
-    </div>
-    <div class="msg-body">${html}</div>
-    ${chips.length?`<div class="msg-chips">${chips.map(c=>`<button class="chip" onclick="${c.fn}">${c.label}</button>`).join('')}</div>`:''}`;
-  msgs.appendChild(el);
-  msgs.scrollTop=msgs.scrollHeight;
-}
+  const messages = [
+    ...S.history.slice(-12).map(h => ({ role: h.role, content: h.content })),
+    { role: 'user', content: userMsg }
+  ];
 
-function addThinking(){
-  hideEmpty();
-  const msgs=document.getElementById('messages');
-  const el=document.createElement('div');
-  el.className='msg agent';el.id='thinking';
-  el.innerHTML=`<div class="msg-meta"><div class="msg-avatar agent">AI</div><span>DevAgent</span></div><div class="thinking"><div class="dots"><span></span><span></span><span></span></div><span>Pensando...</span></div>`;
-  msgs.appendChild(el);msgs.scrollTop=msgs.scrollHeight;
-}
-function removeThinking(){document.getElementById('thinking')?.remove()}
+  try {
+    if (onChunk) {
+      // Streaming mode
+      const response = await puter.ai.chat(messages, {
+        model,
+        stream: true,
+        systemPrompt: buildSystemPrompt()
+      });
 
-function hideEmpty(){document.getElementById('empty-state').classList.add('hidden')}
-
-function setStatus(on,text=''){
-  const bar=document.getElementById('status-bar');
-  bar.classList.toggle('show',on);
-  if(text) document.getElementById('status-text').textContent=text;
-}
-
-async function send(){
-  const inp=document.getElementById('chat-input');
-  const msg=inp.value.trim();
-  if(!msg) return;
-  inp.value='';inp.style.height='auto';
-  document.getElementById('send-btn').disabled=true;
-  addMsg('user',msg);
-  addThinking();
-  setStatus(true,'El agente está trabajando...');
-  try{
-    const ctx=S.connected&&S.files.length
-      ?`Archivos del proyecto: ${S.files.map(f=>f.path).join(', ')}`:'';
-    const res=await callAI(msg,ctx);
-    removeThinking();
-    setStatus(false);
-    addMsg('agent',res);
-  } catch(e){
-    removeThinking();
-    setStatus(false);
-    addMsg('agent',`Hubo un error: ${e.message}. Intenta de nuevo.`);
+      let fullText = '';
+      for await (const chunk of response) {
+        const delta = chunk?.text || chunk?.choices?.[0]?.delta?.content || '';
+        if (delta) {
+          fullText += delta;
+          onChunk(fullText);
+        }
+      }
+      return fullText;
+    } else {
+      const r = await puter.ai.chat(messages, {
+        model,
+        stream: false,
+        systemPrompt: buildSystemPrompt()
+      });
+      return typeof r === 'string' ? r : (r?.message?.content || r?.content || JSON.stringify(r));
+    }
+  } catch (e) {
+    throw new Error(`Error del modelo AI: ${e.message}`);
   }
-  document.getElementById('send-btn').disabled=false;
 }
 
-function handleKey(e){
-  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}
-}
+// ═══════════════════════════════════════════
+// SEND
+// ═══════════════════════════════════════════
+async function send() {
+  const inp = document.getElementById('chat-input');
+  const msg = inp.value.trim();
+  if (!msg || S.busy) return;
 
-async function autoAnalyze(){
-  setStatus(true,'Analizando el proyecto...');
-  try{
-    const files=S.files.map(f=>f.path).join('\n');
-    const res=await callAI(`Analiza este proyecto. Archivos:\n${files}\n\nDame un resumen ejecutivo rápido: qué hace el proyecto, 2-3 problemas que detectas y tu recomendación prioritaria.`);
+  inp.value = '';
+  inp.style.height = 'auto';
+  document.getElementById('send-btn').disabled = true;
+  document.getElementById('char-count').textContent = '';
+  S.busy = true;
+
+  addMsg('user', msg);
+  S.history.push({ role: 'user', content: msg });
+
+  // Smart context: fetch relevant files if repo connected
+  let enrichedMsg = msg;
+  if (S.connected && S.files.length) {
+    const mentioned = S.files.filter(f =>
+      msg.toLowerCase().includes(f.path.toLowerCase()) ||
+      msg.toLowerCase().includes(f.path.split('/').pop().toLowerCase())
+    ).slice(0, 3);
+
+    if (mentioned.length) {
+      setStatus(true, `Leyendo ${mentioned.length} archivo(s)...`);
+      const contents = await Promise.all(mentioned.map(async f => {
+        const content = await fetchFileContent(f.path);
+        return content ? `\n\n### ${f.path}\n\`\`\`\n${content.slice(0, 3000)}\n\`\`\`` : '';
+      }));
+      enrichedMsg += contents.join('');
+    }
+  }
+
+  setStatus(true, 'El agente está trabajando...');
+
+  const streamEl = addStreamMsg();
+  let accumulated = '';
+
+  try {
+    accumulated = await callAI(enrichedMsg, (text) => {
+      accumulated = text;
+      updateStream(streamEl, text);
+      setStatus(true, 'Generando respuesta...');
+    });
+
+    finalizeStream(streamEl, accumulated);
     setStatus(false);
-    addMsg('agent',res,[
-      {label:'🐛 Corregir todos los bugs',fn:"quickAction('Encuentra y corrige TODOS los bugs del proyecto. Muéstrame el código corregido.')"},
-      {label:'🔒 Análisis de seguridad',fn:"quickAction('Haz un análisis de seguridad completo y corrige las vulnerabilidades.')"},
-      {label:'⚡ Optimizar rendimiento',fn:"quickAction('Optimiza el rendimiento del proyecto.')"},
-      {label:'📋 Crear Pull Request',fn:"quickAction('Crea un Pull Request profesional con mejoras para el proyecto.')"}
-    ]);
-  } catch(e){setStatus(false)}
+
+  } catch (e) {
+    finalizeStream(streamEl, `**Error:** ${e.message}\n\nIntenta de nuevo o cambia el modelo de IA.`);
+    setStatus(false);
+  }
+
+  S.busy = false;
+  document.getElementById('send-btn').disabled = false;
 }
 
-function quickAction(text){
-  document.getElementById('chat-input').value=text;
+// ═══════════════════════════════════════════
+// AUTO-ANALYZE
+// ═══════════════════════════════════════════
+async function autoAnalyze() {
+  if (!S.connected) return;
+  setStatus(true, 'Analizando proyecto...');
+
+  // Try to fetch key files for better context
+  const keyFiles = S.files.filter(f => {
+    const name = f.path.toLowerCase();
+    return name === 'package.json' || name === 'readme.md' || name.includes('app.') || name.includes('main.') || name.includes('index.');
+  }).slice(0, 3);
+
+  let fileContext = '';
+  for (const f of keyFiles) {
+    addStep('running', `Leyendo ${f.path}`, 'Obteniendo contenido...');
+    const content = await fetchFileContent(f.path);
+    if (content) {
+      fileContext += `\n\n### ${f.path}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\``;
+      updateStep('done', `Leído: ${f.path}`, `${content.split('\n').length} líneas`);
+    } else {
+      updateStep('info', `${f.path}`, 'No disponible');
+    }
+  }
+
+  addStep('running', 'Generando análisis inteligente', 'Procesando con IA...');
+
+  const prompt = `Analiza este repositorio y proporciona un análisis técnico ejecutivo.
+
+Archivos del proyecto:
+${S.files.map(f => f.path).join('\n')}
+${fileContext}
+
+Responde con:
+1. **¿Qué hace este proyecto?** (1-2 líneas)
+2. **Stack tecnológico** detectado
+3. **Problemas críticos** encontrados (máx. 3, con código de ejemplo si aplica)
+4. **Recomendación prioritaria** de mejora`;
+
+  const streamEl = addStreamMsg();
+
+  try {
+    const result = await callAI(prompt, (text) => {
+      updateStream(streamEl, text);
+    });
+
+    updateStep('done', 'Análisis completado', 'Listo');
+    finalizeStream(streamEl, result, [
+      { label: '🐛 Corregir todos los bugs', fn: `quickAction('Encuentra y corrige TODOS los bugs del proyecto. Para cada bug: explica el problema, muestra el código roto y el código corregido.')` },
+      { label: '🔒 Auditoría de seguridad', fn: `quickAction('Realiza una auditoría de seguridad OWASP Top 10 completa. Muestra vulnerabilidades con código de ejemplo y cómo corregirlas.')` },
+      { label: '⚡ Optimizar rendimiento', fn: `quickAction('Analiza y optimiza el rendimiento: lazy loading, caché, queries N+1, bundle size, etc.')` },
+      { label: '🧪 Generar tests', fn: `quickAction('Escribe tests unitarios completos para las funciones principales del proyecto.')` },
+    ]);
+    setStatus(false);
+  } catch (e) {
+    updateStep('error', 'Error en análisis', e.message);
+    setStatus(false);
+  }
+}
+
+// ═══════════════════════════════════════════
+// QUICK ACTIONS
+// ═══════════════════════════════════════════
+function quickAction(text) {
+  if (S.busy) return;
+  document.getElementById('chat-input').value = text;
   send();
 }
 
-// ═══ INIT ═══
-document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeSheet();closeModal()}
+function quickPrompt(text) {
+  if (S.busy) return;
+  document.getElementById('chat-input').value = text;
+  document.getElementById('send-btn').disabled = false;
+  document.getElementById('chat-input').focus();
+}
+
+function clearChat() {
+  if (S.busy) { toast('El agente está trabajando...'); return; }
+  document.getElementById('messages').innerHTML = '';
+  document.getElementById('empty-state').classList.remove('hidden');
+  S.history = [];
+  toast('Conversación limpiada');
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeSheet(); closeModal(); closeFilePanel(); }
 });
-document.getElementById('connect-modal').addEventListener('click',e=>{
-  if(e.target===document.getElementById('connect-modal')) closeModal();
+
+document.getElementById('connect-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('connect-modal')) closeModal();
+});
+
+document.getElementById('model-select').addEventListener('change', function() {
+  S.model = this.value;
+  toast(`Modelo: ${this.value}`);
+});
+
+// Enable send button on input
+document.getElementById('chat-input').addEventListener('input', function() {
+  document.getElementById('send-btn').disabled = !this.value.trim() || S.busy;
 });
 </script>
 </body>
