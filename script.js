@@ -798,7 +798,7 @@ function mkStream() {
       <span class="mname">DevAgent</span>
       <span class="mtime">${now()}</span>
     </div>
-    <div class="mbubble"><div class="mbody typing-bubble"><div class="dots"><span></span><span></span><span></span></div> Generando...</div></div>
+    <div class="mbubble"><div class="mbody"><div class="typing-indicator"><div class="dots"><span></span><span></span><span></span></div> Generando...</div></div></div>
   `;
   msgs.appendChild(div);
   div.scrollIntoView({ behavior:'smooth', block:'end' });
