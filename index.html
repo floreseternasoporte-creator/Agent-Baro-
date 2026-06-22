@@ -10,230 +10,450 @@
 <title>DevAgent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="sidebar-overlay" onclick="closeSidebar()"></div>
 <div id="app">
 
-  <!-- SIDEBAR -->
-  <aside id="sidebar">
-    <div id="sidebar-top">
-      <div class="sidebar-logo">
-        <div class="sidebar-logo-mark">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-            <path d="M3 9h2l1.5-3 2 6 1.5-3H13"/>
-          </svg>
-        </div>
-        <span class="sidebar-logo-name">DevAgent</span>
-        <span class="sidebar-logo-badge">AI</span>
-      </div>
-      <button class="new-chat-btn" onclick="clearChat()">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 00-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 000-.354l-1.086-1.086zM11.189 6.25L9.75 4.81l-6.286 6.287a.25.25 0 00-.064.108l-.558 1.953 1.953-.558a.249.249 0 00.108-.064l6.286-6.286z"/></svg>
-        Nueva conversacion
-      </button>
+  <!-- TOP APP BAR -->
+  <header id="topbar">
+    <div class="tb-logo">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <path d="M3 9h2l1.5-3 2 6 1.5-3H13"/>
+      </svg>
     </div>
-
-    <div class="sidebar-section-label">Historial</div>
-    <div id="history-list">
-      <div class="hist-item active" id="current-hist-item">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.75A2.75 2.75 0 014.75 0h7.5A2.75 2.75 0 0115 2.75v10.5A2.75 2.75 0 0112.25 16h-7.5A2.75 2.75 0 012 13.25V2.75zm2.75-1.25c-.69 0-1.25.56-1.25 1.25v10.5c0 .69.56 1.25 1.25 1.25h7.5c.69 0 1.25-.56 1.25-1.25V2.75c0-.69-.56-1.25-1.25-1.25h-7.5z"/></svg>
-        <span>Conversacion actual</span>
-      </div>
+    <div class="tb-title">
+      <div class="tb-title-main">DevAgent</div>
+      <div class="tb-title-sub" id="tb-sub">Agente autonomo de codigo</div>
     </div>
-
-    <div class="sidebar-bottom">
-      <button class="sidebar-action" onclick="openModal()">
+    <div class="tb-actions">
+      <div class="conn-dot" id="conn-dot"></div>
+      <button class="tba" id="gh-tba" onclick="openModal()" title="Repositorio">
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        Conectar repositorio
-        <span class="sa-badge" id="gh-sa-badge" style="display:none">OK</span>
+        <span class="badge" id="gh-dot" style="display:none"></span>
       </button>
-      <button class="sidebar-action" id="files-sa" onclick="toggleFiles()" style="display:none">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3h-6.5L5.987 1.755A1.75 1.75 0 004.744 1H1.75zM1.5 2.75a.25.25 0 01.25-.25h3a.25.25 0 01.177.073L6.7 4.25H14.25a.25.25 0 01.25.25v8.5a.25.25 0 01-.25.25H1.75a.25.25 0 01-.25-.25V2.75z"/></svg>
-        Explorar archivos
-      </button>
-      <button class="sidebar-action" onclick="exportConversation()">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.97a.75.75 0 111.06 1.06l-3.25 3.25a.75.75 0 01-1.06 0L4.22 6.779a.75.75 0 011.06-1.06l1.97 1.97z"/></svg>
-        Exportar conversacion
-      </button>
-      <button class="sidebar-action" onclick="openSettings()">
+      <button class="tba" onclick="showScreen('settings')" title="Configuracion">
         <svg viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M7.429 1.525a6.593 6.593 0 011.142 0c.036.003.108.036.137.146l.289 1.105c.147.56.55.967.997 1.189.174.086.341.178.502.274.45.268.987.36 1.529.146l1.079-.43c.105-.042.186-.02.237.032.231.232.437.486.614.756.093.144.066.238.017.296l-.74.867c-.36.422-.527.972-.434 1.493.014.08.024.162.029.243.014.2.042.399.084.598.095.44.42.86.92 1.053l1.08.43c.104.042.143.12.141.195a6.645 6.645 0 01-.572 1.341c-.052.093-.143.11-.228.098l-1.125-.213c-.538-.102-1.088.03-1.504.355-.208.162-.427.312-.657.449-.523.307-.814.93-.712 1.538l.186 1.12c.016.09-.012.18-.105.224-.473.218-.978.368-1.504.444-.105.015-.193-.045-.228-.13l-.479-1.073c-.225-.503-.66-.851-1.145-.921a5.57 5.57 0 01-.739-.146c-.514-.145-1.065-.015-1.455.36l-.766.747c-.07.067-.17.08-.258.042a6.574 6.574 0 01-1.156-.705c-.082-.063-.1-.155-.07-.236l.37-1.097c.177-.525.07-1.09-.27-1.496a5.545 5.545 0 01-.435-.634c-.287-.494-.87-.764-1.452-.676l-1.124.175c-.09.014-.184-.022-.227-.112a6.585 6.585 0 01-.508-1.372c-.028-.104.025-.194.112-.228l1.069-.43c.533-.214.88-.67.945-1.18.02-.155.048-.308.085-.457.13-.51-.02-1.072-.39-1.46L1.44 5.402c-.07-.078-.077-.17-.028-.25.216-.356.464-.69.739-.998.076-.085.175-.092.261-.053l1.052.479c.49.222 1.055.2 1.514-.056.205-.115.42-.22.642-.314.53-.22.868-.731.89-1.29l.04-1.127c.003-.107.072-.18.17-.2zM8 10a2 2 0 100-4 2 2 0 000 4z"/></svg>
-        Configuracion
-        <span class="sa-badge" id="groq-sa-badge" style="display:none">OK</span>
       </button>
     </div>
-  </aside>
+  </header>
 
-  <!-- MAIN PANEL -->
-  <div id="main">
+  <!-- ════ SCREEN: CHAT ════ -->
+  <div class="screen active" id="screen-chat">
 
-    <!-- TOPBAR -->
-    <header id="topbar">
-      <button class="tbtn" onclick="toggleSidebar()" title="Menu" id="sidebar-btn">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.75A.75.75 0 011.75 2h12.5a.75.75 0 110 1.5H1.75A.75.75 0 011 2.75zm0 5A.75.75 0 011.75 7h12.5a.75.75 0 110 1.5H1.75A.75.75 0 011 7.75zM1.75 12a.75.75 0 100 1.5h12.5a.75.75 0 100-1.5H1.75z"/></svg>
-      </button>
+    <!-- Context window bar -->
+    <div id="context-bar">
+      <span class="ctx-label">Contexto</span>
+      <div class="ctx-bar"><div class="ctx-fill" id="ctx-fill" style="width:0%"></div></div>
+      <span class="ctx-pct" id="ctx-pct">0%</span>
+      <span id="ctx-tokens" style="color:var(--text3)">0 tokens</span>
+    </div>
 
-      <div class="top-title" id="top-title">DevAgent — Agente de codigo autonomo</div>
-
-      <div class="status-chip" id="schip">
-        <div class="sdot" id="sdot"></div>
-        <span id="schip-txt">Sin repositorio</span>
-      </div>
-
-      <button class="model-pill" onclick="openSettings()" title="Cambiar modelo" id="model-pill-btn">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M0 4.75A3.75 3.75 0 013.75 1h8.5A3.75 3.75 0 0116 4.75v4.5A3.75 3.75 0 0112.25 13H8.5l-4 2.5a.75.75 0 01-1.14-.64L3.25 13H3.75A3.75 3.75 0 010 9.25v-4.5z"/></svg>
-        <span id="model-pill-txt">llama-3.3-70b</span>
-        <svg viewBox="0 0 16 16" fill="currentColor" width="10" height="10"><path d="M4.427 7.427l3.396 3.396a.25.25 0 00.354 0l3.396-3.396A.25.25 0 0011.396 7H4.604a.25.25 0 00-.177.427z"/></svg>
-      </button>
-
-      <button class="tbtn" id="files-tbtn" onclick="toggleFiles()" style="display:none" title="Explorar archivos">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3h-6.5L5.987 1.755A1.75 1.75 0 004.744 1H1.75zM1.5 2.75a.25.25 0 01.25-.25h3a.25.25 0 01.177.073L6.7 4.25H14.25a.25.25 0 01.25.25v8.5a.25.25 0 01-.25.25H1.75a.25.25 0 01-.25-.25V2.75z"/></svg>
-      </button>
-      <button class="tbtn" id="gh-tbtn" onclick="openModal()" title="Conectar repositorio">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-      </button>
-    </header>
-
-    <!-- CHAT -->
-    <div id="chat">
+    <!-- Chat scroll area -->
+    <div id="chat-scroll">
+      <!-- Empty state -->
       <div id="empty">
-        <div class="empty-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-          </svg>
-        </div>
-        <div>
+        <div class="empty-hero">
+          <div class="empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          </div>
           <div class="empty-title">DevAgent</div>
-          <div class="empty-sub">Tu agente autonomo de desarrollo. Conecta un repo de GitHub, pide una tarea, y el agente la ejecuta con edicion quirurgica.</div>
+          <div class="empty-sub">Tu agente AI de codigo. Conecta un repo de GitHub y ejecuta tareas de desarrollo con IA.</div>
         </div>
-        <div class="empty-categories">
-          <div class="empty-cat-label">Analisis de codigo</div>
-          <div class="empty-grid">
-            <button class="ea" onclick="doQuick('Analiza el repositorio completo: arquitectura, stack tecnologico, patrones usados, dependencias principales y recomendaciones de mejora criticas.')">
-              <svg class="ea-icon blue" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-              <div><div class="ea-title">Analizar repositorio</div><div class="ea-sub">Arquitectura y stack completo</div></div>
+
+        <div class="empty-section">
+          <div class="empty-section-label">Analisis</div>
+          <div class="quick-grid">
+            <button class="qcard" onclick="doQuick('Analiza el repositorio completo: arquitectura, stack tecnologico, patrones de diseno usados, dependencias clave y top 5 problemas criticos con recomendaciones.')">
+              <div class="qcard-icon blue"><svg viewBox="0 0 16 16" fill="currentColor" style="color:var(--accent)"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></div>
+              <div class="qcard-title">Analizar repo</div>
+              <div class="qcard-sub">Arquitectura y stack</div>
             </button>
-            <button class="ea" onclick="doQuick('Detecta y corrige todos los bugs del proyecto. Para cada bug: archivo exacto, numero de linea, descripcion del problema y muestra el diff preciso del cambio.')">
-              <svg class="ea-icon green" viewBox="0 0 16 16" fill="currentColor"><path d="M11 1.75a.75.75 0 01.75-.75h2.5a.75.75 0 010 1.5h-2.5A.75.75 0 0111 1.75zm-8.5 0A.75.75 0 013.25 1h2.5a.75.75 0 010 1.5h-2.5A.75.75 0 012.5 1.75zM8 13a5 5 0 100-10A5 5 0 008 13zm0 1.5a6.5 6.5 0 110-13 6.5 6.5 0 010 13z"/><path d="M8 8.75A.75.75 0 007.25 8V5.75a.75.75 0 011.5 0V8A.75.75 0 018 8.75zm0 2.75a1 1 0 100-2 1 1 0 000 2z"/></svg>
-              <div><div class="ea-title">Detectar bugs</div><div class="ea-sub">Encuentra y corrige errores</div></div>
+            <button class="qcard" onclick="doQuick('Detecta y corrige todos los bugs del proyecto. Para cada bug muestra: archivo, linea exacta, descripcion del problema y el diff preciso del fix.')">
+              <div class="qcard-icon green"><svg viewBox="0 0 16 16" fill="currentColor" style="color:var(--green)"><path d="M11 1.75a.75.75 0 01.75-.75h2.5a.75.75 0 010 1.5h-2.5A.75.75 0 0111 1.75zm-8.5 0A.75.75 0 013.25 1h2.5a.75.75 0 010 1.5h-2.5A.75.75 0 012.5 1.75zM8 13a5 5 0 100-10A5 5 0 008 13zm0 1.5a6.5 6.5 0 110-13 6.5 6.5 0 010 13z"/><path d="M8 8.75A.75.75 0 007.25 8V5.75a.75.75 0 011.5 0V8A.75.75 0 018 8.75zm0 2.75a1 1 0 100-2 1 1 0 000 2z"/></svg></div>
+              <div class="qcard-title">Detectar bugs</div>
+              <div class="qcard-sub">Fix con diffs exactos</div>
+            </button>
+            <button class="qcard" onclick="doQuick('Haz auditoria de seguridad OWASP Top 10. Para cada vuln: archivo, linea, riesgo y el codigo exacto de la correccion.')">
+              <div class="qcard-icon amber"><svg viewBox="0 0 16 16" fill="currentColor" style="color:var(--amber)"><path d="M8.533.133a1.75 1.75 0 00-1.066 0l-5.25 1.68A1.75 1.75 0 001 3.48V8c0 3.192 1.963 5.916 5.25 7.455a1.75 1.75 0 001.5 0C11.037 13.916 13 11.192 13 8V3.48a1.75 1.75 0 00-1.217-1.667L8.533.133z"/></svg></div>
+              <div class="qcard-title">Seguridad OWASP</div>
+              <div class="qcard-sub">Vulnerabilidades</div>
+            </button>
+            <button class="qcard" onclick="doQuick('Optimiza el rendimiento: lazy loading, N+1 queries, bundle size, caching, async/await mal usado. Muestra el codigo optimizado.')">
+              <div class="qcard-icon purple"><svg viewBox="0 0 16 16" fill="currentColor" style="color:var(--purple)"><path d="M1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zM8 0a8 8 0 100 16A8 8 0 008 0zm.75 4.75a.75.75 0 00-1.5 0v3.5l-1.9 1.26a.75.75 0 00.8 1.27l2.25-1.5a.75.75 0 00.35-.64v-3.9z"/></svg></div>
+              <div class="qcard-title">Rendimiento</div>
+              <div class="qcard-sub">Optimizar velocidad</div>
             </button>
           </div>
+        </div>
 
-          <div class="empty-cat-label">Seguridad y rendimiento</div>
-          <div class="empty-grid">
-            <button class="ea" onclick="doQuick('Haz una auditoria de seguridad completa basada en OWASP Top 10. Para cada vulnerabilidad encontrada: archivo afectado, linea, descripcion del riesgo, impacto y la correccion exacta con diff.')">
-              <svg class="ea-icon amber" viewBox="0 0 16 16" fill="currentColor"><path d="M8.533.133a1.75 1.75 0 00-1.066 0l-5.25 1.68A1.75 1.75 0 001 3.48V8c0 3.192 1.963 5.916 5.25 7.455a1.75 1.75 0 001.5 0C11.037 13.916 13 11.192 13 8V3.48a1.75 1.75 0 00-1.217-1.667L8.533.133z"/></svg>
-              <div><div class="ea-title">Auditoria OWASP</div><div class="ea-sub">Vulnerabilidades de seguridad</div></div>
+        <div class="empty-section">
+          <div class="empty-section-label">Generar codigo</div>
+          <div class="quick-grid">
+            <button class="qcard" onclick="doQuick('Genera tests unitarios completos para el proyecto con el framework adecuado. Incluye casos edge y mocks.')">
+              <div class="qcard-icon blue"><svg viewBox="0 0 16 16" fill="currentColor" style="color:var(--blue)"><path d="M2.75 3a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75zm0 4a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75zm0 4a.75.75 0 000 1.5h4a.75.75 0 000-1.5h-4z"/></svg></div>
+              <div class="qcard-title">Generar tests</div>
+              <div class="qcard-sub">Unitarios e integracion</div>
             </button>
-            <button class="ea" onclick="doQuick('Optimiza el rendimiento del proyecto: identifica lazy loading faltante, N+1 queries, problemas de bundle size, falta de caching y mal uso de async/await. Muestra el codigo optimizado con diff.')">
-              <svg class="ea-icon purple" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zM8 0a8 8 0 100 16A8 8 0 008 0zm.75 4.75a.75.75 0 00-1.5 0v3.5l-1.9 1.26a.75.75 0 00.8 1.27l2.25-1.5a.75.75 0 00.35-.64v-3.9z"/></svg>
-              <div><div class="ea-title">Optimizar rendimiento</div><div class="ea-sub">Velocidad y eficiencia</div></div>
+            <button class="qcard" onclick="doQuick('Refactoriza el codigo aplicando SOLID, DRY, elimina codigo duplicado y mejora legibilidad. Muestra diffs exactos.')">
+              <div class="qcard-icon purple"><svg viewBox="0 0 16 16" fill="currentColor" style="color:var(--purple)"><path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61z"/></svg></div>
+              <div class="qcard-title">Refactorizar</div>
+              <div class="qcard-sub">SOLID, DRY, clean</div>
             </button>
-          </div>
-
-          <div class="empty-cat-label">Generacion de codigo</div>
-          <div class="empty-grid">
-            <button class="ea" onclick="doQuick('Genera tests unitarios completos para el proyecto. Usa el framework de testing que ya tiene el proyecto o sugiere uno adecuado. Muestra el codigo completo de los tests con casos edge.')">
-              <svg class="ea-icon blue" viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 3a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75zm0 4a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75zm0 4a.75.75 0 000 1.5h4a.75.75 0 000-1.5h-4z"/></svg>
-              <div><div class="ea-title">Generar tests</div><div class="ea-sub">Tests unitarios y de integracion</div></div>
+            <button class="qcard" onclick="doQuick('Genera documentacion tecnica: README detallado, JSDoc para funciones clave y diagrama de arquitectura en texto.')">
+              <div class="qcard-icon green"><svg viewBox="0 0 16 16" fill="currentColor" style="color:var(--green)"><path d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 018 4.25V1.5H3.75zm5 .056V4.25c0 .138.112.25.25.25h2.694l-.437-.437L8.75 1.556z"/></svg></div>
+              <div class="qcard-title">Documentar</div>
+              <div class="qcard-sub">README y JSDoc</div>
             </button>
-            <button class="ea" onclick="doQuick('Genera documentacion tecnica completa del proyecto: README actualizado, JSDoc/docstrings para funciones clave, diagrama de arquitectura en texto y guia de contribucion.')">
-              <svg class="ea-icon green" viewBox="0 0 16 16" fill="currentColor"><path d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 018 4.25V1.5H3.75zm5 .056V4.25c0 .138.112.25.25.25h2.694l-.437-.437L8.75 1.556z"/></svg>
-              <div><div class="ea-title">Documentar proyecto</div><div class="ea-sub">README, JSDoc, arquitectura</div></div>
-            </button>
-          </div>
-
-          <div class="empty-cat-label">Refactorizacion</div>
-          <div class="empty-grid">
-            <button class="ea" onclick="doQuick('Refactoriza el codigo para mejorar la legibilidad y mantenibilidad: elimina codigo duplicado, aplica principios SOLID, mejora nombres de variables y extrae funciones complejas. Muestra diffs exactos.')">
-              <svg class="ea-icon purple" viewBox="0 0 16 16" fill="currentColor"><path d="M8.75 1.75a.75.75 0 00-1.5 0v1.5h-3.5a.25.25 0 00-.25.25v3.5c0 .138.112.25.25.25h3.5v1.5a.75.75 0 001.5 0v-1.5h3.5a.25.25 0 00.25-.25v-3.5a.25.25 0 00-.25-.25h-3.5v-1.5zm-6 7a.75.75 0 00-1.5 0v1.5H.5a.25.25 0 00-.25.25v3.5c0 .138.112.25.25.25H1.25v1.5a.75.75 0 001.5 0v-1.5h9.5v1.5a.75.75 0 001.5 0v-1.5h.75a.25.25 0 00.25-.25v-3.5a.25.25 0 00-.25-.25H13.75v-1.5a.75.75 0 00-1.5 0v1.5h-9.5v-1.5z"/></svg>
-              <div><div class="ea-title">Refactorizar codigo</div><div class="ea-sub">SOLID, DRY, clean code</div></div>
-            </button>
-            <button class="ea" onclick="doQuick('Moderniza el proyecto: actualiza dependencias desactualizadas, migra codigo legacy a patrones modernos, sugiere mejoras de TypeScript si aplica. Lista cambios necesarios con prioridad.')">
-              <svg class="ea-icon amber" viewBox="0 0 16 16" fill="currentColor"><path d="M13.836 2.477a.75.75 0 01.75.75V6.5a.75.75 0 01-.75.75H10.5a.75.75 0 010-1.5H12.5V3.227a.75.75 0 01.75-.75zm-11.171.75a.75.75 0 01.75-.75H6.5a.75.75 0 010 1.5H4.5V6.5a.75.75 0 01-1.5 0V3.227a.75.75 0 01.665-.75zm.665 8.773a.75.75 0 01.75.75V14.5H6.5a.75.75 0 010 1.5H3.227a.75.75 0 01-.75-.75V12.25a.75.75 0 01.853-.75zm9.841 0a.75.75 0 01.853.75V14.5H12.5a.75.75 0 010-1.5h.586V12.25a.75.75 0 01.585-.75z"/></svg>
-              <div><div class="ea-title">Modernizar stack</div><div class="ea-sub">Dependencias y patrones actuales</div></div>
+            <button class="qcard" onclick="doQuick('Moderniza el proyecto: actualiza dependencias desactualizadas, migra codigo legacy y sugiere mejoras de TypeScript.')">
+              <div class="qcard-icon amber"><svg viewBox="0 0 16 16" fill="currentColor" style="color:var(--amber)"><path d="M13.836 2.477a.75.75 0 01.75.75V6.5a.75.75 0 01-.75.75H10.5a.75.75 0 010-1.5H12.5V3.227a.75.75 0 01.75-.75zm-11.171.75a.75.75 0 01.75-.75H6.5a.75.75 0 010 1.5H4.5V6.5a.75.75 0 01-1.5 0V3.227a.75.75 0 01.665-.75zm.665 8.773a.75.75 0 01.75.75V14.5H6.5a.75.75 0 010 1.5H3.227a.75.75 0 01-.75-.75V12.25a.75.75 0 01.853-.75zm9.841 0a.75.75 0 01.853.75V14.5H12.5a.75.75 0 010-1.5h.586V12.25a.75.75 0 01.585-.75z"/></svg></div>
+              <div class="qcard-title">Modernizar</div>
+              <div class="qcard-sub">Deps y patrones</div>
             </button>
           </div>
         </div>
       </div>
+
+      <!-- Messages -->
       <div id="msgs"></div>
     </div>
 
-    <!-- ACTIVITY LOG -->
+    <!-- Activity log -->
     <div id="activity">
-      <div class="act-head">
+      <div class="act-head" onclick="toggleActivity()">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
         <span id="act-head-txt">Trabajando...</span>
-        <span id="act-token-count" style="margin-left:auto;font-size:9.5px;color:var(--text3)"></span>
+        <span id="act-token-est" style="margin-left:auto;font-size:9.5px;color:var(--text3)"></span>
       </div>
       <div id="act-log"></div>
     </div>
 
-    <!-- PUSH BANNER -->
+    <!-- Push banner -->
     <div id="push-banner">
       <div class="pb-inner">
         <div class="pb-info">
-          <div class="pb-title">
-            <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12" style="display:inline;margin-right:5px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-            Cambios listos para push
-          </div>
-          <div class="pb-sub" id="push-banner-detail">El agente genero ediciones. Subir a GitHub?</div>
+          <div class="pb-title">Cambios listos para push</div>
+          <div class="pb-sub" id="push-banner-detail">Subir a GitHub?</div>
         </div>
       </div>
       <div class="pb-btns">
         <button class="pb-btn skip" onclick="hidePushBanner()">Omitir</button>
-        <button class="pb-btn go" onclick="doPush()">Push a GitHub</button>
+        <button class="pb-btn go" onclick="doPush()">Push</button>
       </div>
     </div>
 
-    <!-- INPUT -->
-    <div id="input-area">
-      <div class="ibox">
-        <textarea id="inp" rows="1" placeholder="Describe una tarea de codigo... (Enter para enviar, Shift+Enter para nueva linea)" onkeydown="onKey(event)"></textarea>
-        <div class="irow">
-          <button class="ibtn" id="gh-ibtn" onclick="openModal()" title="Conectar repositorio">
-            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-            GitHub
-          </button>
-          <button class="ibtn" onclick="insertCodeTemplate()" title="Insertar plantilla de codigo">
-            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.72 3.22a.75.75 0 011.06 1.06L2.06 8l3.72 3.72a.75.75 0 11-1.06 1.06L.47 8.53a.75.75 0 010-1.06l4.25-4.25zm6.56 0a.75.75 0 10-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 101.06 1.06l4.25-4.25a.75.75 0 000-1.06l-4.25-4.25z"/></svg>
-            Codigo
-          </button>
-          <button class="ibtn" onclick="insertPlanTemplate()" title="Modo plan">
-            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 018 4.25V1.5H3.75zm5 .056V4.25c0 .138.112.25.25.25h2.694l-.437-.437L8.75 1.556z"/></svg>
-            Plan
-          </button>
-          <div class="isp"></div>
-          <button id="stopbtn" onclick="stopGeneration()" title="Detener generacion">
-            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 4h8v8H4z"/></svg>
-          </button>
-          <button id="sndbtn" onclick="send()" disabled>
-            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M.989 8 .064 2.68a1.342 1.342 0 011.85-1.462l13.402 5.744a1.13 1.13 0 010 2.076L1.913 14.782a1.342 1.342 0 01-1.85-1.463L.99 8z"/></svg>
-          </button>
-        </div>
+    <!-- Input area -->
+    <div id="input-wrap">
+      <div id="quick-chips">
+        <button class="qchip" onclick="insertTemplate('plan')">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75z"/></svg>
+          Plan
+        </button>
+        <button class="qchip" onclick="insertTemplate('fix')">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M11 1.75a.75.75 0 01.75-.75h2.5a.75.75 0 010 1.5h-2.5A.75.75 0 0111 1.75z"/><path d="M8 13a5 5 0 100-10A5 5 0 008 13z"/></svg>
+          Fix bug
+        </button>
+        <button class="qchip" onclick="insertTemplate('explain')">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M0 8a8 8 0 1116 0A8 8 0 010 8zm8-6.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 6a1 1 0 100-2 1 1 0 000 2z"/></svg>
+          Explicar
+        </button>
+        <button class="qchip" onclick="insertTemplate('add')">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>
+          Agregar feature
+        </button>
+        <button class="qchip" onclick="insertTemplate('review')">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M1.679 7.932c.412-.621 1.242-1.75 2.366-2.717C5.175 4.242 6.527 3.5 8 3.5c1.473 0 2.825.742 3.955 1.715 1.124.967 1.954 2.096 2.366 2.717a.119.119 0 010 .136c-.412.621-1.242 1.75-2.366 2.717C10.825 11.758 9.473 12.5 8 12.5c-1.473 0-2.825-.742-3.955-1.715C2.92 9.818 2.09 8.689 1.679 8.068a.119.119 0 010-.136z"/><path d="M8 10a2 2 0 100-4 2 2 0 000 4z"/></svg>
+          Code review
+        </button>
+        <button class="qchip" onclick="insertTemplate('test')">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M2.75 3a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75z"/></svg>
+          Tests
+        </button>
       </div>
-      <div class="input-hint">
-        <span><span class="hk">Enter</span> enviar</span>
-        <span><span class="hk">Shift+Enter</span> nueva linea</span>
-        <span><span class="hk">Esc</span> cerrar</span>
-        <div style="flex:1"></div>
-        <span id="char-count" style="color:var(--text3);font-size:10px"></span>
+      <div class="ibox">
+        <div class="itxt-wrap">
+          <textarea id="inp" rows="1" placeholder="Describe una tarea de codigo..." onkeydown="onKey(event)"></textarea>
+          <div class="ibtns-row">
+            <button class="ibtn-sm" id="gh-ibtn" onclick="openModal()">
+              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+              <span id="gh-ibtn-txt">Repo</span>
+            </button>
+            <button class="ibtn-sm" id="model-ibtn" onclick="showScreen('settings')">
+              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M0 4.75A3.75 3.75 0 013.75 1h8.5A3.75 3.75 0 0116 4.75v4.5A3.75 3.75 0 0112.25 13H8.5l-4 2.5a.75.75 0 01-1.14-.64L3.25 13H3.75A3.75 3.75 0 010 9.25v-4.5z"/></svg>
+              <span id="model-ibtn-txt">llama-3.3</span>
+            </button>
+          </div>
+        </div>
+        <button id="stopbtn" onclick="stopGeneration()">
+          <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="2"/></svg>
+        </button>
+        <button id="sndbtn" onclick="send()" disabled>
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M.989 8 .064 2.68a1.342 1.342 0 011.85-1.462l13.402 5.744a1.13 1.13 0 010 2.076L1.913 14.782a1.342 1.342 0 01-1.85-1.463L.99 8z"/></svg>
+        </button>
       </div>
     </div>
   </div>
+
+  <!-- ════ SCREEN: FILES ════ -->
+  <div class="screen" id="screen-files">
+    <div class="screen-header">
+      <div class="screen-header-title" id="files-title">Explorador de archivos</div>
+      <div class="search-bar">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.68 11.74a6 6 0 01-7.922-8.982 6 6 0 018.982 7.922l3.04 3.04a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215l-3.04-3.04zm-5.44-1.19a4.5 4.5 0 006.179-6.547 4.5 4.5 0 00-6.179 6.547z"/></svg>
+        <input type="text" id="file-search" placeholder="Buscar archivo..." oninput="filterFiles(this.value)">
+      </div>
+    </div>
+    <div id="file-list-wrap">
+      <div class="no-repo-msg" id="no-repo-msg">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+        <h3>Sin repositorio</h3>
+        <p>Conecta un repo de GitHub para explorar sus archivos</p>
+        <button class="connect-btn" onclick="openModal();showScreen('chat')">Conectar repo</button>
+      </div>
+      <div id="file-list"></div>
+    </div>
+  </div>
+
+  <!-- ════ SCREEN: TASKS ════ -->
+  <div class="screen" id="screen-tasks">
+    <div class="tasks-content">
+      <div class="task-section-title">Tareas rapidas</div>
+
+      <div class="task-card" onclick="doQuick('Analiza el repositorio completo y dame un resumen ejecutivo de la arquitectura, problemas criticos y recomendaciones.');showScreen('chat')">
+        <div class="task-icon" style="background:rgba(91,115,255,.12)">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="20" height="20" style="color:var(--accent)"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        </div>
+        <div class="task-info">
+          <div class="task-name">Analisis de repositorio</div>
+          <div class="task-desc">Arquitectura, stack, problemas y recomendaciones</div>
+        </div>
+        <svg class="task-arrow" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+      </div>
+
+      <div class="task-card" onclick="doQuick('Revisa todo el codigo y detecta bugs, errores de logica, variables no usadas, promesas sin catch, y cualquier problema. Para cada uno muestra el diff exacto del fix.');showScreen('chat')">
+        <div class="task-icon" style="background:rgba(34,197,94,.1)">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="20" height="20" style="color:var(--green)"><path d="M11 1.75a.75.75 0 01.75-.75h2.5a.75.75 0 010 1.5h-2.5A.75.75 0 0111 1.75z"/><path d="M8 13a5 5 0 100-10A5 5 0 008 13zm0 1.5a6.5 6.5 0 110-13 6.5 6.5 0 010 13z"/></svg>
+        </div>
+        <div class="task-info">
+          <div class="task-name">Caza de bugs</div>
+          <div class="task-desc">Detecta y corrige errores con diffs exactos</div>
+        </div>
+        <svg class="task-arrow" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+      </div>
+
+      <div class="task-card" onclick="doQuick('Auditoria de seguridad OWASP Top 10 completa. Para cada vulnerabilidad: archivo, linea, descripcion del riesgo, impacto potencial y el codigo exacto del fix.');showScreen('chat')">
+        <div class="task-icon" style="background:rgba(245,158,11,.1)">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="20" height="20" style="color:var(--amber)"><path d="M8.533.133a1.75 1.75 0 00-1.066 0l-5.25 1.68A1.75 1.75 0 001 3.48V8c0 3.192 1.963 5.916 5.25 7.455a1.75 1.75 0 001.5 0C11.037 13.916 13 11.192 13 8V3.48a1.75 1.75 0 00-1.217-1.667L8.533.133z"/></svg>
+        </div>
+        <div class="task-info">
+          <div class="task-name">Auditoria OWASP</div>
+          <div class="task-desc">Seguridad completa con fixes</div>
+        </div>
+        <svg class="task-arrow" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+      </div>
+
+      <div class="task-card" onclick="doQuick('Optimiza el rendimiento: lazy loading, N+1 queries, bundle size, caching headers, memory leaks, y uso de async/await. Muestra codigo optimizado con diffs.');showScreen('chat')">
+        <div class="task-icon" style="background:rgba(167,139,250,.1)">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="20" height="20" style="color:var(--purple)"><path d="M1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zM8 0a8 8 0 100 16A8 8 0 008 0z"/><path d="M8.75 4.75a.75.75 0 00-1.5 0v3.5l-1.9 1.26a.75.75 0 00.8 1.27l2.25-1.5a.75.75 0 00.35-.64v-3.9z"/></svg>
+        </div>
+        <div class="task-info">
+          <div class="task-name">Optimizar rendimiento</div>
+          <div class="task-desc">Velocidad, memoria y eficiencia</div>
+        </div>
+        <svg class="task-arrow" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+      </div>
+
+      <div class="task-card" onclick="doQuick('Genera tests unitarios y de integracion completos para el proyecto. Usa el framework de testing existente o sugiere uno. Incluye casos edge, mocks y assertions claros.');showScreen('chat')">
+        <div class="task-icon" style="background:rgba(96,165,250,.1)">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="20" height="20" style="color:var(--blue)"><path d="M2.75 3a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75zm0 4a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75zm0 4a.75.75 0 000 1.5h4a.75.75 0 000-1.5h-4z"/></svg>
+        </div>
+        <div class="task-info">
+          <div class="task-name">Generar tests</div>
+          <div class="task-desc">Unitarios, integracion y edge cases</div>
+        </div>
+        <svg class="task-arrow" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+      </div>
+
+      <div class="task-card" onclick="doQuick('Refactoriza el codigo aplicando principios SOLID y DRY. Elimina codigo duplicado, mejora nombres de variables y funciones, extrae funciones complejas. Muestra diffs exactos.');showScreen('chat')">
+        <div class="task-icon" style="background:rgba(91,115,255,.12)">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="20" height="20" style="color:var(--accent)"><path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61z"/></svg>
+        </div>
+        <div class="task-info">
+          <div class="task-name">Refactorizar</div>
+          <div class="task-desc">SOLID, DRY, clean code</div>
+        </div>
+        <svg class="task-arrow" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+      </div>
+
+      <div class="task-card" onclick="exportConversation()">
+        <div class="task-icon" style="background:rgba(34,197,94,.1)">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="20" height="20" style="color:var(--green)"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.97a.75.75 0 111.06 1.06l-3.25 3.25a.75.75 0 01-1.06 0L4.22 6.779a.75.75 0 011.06-1.06l1.97 1.97z"/></svg>
+        </div>
+        <div class="task-info">
+          <div class="task-name">Exportar conversacion</div>
+          <div class="task-desc">Descargar como Markdown</div>
+        </div>
+        <svg class="task-arrow" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+      </div>
+
+      <div class="task-card" onclick="clearChat();showScreen('chat')">
+        <div class="task-icon" style="background:rgba(248,113,113,.08)">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="20" height="20" style="color:var(--red)"><path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61z"/></svg>
+        </div>
+        <div class="task-info">
+          <div class="task-name">Nueva conversacion</div>
+          <div class="task-desc">Limpiar chat y empezar de cero</div>
+        </div>
+        <svg class="task-arrow" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ SCREEN: SETTINGS ════ -->
+  <div class="screen" id="screen-settings">
+    <div class="settings-content">
+
+      <div class="settings-section">
+        <div class="settings-section-label">Conexiones</div>
+        <div class="settings-group">
+          <div class="settings-row" onclick="openModal()">
+            <div class="settings-row-icon" style="background:rgba(91,115,255,.12)">
+              <svg viewBox="0 0 16 16" fill="currentColor" width="17" height="17" style="color:var(--accent)"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            </div>
+            <div class="settings-row-content">
+              <div class="settings-row-label">GitHub</div>
+              <div class="settings-row-sub" id="gh-settings-sub">Conecta un repositorio</div>
+            </div>
+            <div class="settings-row-right">
+              <span class="badge-warn" id="gh-settings-badge" style="display:none">Sin repo</span>
+              <span class="badge-ok" id="gh-settings-badge-ok" style="display:none">Conectado</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-icon" style="background:rgba(34,197,94,.1)">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" style="color:var(--green)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+            </div>
+            <div class="settings-row-content">
+              <div class="settings-row-label">Groq API</div>
+              <div class="settings-row-sub" id="groq-settings-sub">Configura tu API key</div>
+            </div>
+            <div class="settings-row-right">
+              <span class="badge-warn" id="groq-warn-badge">Sin key</span>
+              <span class="badge-ok" id="groq-ok-badge" style="display:none">Activo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">API Key de Groq</div>
+        <div class="fg">
+          <label class="fl">Groq API Key <span style="color:var(--red);font-size:10px">requerido</span></label>
+          <input class="fi" type="password" id="set-groq" placeholder="gsk_...">
+          <div class="fh">Gratis en <strong>console.groq.com</strong> — soporta Llama 3, Mixtral, DeepSeek</div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">GitHub</div>
+        <div class="fg">
+          <label class="fl">Personal Access Token <span style="color:var(--text3);font-size:10px">para push</span></label>
+          <input class="fi" type="password" id="set-ghtoken" placeholder="ghp_...">
+          <div class="fh">Necesario para push de cambios y repos privados. Permisos: <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:10px">repo</code></div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Modelo de IA</div>
+        <div class="settings-group">
+          <div class="settings-row" id="model-row-0" onclick="selectModel('llama-3.3-70b-versatile')">
+            <div class="settings-row-content">
+              <div class="settings-row-label">Llama 3.3 70B</div>
+              <div class="settings-row-sub">Recomendado — mejor calidad</div>
+            </div>
+            <svg id="model-check-0" viewBox="0 0 16 16" fill="currentColor" width="16" height="16" style="color:var(--accent);flex-shrink:0"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+          </div>
+          <div class="settings-row" id="model-row-1" onclick="selectModel('deepseek-r1-distill-llama-70b')">
+            <div class="settings-row-content">
+              <div class="settings-row-label">DeepSeek R1 70B</div>
+              <div class="settings-row-sub">Razonamiento — ideal para bugs</div>
+            </div>
+            <svg id="model-check-1" viewBox="0 0 16 16" fill="currentColor" width="16" height="16" style="color:var(--accent);flex-shrink:0;display:none"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+          </div>
+          <div class="settings-row" id="model-row-2" onclick="selectModel('mixtral-8x7b-32768')">
+            <div class="settings-row-content">
+              <div class="settings-row-label">Mixtral 8x7B</div>
+              <div class="settings-row-sub">Contexto largo 32k — repos grandes</div>
+            </div>
+            <svg id="model-check-2" viewBox="0 0 16 16" fill="currentColor" width="16" height="16" style="color:var(--accent);flex-shrink:0;display:none"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+          </div>
+          <div class="settings-row" id="model-row-3" onclick="selectModel('llama3-8b-8192')">
+            <div class="settings-row-content">
+              <div class="settings-row-label">Llama 3 8B</div>
+              <div class="settings-row-sub">Ultra rapido — respuestas simples</div>
+            </div>
+            <svg id="model-check-3" viewBox="0 0 16 16" fill="currentColor" width="16" height="16" style="color:var(--accent);flex-shrink:0;display:none"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Comportamiento</div>
+        <div class="settings-group">
+          <div class="settings-row">
+            <div class="settings-row-content">
+              <div class="settings-row-label">Modo multi-agente</div>
+              <div class="settings-row-sub">Analiza archivos en paralelo</div>
+            </div>
+            <div class="toggle on" id="multiagent-toggle" onclick="toggleSetting('multiagent')"></div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-content">
+              <div class="settings-row-label">Plan antes de ejecutar</div>
+              <div class="settings-row-sub">Muestra un plan y espera confirmacion</div>
+            </div>
+            <div class="toggle" id="planmode-toggle" onclick="toggleSetting('planmode')"></div>
+          </div>
+        </div>
+      </div>
+
+      <button class="save-btn" onclick="saveSettings()">Guardar configuracion</button>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAVIGATION -->
+  <nav id="bottomnav">
+    <button class="nav-item active" id="nav-chat" onclick="showScreen('chat')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      Chat
+    </button>
+    <button class="nav-item" id="nav-files" onclick="showScreen('files')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+      Archivos
+    </button>
+    <button class="nav-item" id="nav-tasks" onclick="showScreen('tasks')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      Tareas
+    </button>
+    <button class="nav-item" id="nav-settings" onclick="showScreen('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Config
+    </button>
+  </nav>
 </div>
 
 <!-- GITHUB MODAL -->
 <div class="mo" id="modal">
   <div class="mbox">
+    <div class="m-handle"></div>
     <div class="mhead">
-      <span class="mtitle" id="modal-title">Conectar repositorio</span>
-      <button class="mx" onclick="closeModal()">
-        <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
-      </button>
+      <span class="mtitle" id="modal-title">Conectar repo</span>
+      <button class="mx" onclick="closeModal()"><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg></button>
     </div>
-    <div class="mbdy" id="modal-body">
+    <div class="mbdy">
       <div class="steps">
         <div class="stp active" id="stp1"><div class="stn">1</div><div>Repositorio</div></div>
         <div class="stp" id="stp2"><div class="stn">2</div><div>Opciones</div></div>
@@ -242,79 +462,8 @@
       <div id="step-content"></div>
     </div>
     <div class="mfoot">
-      <button class="btn btn-g" id="modal-back" onclick="modalBack()" style="display:none">Atras</button>
-      <div></div>
+      <button class="btn btn-g" id="modal-back" onclick="modalBack()" style="display:none;flex:0.4">Atras</button>
       <button class="btn btn-p" id="modal-next" onclick="modalNext()">Continuar</button>
-    </div>
-  </div>
-</div>
-
-<!-- SETTINGS MODAL -->
-<div class="mo" id="settings-modal">
-  <div class="mbox">
-    <div class="mhead">
-      <span class="mtitle">Configuracion</span>
-      <button class="mx" onclick="closeSettings()">
-        <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
-      </button>
-    </div>
-    <div class="mbdy">
-      <div class="fg">
-        <label class="fl">Groq API Key <span style="color:var(--red);font-size:10px">*requerido</span></label>
-        <input class="fi" type="password" id="set-groq" placeholder="gsk_..." value="">
-        <div class="fh">Obtener gratis en <strong>console.groq.com</strong> — soporta llama3, mixtral, gemma. Sin tarjeta.</div>
-      </div>
-      <div class="fg">
-        <label class="fl">GitHub Personal Access Token <span style="color:var(--text3);font-size:10px">opcional — para push</span></label>
-        <input class="fi" type="password" id="set-ghtoken" placeholder="ghp_..." value="">
-        <div class="fh">Necesario para push de cambios y repos privados. Permisos: <code>repo</code></div>
-      </div>
-      <div class="fg">
-        <label class="fl">Modelo de IA</label>
-        <select class="fi" id="set-model">
-          <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile — recomendado</option>
-          <option value="llama-3.1-70b-versatile">llama-3.1-70b-versatile</option>
-          <option value="llama3-70b-8192">llama3-70b-8192</option>
-          <option value="llama3-8b-8192">llama3-8b-8192 — mas rapido</option>
-          <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 — contexto largo</option>
-          <option value="gemma2-9b-it">gemma2-9b-it</option>
-          <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b</option>
-        </select>
-      </div>
-      <div class="fg">
-        <label class="fl">Modo multi-agente</label>
-        <div style="display:flex;align-items:center;gap:12px;padding:10px 13px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r)">
-          <div style="flex:1">
-            <div style="font-size:12.5px;font-weight:600;color:var(--text)">Agentes paralelos por archivo</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px">Cuando hay multiples archivos, analiza cada uno de forma independiente en paralelo</div>
-          </div>
-          <div class="toggle" id="multiagent-toggle" onclick="toggleMultiAgent()"></div>
-        </div>
-      </div>
-      <div class="fg">
-        <label class="fl">Modo plan primero</label>
-        <div style="display:flex;align-items:center;gap:12px;padding:10px 13px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r)">
-          <div style="flex:1">
-            <div style="font-size:12.5px;font-weight:600;color:var(--text)">Mostrar plan antes de ejecutar</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px">El agente primero muestra un plan de accion y espera confirmacion antes de editar codigo</div>
-          </div>
-          <div class="toggle" id="planmode-toggle" onclick="togglePlanMode()"></div>
-        </div>
-      </div>
-      <div class="fg">
-        <label class="fl">Limite de archivos por tarea</label>
-        <select class="fi" id="set-filelimit">
-          <option value="5">5 archivos (rapido)</option>
-          <option value="10" selected>10 archivos (recomendado)</option>
-          <option value="20">20 archivos (lento)</option>
-          <option value="50">50 archivos (muy lento)</option>
-        </select>
-        <div class="fh">Cuantos archivos del repo lee el agente por tarea. Mas archivos = mejor contexto pero mayor tiempo.</div>
-      </div>
-    </div>
-    <div class="mfoot">
-      <button class="btn btn-g" onclick="closeSettings()">Cancelar</button>
-      <button class="btn btn-p" onclick="saveSettings()">Guardar configuracion</button>
     </div>
   </div>
 </div>
@@ -322,67 +471,51 @@
 <!-- PUSH MODAL -->
 <div class="mo" id="push-modal">
   <div class="mbox">
+    <div class="m-handle"></div>
     <div class="mhead">
       <span class="mtitle">Push a GitHub</span>
-      <button class="mx" onclick="closePushModal()">
-        <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
-      </button>
+      <button class="mx" onclick="closePushModal()"><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg></button>
     </div>
     <div class="mbdy">
-      <div class="fg">
-        <label class="fl">Mensaje del commit</label>
-        <input class="fi" type="text" id="push-commit-msg" placeholder="fix: descripcion del cambio" value="">
+      <div class="fg" style="margin-bottom:14px">
+        <label class="fl">Commit message</label>
+        <input class="fi" type="text" id="push-commit-msg" placeholder="fix: descripcion del cambio">
       </div>
-      <div class="fg">
+      <div class="fg" style="margin-bottom:14px">
         <label class="fl">Rama</label>
-        <input class="fi" type="text" id="push-branch" placeholder="main" value="">
+        <input class="fi" type="text" id="push-branch" placeholder="main">
       </div>
-      <div id="push-files-list" style="margin-top:4px"></div>
-      <div id="push-result" style="margin-top:14px;display:none"></div>
+      <div id="push-files-list"></div>
+      <div id="push-result" style="display:none;margin-top:12px"></div>
     </div>
     <div class="mfoot">
-      <button class="btn btn-g" onclick="closePushModal()">Cancelar</button>
-      <button class="btn btn-p" id="push-confirm-btn" onclick="confirmPush()">Confirmar push</button>
+      <button class="btn btn-g" onclick="closePushModal()" style="flex:0.5">Cancelar</button>
+      <button class="btn btn-p" id="push-confirm-btn" onclick="confirmPush()">Push</button>
     </div>
   </div>
 </div>
 
-<!-- SHEET -->
-<div id="so">
-  <div id="sb" onclick="closeSheet()"></div>
-  <div id="sh">
-    <div class="sh-handle"></div>
-    <div class="sh-head">
-      <span class="sh-title">Conexiones</span>
-      <button class="sh-close" onclick="closeSheet()">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
-      </button>
+<!-- FILE VIEWER -->
+<div id="file-viewer">
+  <div class="fv-head">
+    <button class="fv-back" onclick="closeFileViewer()">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.78 12.78a.75.75 0 01-1.06 0L4.47 8.53a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 1.06L6.06 8l3.72 3.72a.75.75 0 010 1.06z"/></svg>
+    </button>
+    <div class="fv-title">
+      <div class="fv-name" id="fv-name">archivo.js</div>
+      <div class="fv-path" id="fv-path">src/archivo.js</div>
     </div>
-    <div class="sh-label">Repositorio</div>
-    <div class="conn-row" onclick="openModal();closeSheet()">
-      <div class="conn-ic gh">
-        <svg viewBox="0 0 16 16" fill="white" width="18" height="18"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-      </div>
-      <div class="conn-info">
-        <div class="conn-name">GitHub <span class="cbadge" id="gh-badge" style="display:none">Conectado</span></div>
-        <div class="conn-sub" id="gh-sub">Conecta un repositorio para analizar y editar codigo</div>
-      </div>
+    <div class="fv-actions">
+      <button class="fv-action analyze" onclick="analyzeCurrentFile()">Analizar</button>
+      <button class="fv-action edit" onclick="editCurrentFile()">Editar con AI</button>
     </div>
-    <div class="sh-label">API</div>
-    <div class="conn-row" onclick="openSettings();closeSheet()">
-      <div class="conn-ic groq">
-        <svg viewBox="0 0 24 24" fill="white" width="18" height="18"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
-      </div>
-      <div class="conn-info">
-        <div class="conn-name">Groq API <span class="cbadge" id="groq-badge" style="display:none">Configurado</span><span class="cbadge-warn" id="groq-warn" style="display:none">Sin configurar</span></div>
-        <div class="conn-sub" id="groq-sub">LLM ultra-rapido — llama3, mixtral, gemma, deepseek</div>
-      </div>
-    </div>
+  </div>
+  <div class="fv-code" id="fv-code">
+    <div class="fv-loading">Cargando...</div>
   </div>
 </div>
 
 <div id="toast"></div>
-
 <script src="script.js"></script>
 </body>
 </html>
