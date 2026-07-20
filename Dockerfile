@@ -1,14 +1,15 @@
 FROM node:20-slim
 
+# Instalar dependencias en /deps (fuera de /app)
+# Así sobreviven aunque Railway monte el código fuente sobre /app
+COPY package*.json /deps/
+RUN cd /deps && npm install --omit=dev
+
 WORKDIR /app
-
-# Install dependencies first (separate layer for better caching)
-COPY package*.json ./
-RUN npm install --omit=dev
-
-# Copy source code
 COPY . .
 
-EXPOSE 3000
+# Decirle a Node.js dónde buscar los módulos
+ENV NODE_PATH=/deps/node_modules
 
+EXPOSE 3000
 CMD ["node", "server.js"]
