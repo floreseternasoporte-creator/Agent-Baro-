@@ -776,6 +776,53 @@ html,body{
 .stp.active .stn{background:var(--accent);color:#fff}
 .stp.done .stn{background:var(--green);color:#fff}
 
+/* ══ FILE PICKER ══════════════════════════ */
+#file-picker{
+  position:fixed;bottom:0;left:0;right:0;
+  background:var(--bg2);border-top:1px solid var(--border);
+  border-radius:20px 20px 0 0;
+  z-index:90;
+  max-height:60dvh;display:flex;flex-direction:column;
+  box-shadow:0 -4px 24px rgba(0,0,0,.12);
+  transform:translateY(100%);
+  transition:transform .22s cubic-bezier(.32,0,.12,1);
+}
+#file-picker.open{transform:translateY(0)}
+.fp-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px 10px;flex-shrink:0;
+}
+.fp-title{font-size:13px;font-weight:600;color:var(--text2)}
+.fp-search-wrap{
+  display:flex;align-items:center;gap:8px;
+  margin:0 16px 8px;padding:8px 12px;
+  background:var(--bg3);border:1.5px solid var(--border2);
+  border-radius:var(--r);flex-shrink:0;
+  transition:border-color .15s;
+}
+.fp-search-wrap:focus-within{border-color:var(--accent-border)}
+.fp-search-wrap svg{width:14px;height:14px;color:var(--text3);flex-shrink:0}
+#fp-search{
+  flex:1;background:transparent;border:none;outline:none;
+  color:var(--text);font:inherit;font-size:13px;
+}
+#fp-search::placeholder{color:var(--text3)}
+#fp-list{flex:1;overflow-y:auto;padding:0 8px 12px}
+#fp-list::-webkit-scrollbar{display:none}
+.fp-row{
+  width:100%;display:flex;align-items:center;gap:9px;
+  padding:9px 10px;border-radius:9px;
+  background:transparent;border:none;
+  cursor:pointer;text-align:left;
+  transition:background .1s;
+  -webkit-tap-highlight-color:rgba(217,119,87,.06);
+}
+.fp-row:hover,.fp-row:active{background:var(--bg3)}
+.fp-dot{width:9px;height:9px;border-radius:3px;flex-shrink:0}
+.fp-name{font-family:var(--mono);font-size:12.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;max-width:55%}
+.fp-dir{font-family:var(--mono);font-size:10.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.fp-empty{padding:20px;text-align:center;font-size:13px;color:var(--text3)}
+
 /* ══ TOAST ════════════════════════════════ */
 #toast{
   position:fixed;bottom:calc(var(--navbar) + var(--safe-bottom) + 10px);

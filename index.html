@@ -25,17 +25,10 @@
     </div>
     <div class="tb-title">
       <div class="tb-title-main">DevAgent</div>
-      <div class="tb-title-sub" id="tb-sub">Agente autonomo de codigo</div>
+      <div class="tb-title-sub" id="tb-sub"></div>
     </div>
     <div class="tb-actions">
       <div class="conn-dot" id="conn-dot"></div>
-      <button class="tba" id="gh-tba" onclick="openModal()" title="Repositorio">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        <span class="badge" id="gh-dot" style="display:none"></span>
-      </button>
-      <button class="tba" onclick="showScreen('settings')" title="Configuracion">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M7.429 1.525a6.593 6.593 0 011.142 0c.036.003.108.036.137.146l.289 1.105c.147.56.55.967.997 1.189.174.086.341.178.502.274.45.268.987.36 1.529.146l1.079-.43c.105-.042.186-.02.237.032.231.232.437.486.614.756.093.144.066.238.017.296l-.74.867c-.36.422-.527.972-.434 1.493.014.08.024.162.029.243.014.2.042.399.084.598.095.44.42.86.92 1.053l1.08.43c.104.042.143.12.141.195a6.645 6.645 0 01-.572 1.341c-.052.093-.143.11-.228.098l-1.125-.213c-.538-.102-1.088.03-1.504.355-.208.162-.427.312-.657.449-.523.307-.814.93-.712 1.538l.186 1.12c.016.09-.012.18-.105.224-.473.218-.978.368-1.504.444-.105.015-.193-.045-.228-.13l-.479-1.073c-.225-.503-.66-.851-1.145-.921a5.57 5.57 0 01-.739-.146c-.514-.145-1.065-.015-1.455.36l-.766.747c-.07.067-.17.08-.258.042a6.574 6.574 0 01-1.156-.705c-.082-.063-.1-.155-.07-.236l.37-1.097c.177-.525.07-1.09-.27-1.496a5.545 5.545 0 01-.435-.634c-.287-.494-.87-.764-1.452-.676l-1.124.175c-.09.014-.184-.022-.227-.112a6.585 6.585 0 01-.508-1.372c-.028-.104.025-.194.112-.228l1.069-.43c.533-.214.88-.67.945-1.18.02-.155.048-.308.085-.457.13-.51-.02-1.072-.39-1.46L1.44 5.402c-.07-.078-.077-.17-.028-.25.216-.356.464-.69.739-.998.076-.085.175-.092.261-.053l1.052.479c.49.222 1.055.2 1.514-.056.205-.115.42-.22.642-.314.53-.22.868-.731.89-1.29l.04-1.127c.003-.107.072-.18.17-.2zM8 10a2 2 0 100-4 2 2 0 000 4z"/></svg>
-      </button>
     </div>
   </header>
 
@@ -113,9 +106,9 @@
               <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
               <span id="gh-ibtn-txt">Repo</span>
             </button>
-            <button class="ibtn-sm" id="model-ibtn" onclick="showScreen('settings')">
-              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M0 4.75A3.75 3.75 0 013.75 1h8.5A3.75 3.75 0 0116 4.75v4.5A3.75 3.75 0 0112.25 13H8.5l-4 2.5a.75.75 0 01-1.14-.64L3.25 13H3.75A3.75 3.75 0 010 9.25v-4.5z"/></svg>
-              <span id="model-ibtn-txt">llama-3.3</span>
+            <button class="ibtn-sm" id="file-ref-btn" onclick="toggleFilePicker()" style="display:none">
+              <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M3.75 1.5a.25.25 0 00-.25.25v11.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V6H9.75A1.75 1.75 0 018 4.25V1.5H3.75zm5.75.56v2.19c0 .138.112.25.25.25h2.19L9.5 2.06zM2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75z"/></svg>
+              @ Archivo
             </button>
           </div>
         </div>
@@ -219,29 +212,29 @@
         <div class="settings-group">
           <div class="settings-row" id="model-row-0" onclick="selectModel('llama-3.3-70b-versatile')">
             <div class="settings-row-content">
-              <div class="settings-row-label">Llama 3.3 70B</div>
+              <div class="settings-row-label">Avanzado</div>
               <div class="settings-row-sub">Recomendado — mejor calidad</div>
             </div>
             <svg id="model-check-0" viewBox="0 0 16 16" fill="currentColor" width="16" height="16" style="color:var(--accent);flex-shrink:0"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
           </div>
           <div class="settings-row" id="model-row-1" onclick="selectModel('deepseek-r1-distill-llama-70b')">
             <div class="settings-row-content">
-              <div class="settings-row-label">DeepSeek R1 70B</div>
-              <div class="settings-row-sub">Razonamiento — ideal para bugs</div>
+              <div class="settings-row-label">Razonamiento</div>
+              <div class="settings-row-sub">Ideal para bugs y logica compleja</div>
             </div>
             <svg id="model-check-1" viewBox="0 0 16 16" fill="currentColor" width="16" height="16" style="color:var(--accent);flex-shrink:0;display:none"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
           </div>
           <div class="settings-row" id="model-row-2" onclick="selectModel('mixtral-8x7b-32768')">
             <div class="settings-row-content">
-              <div class="settings-row-label">Mixtral 8x7B</div>
-              <div class="settings-row-sub">Contexto largo 32k — repos grandes</div>
+              <div class="settings-row-label">Contexto amplio</div>
+              <div class="settings-row-sub">Hasta 32k tokens — repos grandes</div>
             </div>
             <svg id="model-check-2" viewBox="0 0 16 16" fill="currentColor" width="16" height="16" style="color:var(--accent);flex-shrink:0;display:none"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
           </div>
           <div class="settings-row" id="model-row-3" onclick="selectModel('llama3-8b-8192')">
             <div class="settings-row-content">
-              <div class="settings-row-label">Llama 3 8B</div>
-              <div class="settings-row-sub">Ultra rapido — respuestas simples</div>
+              <div class="settings-row-label">Rapido</div>
+              <div class="settings-row-sub">Ultra veloz — respuestas simples</div>
             </div>
             <svg id="model-check-3" viewBox="0 0 16 16" fill="currentColor" width="16" height="16" style="color:var(--accent);flex-shrink:0;display:none"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
           </div>
@@ -362,6 +355,19 @@
   <div class="fv-code" id="fv-code">
     <div class="fv-loading">Cargando...</div>
   </div>
+</div>
+
+<!-- FILE PICKER -->
+<div id="file-picker">
+  <div class="fp-header">
+    <span class="fp-title">Agregar archivo al contexto</span>
+    <button class="mx" onclick="closeFilePicker()"><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg></button>
+  </div>
+  <div class="fp-search-wrap">
+    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.68 11.74a6 6 0 01-7.922-8.982 6 6 0 018.982 7.922l3.04 3.04a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215l-3.04-3.04zm-5.44-1.19a4.5 4.5 0 006.179-6.547 4.5 4.5 0 00-6.179 6.547z"/></svg>
+    <input type="text" id="fp-search" placeholder="Buscar archivo..." oninput="filterFilePicker(this.value)" autocomplete="off" spellcheck="false">
+  </div>
+  <div id="fp-list"></div>
 </div>
 
 <div id="toast"></div>

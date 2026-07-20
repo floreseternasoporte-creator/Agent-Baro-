@@ -209,7 +209,7 @@ function selectModel(model) {
     if (check) check.style.display = m === model ? '' : 'none';
   });
   updateModelBtn();
-  showToast('Modelo: ' + model.replace('-versatile','').replace('-distill-llama-70b',' R1'));
+  showToast('Modelo actualizado');
 }
 
 // Refleja S.pendingEdits (archivos con diffs REALMENTE aplicados
@@ -263,7 +263,7 @@ function updateStatusBadges() {
   el('groq-ok-badge') && (el('groq-ok-badge').style.display = groqOk ? '' : 'none');
   el('groq-warn-badge') && (el('groq-warn-badge').style.display = groqOk ? 'none' : '');
   el('groq-settings-sub') && (el('groq-settings-sub').textContent = groqOk
-    ? (S.groqKey ? `Modelo: ${S.model.replace('-versatile','').replace('-distill-llama-70b',' R1')}` : 'Usando la clave configurada en el servidor')
+    ? (S.groqKey ? 'API key activa' : 'Usando la clave configurada en el servidor')
     : 'Configura tu API key (gratis)');
 
   const ghOk = !!S.repoData;
@@ -274,11 +274,7 @@ function updateStatusBadges() {
 }
 
 function updateModelBtn() {
-  const el = document.getElementById('model-ibtn-txt');
-  if (el) {
-    const short = (S.model || '').split('-').slice(0,2).join('-').replace('llama','llama');
-    el.textContent = S.model.includes('deepseek') ? 'deepseek-r1' : S.model.replace('-versatile','').replace('llama-3.3','llama-3.3').replace('llama3-','llama3-').replace('-8192','').replace('-32768','');
-  }
+  // model brand names are hidden from UI — selection only via Config screen
 }
 
 // ═══════════════════════════════════════════
@@ -452,6 +448,9 @@ async function connectRepo(repo) {
   if (ghIbtnTxt) ghIbtnTxt.textContent = S.repoData.full_name.split('/').pop();
   const ghIbtn = document.getElementById('gh-ibtn');
   if (ghIbtn) ghIbtn.classList.add('gok');
+
+  const fileRefBtn = document.getElementById('file-ref-btn');
+  if (fileRefBtn) fileRefBtn.style.display = '';
 
   updateStatusBadges();
   renderFileList();
@@ -1233,6 +1232,75 @@ function clearChat() {
   showToast('Conversacion nueva');
 }
 
+
+// ═══════════════════════════════════════════
+// FILE PICKER (@archivo)
+// ═══════════════════════════════════════════
+function toggleFilePicker() {
+  const picker = document.getElementById('file-picker');
+  if (!picker) return;
+  if (picker.classList.contains('open')) {
+    closeFilePicker();
+  } else {
+    renderFilePicker('');
+    picker.classList.add('open');
+    setTimeout(() => document.getElementById('fp-search')?.focus(), 120);
+  }
+}
+
+function closeFilePicker() {
+  const picker = document.getElementById('file-picker');
+  if (picker) picker.classList.remove('open');
+  const search = document.getElementById('fp-search');
+  if (search) search.value = '';
+}
+
+function filterFilePicker(q) {
+  renderFilePicker(q.toLowerCase());
+}
+
+function renderFilePicker(q) {
+  const list = document.getElementById('fp-list');
+  if (!list) return;
+  const files = S.files
+    .map(f => f.path || f)
+    .filter(p => !q || p.toLowerCase().includes(q))
+    .slice(0, 60);
+
+  if (files.length === 0) {
+    list.innerHTML = '<div class="fp-empty">Sin resultados</div>';
+    return;
+  }
+
+  list.innerHTML = files.map(path => {
+    const parts = path.split('/');
+    const name = parts.pop();
+    const dir = parts.join('/');
+    const ext = name.split('.').pop().toLowerCase();
+    const colors = { js:'#f7df1e', ts:'#3178c6', jsx:'#61dafb', tsx:'#61dafb', py:'#3572a5', go:'#00add8', rs:'#dea584', css:'#563d7c', html:'#e34c26', json:'#292929', md:'#083fa1', vue:'#41b883' };
+    const dot = colors[ext] || 'var(--border3)';
+    return `<button class="fp-row" onclick="insertFileRef(${JSON.stringify(path)})">
+      <span class="fp-dot" style="background:${dot}"></span>
+      <span class="fp-name">${esc(name)}</span>
+      ${dir ? `<span class="fp-dir">${esc(dir)}</span>` : ''}
+    </button>`;
+  }).join('');
+}
+
+function insertFileRef(path) {
+  const inp = document.getElementById('inp');
+  if (!inp) return;
+  const filename = path.split('/').pop();
+  const ref = `@${filename} `;
+  const pos = inp.selectionStart;
+  inp.value = inp.value.slice(0, pos) + ref + inp.value.slice(pos);
+  inp.focus();
+  inp.selectionStart = inp.selectionEnd = pos + ref.length;
+  inp.style.height = 'auto';
+  inp.style.height = Math.min(inp.scrollHeight, 140) + 'px';
+  document.getElementById('sndbtn').disabled = !inp.value.trim() || S.busy;
+  closeFilePicker();
+}
 
 // ═══════════════════════════════════════════
 // KEYBOARD
