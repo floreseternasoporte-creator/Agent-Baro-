@@ -379,22 +379,70 @@ async function modalNext() {
 function modalBack() { if (modalStep > 1) { modalStep--; renderStep(); } }
 
 // ═══════════════════════════════════════════
+// SESSION RECOVERY
+// Si el servidor se reinició (Railway redeploy), la sesión en
+// memoria desaparece. Esta función la detecta y la recrea sola.
+// ═══════════════════════════════════════════
+async function ensureSession() {
+  if (!S.sessionId) await initSession();
+}
+
+function isSessionGone(data) {
+  return typeof data.error === 'string' && data.error.toLowerCase().includes('sesi');
+}
+
+async function apiFetch(url, options, retry = true) {
+  await ensureSession();
+  const resp = await fetch(url, {
+    ...options,
+    body: options.body
+      ? options.body.replace ? options.body.replace(/"sessionId":"[^"]*"/, `"sessionId":"${S.sessionId}"`) : options.body
+      : undefined,
+  });
+  if (resp.status === 404 && retry) {
+    const data = await resp.clone().json().catch(() => ({}));
+    if (isSessionGone(data)) {
+      S.sessionId = null;
+      await initSession();
+      return apiFetch(url, options, false);
+    }
+  }
+  return resp;
+}
+
+// ═══════════════════════════════════════════
 // REPO REAL (via backend — clon en disco, no simulado)
 // ═══════════════════════════════════════════
 async function connectRepo(repo) {
-  if (!S.sessionId) await initSession();
+  await ensureSession();
 
-  const resp = await fetch(`${API}/repo/connect`, {
+  const makeBody = () => JSON.stringify({
+    sessionId: S.sessionId,
+    url: `https://github.com/${repo}`,
+    branch: S.branch,
+    token: S.ghToken || undefined,
+    instructions: S.instructions || '',
+  });
+
+  let resp = await fetch(`${API}/repo/connect`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: S.sessionId,
-      url: `https://github.com/${repo}`,
-      branch: S.branch,
-      token: S.ghToken || undefined,
-      instructions: S.instructions || '',
-    }),
+    body: makeBody(),
   });
+
+  // Si la sesión expiró (Railway reinició), crearla y reintentar una vez
+  if (resp.status === 404) {
+    const d = await resp.json().catch(() => ({}));
+    if (isSessionGone(d)) {
+      S.sessionId = null;
+      await initSession();
+      resp = await fetch(`${API}/repo/connect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: makeBody(),
+      });
+    }
+  }
 
   const data = await resp.json();
   if (!resp.ok) throw new Error(data.error || `Error ${resp.status} conectando el repositorio`);
@@ -1034,21 +1082,39 @@ function finalStream(div, text) {
 // devuelve el texto final.
 // ═══════════════════════════════════════════
 async function callAI(msg, onStream) {
-  if (!S.sessionId) await initSession();
+  await ensureSession();
 
   S.abortController = new AbortController();
 
-  const resp = await fetch(`${API}/chat`, {
+  const makeBody = () => JSON.stringify({
+    sessionId: S.sessionId,
+    message: msg,
+    planMode: S.planModeEnabled,
+    fileLimit: S.fileLimit,
+  });
+
+  let resp = await fetch(`${API}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal: S.abortController.signal,
-    body: JSON.stringify({
-      sessionId: S.sessionId,
-      message: msg,
-      planMode: S.planModeEnabled,
-      fileLimit: S.fileLimit,
-    }),
+    body: makeBody(),
   });
+
+  // Sesión expirada → recrear y reintentar
+  if (resp.status === 404) {
+    const d = await resp.json().catch(() => ({}));
+    if (isSessionGone(d)) {
+      S.sessionId = null;
+      await initSession();
+      S.abortController = new AbortController();
+      resp = await fetch(`${API}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: S.abortController.signal,
+        body: makeBody(),
+      });
+    }
+  }
 
   if (!resp.ok || !resp.body) {
     const err = await resp.json().catch(() => ({}));
