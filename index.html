@@ -141,26 +141,6 @@
     </div>
   </div>
 
-  <!-- ════ SCREEN: HISTORY ════ -->
-  <div class="screen" id="screen-history">
-    <div class="screen-header">
-      <div class="screen-header-title">Historial de chats</div>
-    </div>
-    <div id="history-list-wrap">
-      <div id="history-list"></div>
-    </div>
-    <!-- CHAT VIEWER (dentro de historial) -->
-    <div id="history-viewer" class="history-viewer">
-      <div class="hv-head">
-        <button class="fv-back" onclick="closeHistoryViewer()">
-          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.78 12.78a.75.75 0 01-1.06 0L4.47 8.53a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 1.06L6.06 8l3.72 3.72a.75.75 0 010 1.06z"/></svg>
-        </button>
-        <div class="hv-title" id="hv-title">Conversación</div>
-      </div>
-      <div id="hv-msgs" class="hv-msgs"></div>
-    </div>
-  </div>
-
   <!-- ════ SCREEN: TASKS ════ -->
   <div class="screen" id="screen-tasks">
     <div class="tasks-content">
@@ -281,10 +261,6 @@
     <button class="nav-item active" id="nav-chat" onclick="showScreen('chat')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
       Chat
-    </button>
-    <button class="nav-item" id="nav-history" onclick="showScreen('history')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      Historial
     </button>
     <button class="nav-item" id="nav-files" onclick="showScreen('files')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
