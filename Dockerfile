@@ -10,7 +10,7 @@ FROM node:20-slim
 
 # Dependencias del sistema + Ollama
 RUN apt-get update && \
-    apt-get install -y curl ca-certificates && \
+    apt-get install -y curl ca-certificates zstd && \
     rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://ollama.ai/install.sh | sh
