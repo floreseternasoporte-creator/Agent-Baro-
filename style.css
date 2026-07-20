@@ -460,23 +460,6 @@ html,body{
   flex-shrink:0;
   box-shadow:0 -1px 3px rgba(0,0,0,.04);
 }
-/* quick chips above input */
-#quick-chips{
-  display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;
-  -webkit-overflow-scrolling:touch;scrollbar-width:none;
-}
-#quick-chips::-webkit-scrollbar{display:none}
-.qchip{
-  display:flex;align-items:center;gap:5px;
-  padding:5px 11px;border-radius:20px;
-  border:1px solid var(--border);background:var(--bg3);
-  color:var(--text2);font:inherit;font-size:11.5px;
-  cursor:pointer;white-space:nowrap;flex-shrink:0;
-  transition:all .12s;
-}
-.qchip:hover{background:var(--bg4);border-color:var(--border2)}
-.qchip:active{background:var(--bg4);border-color:var(--accent-border);color:var(--accent)}
-.qchip svg{width:12px;height:12px}
 
 .ibox{
   display:flex;align-items:flex-end;gap:8px;

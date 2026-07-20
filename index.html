@@ -105,32 +105,6 @@
 
     <!-- Input area -->
     <div id="input-wrap">
-      <div id="quick-chips">
-        <button class="qchip" onclick="insertTemplate('plan')">
-          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75z"/></svg>
-          Plan
-        </button>
-        <button class="qchip" onclick="insertTemplate('fix')">
-          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M11 1.75a.75.75 0 01.75-.75h2.5a.75.75 0 010 1.5h-2.5A.75.75 0 0111 1.75z"/><path d="M8 13a5 5 0 100-10A5 5 0 008 13z"/></svg>
-          Fix bug
-        </button>
-        <button class="qchip" onclick="insertTemplate('explain')">
-          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M0 8a8 8 0 1116 0A8 8 0 010 8zm8-6.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 6a1 1 0 100-2 1 1 0 000 2z"/></svg>
-          Explicar
-        </button>
-        <button class="qchip" onclick="insertTemplate('add')">
-          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>
-          Agregar feature
-        </button>
-        <button class="qchip" onclick="insertTemplate('review')">
-          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M1.679 7.932c.412-.621 1.242-1.75 2.366-2.717C5.175 4.242 6.527 3.5 8 3.5c1.473 0 2.825.742 3.955 1.715 1.124.967 1.954 2.096 2.366 2.717a.119.119 0 010 .136c-.412.621-1.242 1.75-2.366 2.717C10.825 11.758 9.473 12.5 8 12.5c-1.473 0-2.825-.742-3.955-1.715C2.92 9.818 2.09 8.689 1.679 8.068a.119.119 0 010-.136z"/><path d="M8 10a2 2 0 100-4 2 2 0 000 4z"/></svg>
-          Code review
-        </button>
-        <button class="qchip" onclick="insertTemplate('test')">
-          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M2.75 3a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75z"/></svg>
-          Tests
-        </button>
-      </div>
       <div class="ibox">
         <div class="itxt-wrap">
           <textarea id="inp" rows="1" placeholder="Describe una tarea de codigo..." onkeydown="onKey(event)"></textarea>

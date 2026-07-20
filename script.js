@@ -1233,26 +1233,6 @@ function clearChat() {
   showToast('Conversacion nueva');
 }
 
-// ═══════════════════════════════════════════
-// INPUT TEMPLATES
-// ═══════════════════════════════════════════
-const TEMPLATES = {
-  plan: 'Crea un plan de implementacion detallado para: ',
-  fix: 'Encuentra y corrige el bug en `ARCHIVO` donde ',
-  explain: 'Explica como funciona el archivo `ARCHIVO` y que hace cada funcion principal',
-  add: 'Agrega la siguiente funcionalidad al proyecto: ',
-  review: 'Haz un code review completo de `ARCHIVO` y sugiere mejoras con diffs',
-  test: 'Genera tests unitarios completos para `ARCHIVO` con casos edge y mocks',
-};
-
-function insertTemplate(name) {
-  const inp = document.getElementById('inp');
-  inp.value = TEMPLATES[name] || '';
-  inp.focus();
-  inp.style.height = 'auto';
-  inp.style.height = Math.min(inp.scrollHeight, 140) + 'px';
-  document.getElementById('sndbtn').disabled = !inp.value.trim();
-}
 
 // ═══════════════════════════════════════════
 // KEYBOARD
