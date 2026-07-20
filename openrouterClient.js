@@ -7,8 +7,16 @@
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Modelo gratuito por defecto — cambia con OPENROUTER_MODEL
-const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'google/gemma-4-31b-it:free';
+// Modelos gratuitos verificados — se intentan en orden hasta que uno responda
+const FREE_MODELS = [
+  'poolside/laguna-m.1:free',       // coding agent flagship
+  'cohere/north-mini-code:free',    // coding agent de Cohere
+  'openai/gpt-oss-20b:free',        // OSS de OpenAI 20B
+  'nvidia/nemotron-3-super-120b-a12b:free', // 120B NVIDIA
+  'openrouter/free',                // fallback genérico de OpenRouter
+];
+
+const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || FREE_MODELS[0];
 
 function buildSystemPrompt({ repo, branch, fileCount, instructions, planMode, agentCapable }) {
   let sys = `Eres DevAgent, un agente autonomo de ingenieria de software de nivel senior. Piensas con claridad, actuas de forma precisa y produces codigo de produccion real — no ejemplos ni placeholders.
@@ -85,49 +93,31 @@ No generes ningun diff hasta recibir confirmacion.`;
   return sys;
 }
 
-async function streamChat({ model, messages, signal, onDelta }) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    const err = new Error('Falta OPENROUTER_API_KEY. Agrégala en las variables de entorno de Railway.');
-    err.status = 503;
-    throw err;
-  }
-
-  const useModel = model || DEFAULT_MODEL;
-
-  let resp;
-  try {
-    resp = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://devagent.app',
-        'X-Title': 'DevAgent',
-      },
-      signal,
-      body: JSON.stringify({
-        model: useModel,
-        messages,
-        max_tokens: 4096,
-        temperature: 0.1,
-        stream: true,
-      }),
-    });
-  } catch (e) {
-    const err = new Error('No se pudo conectar con OpenRouter. ' + e.message);
-    err.status = 503;
-    throw err;
-  }
+async function tryModel({ apiKey, model, messages, signal, onDelta }) {
+  const resp = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://devagent.app',
+      'X-Title': 'DevAgent',
+    },
+    signal,
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: 4096,
+      temperature: 0.1,
+      stream: true,
+    }),
+  });
 
   if (!resp.ok) {
-    let message = `Error ${resp.status} de OpenRouter`;
-    try {
-      const body = await resp.json();
-      message = body.error?.message || body.error || message;
-    } catch {}
+    let message = `Error ${resp.status}`;
+    try { const b = await resp.json(); message = b.error?.message || b.error || message; } catch {}
     const err = new Error(message);
     err.status = resp.status;
+    err.providerError = true;
     throw err;
   }
 
@@ -154,13 +144,41 @@ async function streamChat({ model, messages, signal, onDelta }) {
           result += delta;
           if (onDelta) onDelta(delta, result);
         }
-      } catch {
-        // SSE incompleto, ignorar
-      }
+      } catch { /* SSE incompleto, ignorar */ }
     }
   }
 
   return result;
+}
+
+async function streamChat({ model, messages, signal, onDelta }) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    const err = new Error('Falta OPENROUTER_API_KEY. Agrégala en las variables de entorno de Railway.');
+    err.status = 503;
+    throw err;
+  }
+
+  // Si el usuario especificó un modelo concreto, úsalo sin fallback
+  if (model) return tryModel({ apiKey, model, messages, signal, onDelta });
+
+  // Recorre la lista de modelos gratuitos hasta que uno funcione
+  let lastErr;
+  for (const candidate of FREE_MODELS) {
+    try {
+      console.log(`[OpenRouter] Probando modelo: ${candidate}`);
+      return await tryModel({ apiKey, model: candidate, messages, signal, onDelta });
+    } catch (e) {
+      console.warn(`[OpenRouter] ${candidate} falló: ${e.message}`);
+      lastErr = e;
+      // Si fue abortado por el cliente no seguir intentando
+      if (signal?.aborted) throw e;
+    }
+  }
+
+  const err = new Error('Todos los modelos gratuitos fallaron. Último error: ' + lastErr?.message);
+  err.status = 503;
+  throw err;
 }
 
 async function checkHealth() {
