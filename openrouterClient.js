@@ -8,7 +8,7 @@
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Modelo gratuito por defecto — cambia con OPENROUTER_MODEL
-const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'qwen/qwen3-8b:free';
+const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'google/gemma-4-31b-it:free';
 
 function buildSystemPrompt({ repo, branch, fileCount, instructions, planMode, agentCapable }) {
   let sys = `Eres DevAgent, un agente autonomo de ingenieria de software de nivel senior. Piensas con claridad, actuas de forma precisa y produces codigo de produccion real — no ejemplos ni placeholders.
