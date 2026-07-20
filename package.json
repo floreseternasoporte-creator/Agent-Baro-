@@ -1,0 +1,23 @@
+{
+  "name": "devagent",
+  "version": "2.0.0",
+  "description": "DevAgent — agente autonomo de codigo. Backend Express + frontend movil, listo para Railway.",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "simple-git": "^3.25.0",
+    "diff": "^5.2.0",
+    "express-rate-limit": "^7.2.0"
+  }
+}
