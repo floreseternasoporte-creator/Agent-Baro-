@@ -303,16 +303,38 @@ function renderStep() {
   });
 
   if (modalStep === 1) {
-    c.innerHTML = `
-      <div class="fg" style="margin-bottom:16px">
-        <label class="fl">URL del repositorio</label>
-        <input class="fi" type="url" id="repo-url" placeholder="https://github.com/usuario/repo" value="${S.repoData ? 'https://github.com/'+S.repoData.full_name : ''}">
-        <div class="fh">Publicos funcionan sin token. Para privados, agrega tu token en Config.</div>
-      </div>
-      <div class="fg">
-        <label class="fl">Rama</label>
-        <input class="fi" type="text" id="repo-branch" placeholder="main" value="${S.branch}">
-      </div>`;
+    const oauthEnabled = !!S.serverConfig?.githubOAuthEnabled;
+    // Restaurar steps si venimos de repo picker
+    const stepsEl = document.getElementById('modal-steps');
+    if (stepsEl) stepsEl.style.display = '';
+    const titleEl = document.getElementById('modal-title');
+    if (titleEl) titleEl.textContent = 'Conectar repo';
+
+    if (oauthEnabled) {
+      c.innerHTML = `
+        <button class="gh-oauth-btn" onclick="startDeviceFlow()">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="18" height="18"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          Conectar con GitHub
+        </button>
+        <div class="gh-or-sep"><span>o usa URL manual</span></div>
+        <div class="fg" style="margin-bottom:10px">
+          <input class="fi" type="url" id="repo-url" placeholder="https://github.com/usuario/repo" value="${S.repoData ? 'https://github.com/'+S.repoData.full_name : ''}">
+        </div>
+        <div class="fg">
+          <input class="fi" type="text" id="repo-branch" placeholder="Rama (main)" value="${S.branch}">
+        </div>`;
+    } else {
+      c.innerHTML = `
+        <div class="fg" style="margin-bottom:16px">
+          <label class="fl">URL del repositorio</label>
+          <input class="fi" type="url" id="repo-url" placeholder="https://github.com/usuario/repo" value="${S.repoData ? 'https://github.com/'+S.repoData.full_name : ''}">
+          <div class="fh">Publicos sin token. Para privados, agrega tu GitHub Token en Ajustes.</div>
+        </div>
+        <div class="fg">
+          <label class="fl">Rama</label>
+          <input class="fi" type="text" id="repo-branch" placeholder="main" value="${S.branch}">
+        </div>`;
+    }
     setTimeout(() => document.getElementById('repo-url')?.focus(), 150);
   } else if (modalStep === 2) {
     c.innerHTML = `
@@ -373,9 +395,17 @@ async function loadRepoInfo() {
 
 async function modalNext() {
   if (modalStep === 1) {
-    const url = document.getElementById('repo-url').value.trim();
-    const branch = document.getElementById('repo-branch').value.trim() || 'main';
-    if (!url) { showToast('Ingresa la URL del repositorio'); return; }
+    // Si ya hay un repo seleccionado via OAuth picker
+    if (_selectedRepo) {
+      modalStep = 2;
+      _selectedRepo = null;
+      renderStep();
+      return;
+    }
+    const urlEl = document.getElementById('repo-url');
+    if (!urlEl || !urlEl.value.trim()) { showToast('Ingresa la URL del repositorio'); return; }
+    const url = urlEl.value.trim();
+    const branch = document.getElementById('repo-branch')?.value?.trim() || 'main';
     const match = url.match(/github\.com\/([^\/]+\/[^\/]+)/);
     if (!match) { showToast('URL invalida'); return; }
     S.branch = branch;
@@ -1303,10 +1333,174 @@ function insertFileRef(path) {
 }
 
 // ═══════════════════════════════════════════
+// GITHUB DEVICE FLOW OAUTH
+// ═══════════════════════════════════════════
+let _devicePollTimer = null;
+let _oauthRepos = null;
+let _oauthUser = null;
+let _selectedRepo = null;
+
+async function startDeviceFlow() {
+  const sheet = document.getElementById('device-flow-sheet');
+  const body = document.getElementById('device-flow-body');
+  if (!sheet || !body) return;
+
+  body.innerHTML = `<div class="dfs-spinner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28" class="spin"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div><p style="color:var(--text3);font-size:13px;margin-top:12px">Conectando con GitHub...</p>`;
+  sheet.classList.add('open');
+
+  try {
+    const resp = await fetch(`${API}/auth/github/device`, { method: 'POST' });
+    const data = await resp.json();
+    if (data.error) { showDeviceFlowError(data.error); return; }
+
+    const { device_code, user_code, verification_uri, expires_in, interval } = data;
+    const pollMs = Math.max((interval || 5) * 1000, 5000);
+
+    body.innerHTML = `
+      <div style="margin-bottom:20px">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Abre el siguiente enlace e ingresa tu codigo:</p>
+        <a href="${esc(verification_uri)}" target="_blank" rel="noopener" class="dfs-link">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          github.com/login/device
+        </a>
+        <div class="dfs-code">${esc(user_code)}</div>
+        <button class="dfs-copy-btn" onclick="navigator.clipboard.writeText('${esc(user_code)}').then(()=>showToast('Codigo copiado'))">Copiar codigo</button>
+      </div>
+      <div class="dfs-status" id="dfs-status">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" class="spin"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        Esperando autorizacion...
+      </div>`;
+
+    clearInterval(_devicePollTimer);
+    _devicePollTimer = setInterval(() => pollDeviceFlow(device_code), pollMs);
+
+    // Auto-expire
+    setTimeout(() => {
+      clearInterval(_devicePollTimer);
+      const st = document.getElementById('dfs-status');
+      if (st) st.innerHTML = '⚠️ Codigo expirado. Intenta de nuevo.';
+    }, (expires_in || 900) * 1000);
+
+  } catch (e) {
+    showDeviceFlowError(e.message);
+  }
+}
+
+async function pollDeviceFlow(deviceCode) {
+  try {
+    const resp = await fetch(`${API}/auth/github/poll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceCode }),
+    });
+    const data = await resp.json();
+
+    if (data.access_token) {
+      clearInterval(_devicePollTimer);
+      S.ghToken = data.access_token;
+      localStorage.setItem('da_gh_token', data.access_token);
+      closeDeviceFlowSheet();
+      await loadGitHubRepos(data.access_token);
+    } else if (data.error === 'slow_down') {
+      // GitHub pide que reduzcamos el polling — esperar mas tiempo
+    } else if (data.error && data.error !== 'authorization_pending') {
+      clearInterval(_devicePollTimer);
+      const st = document.getElementById('dfs-status');
+      if (st) st.textContent = '❌ ' + (data.error_description || data.error);
+    }
+  } catch (_) { /* red error, retry en el proximo tick */ }
+}
+
+function cancelDeviceFlow() {
+  clearInterval(_devicePollTimer);
+  closeDeviceFlowSheet();
+}
+
+function closeDeviceFlowSheet() {
+  document.getElementById('device-flow-sheet')?.classList.remove('open');
+}
+
+function showDeviceFlowError(msg) {
+  const body = document.getElementById('device-flow-body');
+  if (body) body.innerHTML = `<p style="color:var(--red);font-size:13px">❌ ${esc(msg)}</p><button class="btn btn-g" onclick="cancelDeviceFlow()" style="margin-top:14px;width:100%">Cerrar</button>`;
+}
+
+async function loadGitHubRepos(token) {
+  openModal();
+  const c = document.getElementById('step-content');
+  if (c) c.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24" class="spin"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg><p style="margin-top:10px;font-size:13px">Cargando tus repositorios...</p></div>`;
+
+  try {
+    const resp = await fetch(`${API}/auth/github/repos`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Error cargando repos');
+    _oauthRepos = data.repos;
+    _oauthUser = data.user;
+    renderRepoPicker('');
+    updateModalStepTitle('Elige un repositorio');
+  } catch (e) {
+    const c2 = document.getElementById('step-content');
+    if (c2) c2.innerHTML = `<p style="color:var(--red);font-size:13px;padding:8px 0">Error: ${esc(e.message)}</p>`;
+  }
+}
+
+function updateModalStepTitle(title) {
+  const el = document.getElementById('modal-title');
+  if (el) el.textContent = title;
+  const steps = document.getElementById('modal-steps');
+  if (steps) steps.style.display = 'none';
+}
+
+function renderRepoPicker(q) {
+  const c = document.getElementById('step-content');
+  if (!c || !_oauthRepos) return;
+  const lower = q.toLowerCase();
+  const filtered = _oauthRepos
+    .filter(r => !lower || r.full_name.toLowerCase().includes(lower) || (r.description || '').toLowerCase().includes(lower))
+    .slice(0, 50);
+
+  const langColors = { JavaScript:'#f7df1e', TypeScript:'#3178c6', Python:'#3572a5', Go:'#00add8', Rust:'#dea584', Ruby:'#cc342d', Java:'#b07219', 'C#':'#178600', PHP:'#4f5d95', Vue:'#41b883', Swift:'#fa7343', Kotlin:'#f18e33' };
+
+  c.innerHTML = `
+    <div class="rp-search-wrap">
+      <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M10.68 11.74a6 6 0 01-7.922-8.982 6 6 0 018.982 7.922l3.04 3.04a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215l-3.04-3.04zm-5.44-1.19a4.5 4.5 0 006.179-6.547 4.5 4.5 0 00-6.179 6.547z"/></svg>
+      <input type="text" class="rp-search" placeholder="Buscar repositorio..." oninput="renderRepoPicker(this.value)" autocomplete="off" spellcheck="false" value="${esc(q)}">
+    </div>
+    <div class="rp-list">
+      ${filtered.length === 0 ? '<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Sin resultados</div>' : filtered.map(r => {
+        const lang = r.language || '';
+        const dot = langColors[lang] || 'var(--border3)';
+        const selected = _selectedRepo && _selectedRepo.full_name === r.full_name;
+        return `<button class="rp-row${selected ? ' selected' : ''}" onclick="selectOAuthRepo(${JSON.stringify(r.full_name)}, ${JSON.stringify(r.default_branch || 'main')}, ${JSON.stringify(r.private)})">
+          <div class="rp-row-name">${esc(r.name)}<span class="rp-owner">/${esc(r.owner?.login || '')}</span></div>
+          <div class="rp-row-meta">
+            ${lang ? `<span class="rp-lang-dot" style="background:${dot}"></span><span>${esc(lang)}</span>` : ''}
+            ${r.private ? '<span class="rp-private">Privado</span>' : ''}
+          </div>
+          ${selected ? '<svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16" style="color:var(--accent);flex-shrink:0"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>' : ''}
+        </button>`;
+      }).join('')}
+    </div>`;
+}
+
+function selectOAuthRepo(fullName, branch, isPrivate) {
+  _selectedRepo = { full_name: fullName, branch };
+  S.branch = branch;
+  S._pendingRepo = fullName;
+  // Actualizar la visual del check
+  renderRepoPicker(document.querySelector('.rp-search')?.value || '');
+  // Habilitamos el boton continuar
+  const btn = document.getElementById('modal-next');
+  if (btn) { btn.disabled = false; btn.textContent = 'Conectar'; }
+}
+
+// ═══════════════════════════════════════════
 // KEYBOARD
 // ═══════════════════════════════════════════
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); closePushModal(); closeFileViewer(); }
+  if (e.key === 'Escape') { closeModal(); closePushModal(); closeFileViewer(); cancelDeviceFlow(); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); clearChat(); }
 });
 
@@ -1351,6 +1545,10 @@ async function initSession() {
     setTimeout(initSession, 3000);
     return;
   }
+
+  // Mostrar el CTA de conectar repo en el empty state
+  const ctaEl = document.getElementById('empty-connect-cta');
+  if (ctaEl) ctaEl.style.display = '';
 
   if (!S.groqKey && !S.serverConfig?.groqPreconfigured) {
     setTimeout(() => {

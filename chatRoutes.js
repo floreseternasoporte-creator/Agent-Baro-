@@ -14,21 +14,42 @@ const { buildSystemPrompt, streamChat } = require('./groqClient');
 
 const router = express.Router();
 
+// Extrae @menciones explicitas del mensaje (ej: @server.js, @src/app.ts)
+function extractMentions(message) {
+  const re = /@([\w./\-]+\.\w+)/g;
+  const found = new Set();
+  let m;
+  while ((m = re.exec(message)) !== null) found.add(m[1]);
+  return [...found];
+}
+
+// Busca un archivo por nombre (parcial) dentro de la lista real del repo
+function resolveFilePath(files, mention) {
+  const lower = mention.toLowerCase();
+  // Coincidencia exacta primero
+  const exact = files.find((f) => f.toLowerCase() === lower || f.toLowerCase().endsWith('/' + lower));
+  if (exact) return exact;
+  // Coincidencia parcial
+  return files.find((f) => f.toLowerCase().includes(lower)) || null;
+}
+
 function findRelevantFiles(files, msg, limit) {
   if (!files.length) return [];
   const lower = msg.toLowerCase();
 
   const KEYWORD_GROUPS = {
-    auth: ['auth', 'login', 'session', 'token', 'jwt', 'password'],
-    db: ['database', 'db', 'model', 'schema', 'migration', 'query', 'sql', 'orm'],
-    api: ['api', 'route', 'endpoint', 'controller', 'handler', 'rest', 'graphql'],
-    ui: ['component', 'view', 'page', 'template', 'style', 'css', 'ui', 'layout'],
-    test: ['test', 'spec', 'jest', 'mocha', 'cypress', 'vitest', 'pytest'],
-    config: ['config', 'env', 'settings', 'webpack', 'vite', 'babel', 'tsconfig'],
-    main: ['main', 'index', 'app', 'server', 'entry', 'start'],
+    auth: ['auth', 'login', 'session', 'token', 'jwt', 'password', 'oauth'],
+    db: ['database', 'db', 'model', 'schema', 'migration', 'query', 'sql', 'orm', 'prisma', 'mongoose'],
+    api: ['api', 'route', 'endpoint', 'controller', 'handler', 'rest', 'graphql', 'webhook'],
+    ui: ['component', 'view', 'page', 'template', 'style', 'css', 'ui', 'layout', 'modal', 'button'],
+    test: ['test', 'spec', 'jest', 'mocha', 'cypress', 'vitest', 'pytest', 'unit', 'e2e'],
+    config: ['config', 'env', 'settings', 'webpack', 'vite', 'babel', 'tsconfig', 'eslint'],
+    main: ['main', 'index', 'app', 'server', 'entry', 'start', 'init'],
+    types: ['type', 'interface', 'enum', 'dto', 'schema', 'zod', 'yup'],
+    utils: ['util', 'helper', 'lib', 'hook', 'service', 'store', 'context'],
   };
-  const CODE_EXTS = ['.js', '.ts', '.jsx', '.tsx', '.py', '.go', '.rs', '.java', '.php', '.rb', '.cs'];
-  const IMPORTANT_NAMES = ['package.json', 'requirements.txt', 'go.mod', 'index.js', 'app.js', 'main.py', 'server.js', 'main.ts', 'app.ts', 'readme.md'];
+  const CODE_EXTS = ['.js', '.ts', '.jsx', '.tsx', '.py', '.go', '.rs', '.java', '.php', '.rb', '.cs', '.vue', '.svelte'];
+  const IMPORTANT_NAMES = ['package.json', 'requirements.txt', 'go.mod', 'index.js', 'app.js', 'main.py', 'server.js', 'main.ts', 'app.ts', 'readme.md', 'dockerfile', 'docker-compose.yml'];
 
   return files
     .map((f) => {
@@ -36,14 +57,17 @@ function findRelevantFiles(files, msg, limit) {
       const p = f.toLowerCase();
       const name = p.split('/').pop().replace(/\.\w+$/, '');
 
-      if (lower.includes(p)) score += 100;
-      if (lower.includes(name)) score += 35;
+      if (lower.includes(p)) score += 120;
+      if (lower.includes(name)) score += 40;
 
-      for (const words of Object.values(KEYWORD_GROUPS)) {
-        if (words.some((w) => lower.includes(w)) && words.some((w) => p.includes(w))) score += 22;
+      for (const [group, words] of Object.entries(KEYWORD_GROUPS)) {
+        const msgMatch = words.some((w) => lower.includes(w));
+        const fileMatch = words.some((w) => p.includes(w));
+        if (msgMatch && fileMatch) score += 25;
+        else if (fileMatch && group === 'main') score += 8; // entry points always useful
       }
-      if (CODE_EXTS.some((e) => p.endsWith(e))) score += 4;
-      if (IMPORTANT_NAMES.includes(p.split('/').pop())) score += 12;
+      if (CODE_EXTS.some((e) => p.endsWith(e))) score += 5;
+      if (IMPORTANT_NAMES.some((n) => p.endsWith(n))) score += 15;
 
       return { path: f, score };
     })
@@ -76,30 +100,55 @@ router.post('/chat', async (req, res) => {
     if (session.repoFullName) {
       const allFiles = await git.listFiles(session.dir);
       fileCount = allFiles.length;
-      const relevant = findRelevantFiles(allFiles, message, fileLimit || 10);
 
-      if (relevant.length) {
-        send('log', { type: 'info', title: `${relevant.length} archivos relevantes encontrados`, detail: relevant.slice(0, 3).map((f) => f.path).join(', ') });
+      // 1. Resolver @menciones explicitas (maxima prioridad)
+      const mentions = extractMentions(message);
+      const mentionedPaths = [];
+      for (const m of mentions) {
+        const resolved = resolveFilePath(allFiles, m);
+        if (resolved && !mentionedPaths.includes(resolved)) mentionedPaths.push(resolved);
+      }
+
+      // 2. Completar con archivos relevantes por heuristica
+      const heuristicLimit = Math.max(0, (fileLimit || 10) - mentionedPaths.length);
+      const heuristic = findRelevantFiles(
+        allFiles.filter((f) => !mentionedPaths.includes(f)),
+        message,
+        heuristicLimit,
+      );
+
+      const toRead = [
+        ...mentionedPaths.map((p) => ({ path: p, explicit: true })),
+        ...heuristic.map((r) => ({ path: r.path, explicit: false })),
+      ];
+
+      if (toRead.length) {
+        const labels = toRead.slice(0, 3).map((r) => (r.explicit ? `@${r.path.split('/').pop()}` : r.path)).join(', ');
+        send('log', { type: 'info', title: `Leyendo ${toRead.length} archivo(s)`, detail: labels });
 
         let ctx = '';
-        for (const r of relevant) {
-          send('log', { type: 'run', title: `Leyendo ${r.path}` });
+        for (const r of toRead) {
+          send('log', { type: 'run', title: r.explicit ? `@${r.path.split('/').pop()} (mencionado)` : `Leyendo ${r.path}` });
           try {
             const content = await git.readFile(session.dir, r.path);
             const lines = content.split('\n');
-            const snippet = lines.length > 220 ? lines.slice(0, 220).join('\n') + `\n... [${lines.length - 220} lineas mas]` : content;
-            ctx += `\n\n---\n### ${r.path}\n\`\`\`\n${snippet}\n\`\`\``;
-            send('log', { type: 'ok', title: `Leido: ${r.path}`, detail: `${lines.length} lineas (desde disco real)` });
+            // Archivos @mencionados: hasta 400 lineas. Heuristicos: hasta 200.
+            const cap = r.explicit ? 400 : 220;
+            const snippet = lines.length > cap
+              ? lines.slice(0, cap).join('\n') + `\n... [${lines.length - cap} lineas mas]`
+              : content;
+            ctx += `\n\n---\n### ${r.path}${r.explicit ? ' ← mencionado con @' : ''}\n\`\`\`\n${snippet}\n\`\`\``;
+            send('log', { type: 'ok', title: `Leido: ${r.path}`, detail: `${lines.length} lineas` });
           } catch (e) {
             send('log', { type: 'err', title: `No se pudo leer ${r.path}`, detail: e.message });
           }
         }
         if (ctx) {
-          enrichedMessage = `${message}\n\n## Contenido real de archivos relevantes (leido del clon en disco)\n${ctx}\n\n## Instruccion\nUsa el codigo de arriba para resolver la tarea con diffs quirurgicos exactos. Recuerda que estos diffs se APLICARAN de verdad sobre estos archivos.`;
+          enrichedMessage = `${message}\n\n## Archivos del repositorio (contenido real leido de disco)\n${ctx}\n\n## Instruccion critica\nUsa el codigo de arriba. Genera diffs unified-format exactos y quirurgicos. Estos diffs se APLICARAN de verdad sobre los archivos reales.`;
         }
       } else {
-        send('log', { type: 'info', title: 'Contexto general del repo', detail: `${allFiles.length} archivos disponibles` });
-        enrichedMessage = `${message}\n\n## Estructura real del repo\n\`\`\`\n${allFiles.slice(0, 80).join('\n')}\n\`\`\``;
+        send('log', { type: 'info', title: 'Contexto general del repo', detail: `${allFiles.length} archivos` });
+        enrichedMessage = `${message}\n\n## Estructura del repositorio\n\`\`\`\n${allFiles.slice(0, 100).join('\n')}\n\`\`\`\n\nSi necesitas ver un archivo especifico, dime su nombre o mencionalo con @.`;
       }
     }
 

@@ -19,6 +19,7 @@ const { sweepExpired, WORKSPACES_ROOT } = require('./sessionStore');
 const repoRoutes = require('./repoRoutes');
 const chatRoutes = require('./chatRoutes');
 const agentRoutes = require('./agentRoutes');
+const authRoutes = require('./authRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,6 +47,7 @@ app.use('/api', apiLimiter);
 if (!fs.existsSync(WORKSPACES_ROOT)) fs.mkdirSync(WORKSPACES_ROOT, { recursive: true });
 
 // ── API real del agente ───────────────────────────────────
+app.use('/api', authRoutes);
 app.use('/api', repoRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', agentRoutes);
@@ -60,6 +62,7 @@ app.get('/api/config', (_req, res) => {
   res.json({
     groqPreconfigured: !!process.env.GROQ_API_KEY,
     githubPreconfigured: !!process.env.GITHUB_TOKEN,
+    githubOAuthEnabled: !!process.env.GITHUB_CLIENT_ID,
   });
 });
 
