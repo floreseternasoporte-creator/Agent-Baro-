@@ -10,15 +10,7 @@
 const express = require('express');
 const { getSession } = require('./sessionStore');
 const git = require('./gitAgent');
-const ollamaClient = require('./ollamaClient');
-const groqClient  = require('./groqClient');
-
-// Usa Groq si hay API key configurada, si no intenta con Ollama local
-function getClient(reqGroqKey) {
-  const key = reqGroqKey || process.env.GROQ_API_KEY;
-  if (key) return { buildSystemPrompt: groqClient.buildSystemPrompt, streamChat: (opts) => groqClient.streamChat({ ...opts, apiKey: key }) };
-  return { buildSystemPrompt: ollamaClient.buildSystemPrompt, streamChat: ollamaClient.streamChat };
-}
+const { buildSystemPrompt, streamChat } = require('./ollamaClient');
 
 const router = express.Router();
 
@@ -85,8 +77,7 @@ function findRelevantFiles(files, msg, limit) {
 }
 
 router.post('/chat', async (req, res) => {
-  const { sessionId, message, model, planMode, fileLimit, groqApiKey } = req.body || {};
-  const { buildSystemPrompt, streamChat } = getClient(groqApiKey);
+  const { sessionId, message, model, planMode, fileLimit } = req.body || {};
   const session = getSession(sessionId);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada. Recarga la app.' });
 
