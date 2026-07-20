@@ -1408,7 +1408,7 @@ function renderRepoPicker(q) {
         const lang = r.language || '';
         const dot = langColors[lang] || 'var(--border3)';
         const selected = _selectedRepo && _selectedRepo.full_name === r.full_name;
-        return `<button class="rp-row${selected ? ' selected' : ''}" onclick="selectOAuthRepo(${JSON.stringify(r.full_name)}, ${JSON.stringify(r.default_branch || 'main')}, ${JSON.stringify(r.private)})">
+        return `<button class="rp-row${selected ? ' selected' : ''}" onclick='selectOAuthRepo(${JSON.stringify(r.full_name)}, ${JSON.stringify(r.default_branch || 'main')}, ${r.private})'>
           <div class="rp-row-name">${esc(r.name)}<span class="rp-owner">/${esc(r.owner?.login || '')}</span></div>
           <div class="rp-row-meta">
             ${lang ? `<span class="rp-lang-dot" style="background:${dot}"></span><span>${esc(lang)}</span>` : ''}
