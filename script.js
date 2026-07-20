@@ -303,39 +303,20 @@ function renderStep() {
   });
 
   if (modalStep === 1) {
-    const oauthEnabled = !!S.serverConfig?.githubOAuthEnabled;
     // Restaurar steps si venimos de repo picker
     const stepsEl = document.getElementById('modal-steps');
     if (stepsEl) stepsEl.style.display = '';
     const titleEl = document.getElementById('modal-title');
     if (titleEl) titleEl.textContent = 'Conectar repo';
 
-    if (oauthEnabled) {
-      c.innerHTML = `
-        <button class="gh-oauth-btn" onclick="startDeviceFlow()">
+    c.innerHTML = `
+      <div style="text-align:center;padding:8px 0 16px">
+        <button class="gh-oauth-btn" onclick="startDeviceFlow()" style="width:100%;justify-content:center">
           <svg viewBox="0 0 16 16" fill="currentColor" width="18" height="18"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
           Conectar con GitHub
         </button>
-        <div class="gh-or-sep"><span>o usa URL manual</span></div>
-        <div class="fg" style="margin-bottom:10px">
-          <input class="fi" type="url" id="repo-url" placeholder="https://github.com/usuario/repo" value="${S.repoData ? 'https://github.com/'+S.repoData.full_name : ''}">
-        </div>
-        <div class="fg">
-          <input class="fi" type="text" id="repo-branch" placeholder="Rama (main)" value="${S.branch}">
-        </div>`;
-    } else {
-      c.innerHTML = `
-        <div class="fg" style="margin-bottom:16px">
-          <label class="fl">URL del repositorio</label>
-          <input class="fi" type="url" id="repo-url" placeholder="https://github.com/usuario/repo" value="${S.repoData ? 'https://github.com/'+S.repoData.full_name : ''}">
-          <div class="fh">Publicos sin token. Para privados, agrega tu GitHub Token en Ajustes.</div>
-        </div>
-        <div class="fg">
-          <label class="fl">Rama</label>
-          <input class="fi" type="text" id="repo-branch" placeholder="main" value="${S.branch}">
-        </div>`;
-    }
-    setTimeout(() => document.getElementById('repo-url')?.focus(), 150);
+        <div style="font-size:12px;color:var(--text3);margin-top:12px">Autoriza en tu navegador — sin contraseñas</div>
+      </div>`;
   } else if (modalStep === 2) {
     c.innerHTML = `
       <div class="fg" style="margin-bottom:16px">
@@ -366,7 +347,7 @@ function renderStep() {
 }
 
 async function loadRepoInfo() {
-  const url = document.getElementById('repo-url')?.value || (S.repoData ? 'https://github.com/'+S.repoData.full_name : '');
+  const url = (S._pendingRepo ? 'https://github.com/'+S._pendingRepo : '') || (S.repoData ? 'https://github.com/'+S.repoData.full_name : '');
   const info = document.getElementById('modal-info');
   if (!url || !info) return;
   try {
@@ -395,23 +376,15 @@ async function loadRepoInfo() {
 
 async function modalNext() {
   if (modalStep === 1) {
-    // Si ya hay un repo seleccionado via OAuth picker
+    // Repo seleccionado via OAuth/device flow
     if (_selectedRepo) {
       modalStep = 2;
       _selectedRepo = null;
       renderStep();
       return;
     }
-    const urlEl = document.getElementById('repo-url');
-    if (!urlEl || !urlEl.value.trim()) { showToast('Ingresa la URL del repositorio'); return; }
-    const url = urlEl.value.trim();
-    const branch = document.getElementById('repo-branch')?.value?.trim() || 'main';
-    const match = url.match(/github\.com\/([^\/]+\/[^\/]+)/);
-    if (!match) { showToast('URL invalida'); return; }
-    S.branch = branch;
-    S._pendingRepo = match[1].replace(/\.git$/, '');
-    modalStep = 2;
-    renderStep();
+    showToast('Conecta con GitHub primero');
+    return;
   } else if (modalStep === 2) {
     S.instructions = document.getElementById('repo-inst')?.value?.trim() || '';
     const btn = document.getElementById('modal-next');

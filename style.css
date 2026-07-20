@@ -72,11 +72,9 @@ html,body{
   box-shadow:0 1px 3px rgba(0,0,0,.06);
 }
 .tb-logo{
-  width:32px;height:32px;border-radius:10px;
-  background:var(--accent);
-  display:flex;align-items:center;justify-content:center;
+  height:32px;
+  display:flex;align-items:center;
   flex-shrink:0;
-  box-shadow:0 2px 8px rgba(217,119,87,.25);
 }
 .tb-logo svg{width:17px;height:17px;color:#fff}
 .tb-title{flex:1;min-width:0}
@@ -143,10 +141,7 @@ html,body{
   text-align:center;padding-top:16px;
 }
 .empty-icon{
-  width:72px;height:72px;border-radius:22px;
-  background:var(--accent);
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 10px 32px rgba(217,119,87,.25);
 }
 .empty-icon svg{width:34px;height:34px;color:#fff}
 .empty-title{font-family:var(--font-serif);font-size:26px;font-weight:500;letter-spacing:-.4px;color:var(--text)}
