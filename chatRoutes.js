@@ -10,7 +10,7 @@
 const express = require('express');
 const { getSession } = require('./sessionStore');
 const git = require('./gitAgent');
-const { buildSystemPrompt, streamChat } = require('./ollamaClient');
+const { buildSystemPrompt, streamChat } = require('./openrouterClient');
 
 const router = express.Router();
 
