@@ -6,7 +6,7 @@
 // "npm start".
 // ═══════════════════════════════════════════════════════
 
-require('dotenv').config();
+try { require('dotenv').config(); } catch (_) { /* en Railway las vars ya están inyectadas, dotenv es opcional */ }
 
 const express = require('express');
 const cors = require('cors');
