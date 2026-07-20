@@ -3,14 +3,14 @@
 // Recibe un mensaje del usuario, si hay un repo real
 // clonado busca los archivos relevantes y LOS LEE DE
 // VERDAD desde disco (no desde cache del navegador), arma
-// el prompt, y transmite la respuesta de Groq al navegador
+// el prompt, y transmite la respuesta del modelo local al navegador
 // en tiempo real via Server-Sent Events.
 // ═══════════════════════════════════════════════════════
 
 const express = require('express');
 const { getSession } = require('./sessionStore');
 const git = require('./gitAgent');
-const { buildSystemPrompt, streamChat } = require('./groqClient');
+const { buildSystemPrompt, streamChat } = require('./ollamaClient');
 
 const router = express.Router();
 
@@ -167,12 +167,10 @@ router.post('/chat', async (req, res) => {
       { role: 'user', content: enrichedMessage },
     ];
 
-    send('log', { type: 'run', title: 'Generando respuesta...', detail: model });
+    send('log', { type: 'run', title: 'Generando respuesta...', detail: 'modelo local' });
 
-    const apiKey = req.headers['x-groq-key'] || process.env.GROQ_API_KEY;
     const result = await streamChat({
-      apiKey,
-      model,
+      model,   // ignorado si no coincide — ollamaClient usa DEFAULT_MODEL
       messages,
       signal: abortController.signal,
       onDelta: (_delta, fullText) => send('delta', { text: fullText }),

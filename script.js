@@ -19,7 +19,7 @@ const S = {
   totalTokens: 0,
   maxTokens: 131072,
   sessionId: null,       // id de la sesion/workspace real en el servidor
-  serverConfig: null,    // { groqPreconfigured, githubPreconfigured }
+  serverConfig: null,    // { ollamaReady, ollamaModel, githubPreconfigured }
   MODELS: [
     'llama-3.3-70b-versatile',
     'deepseek-r1-distill-llama-70b',
@@ -175,41 +175,19 @@ function showScreen(name) {
 // SETTINGS
 // ═══════════════════════════════════════════
 function loadSettings() {
-  S.groqKey = localStorage.getItem('da_groq_key') || '';
   S.ghToken = localStorage.getItem('da_gh_token') || '';
-  S.model = localStorage.getItem('da_model') || 'llama-3.3-70b-versatile';
   S.multiAgentEnabled = localStorage.getItem('da_multi_agent') !== 'false';
   S.planModeEnabled = localStorage.getItem('da_plan_mode') === 'true';
   S.fileLimit = parseInt(localStorage.getItem('da_file_limit') || '10');
   updateStatusBadges();
-  updateModelBtn();
 }
 
 function syncSettingsUI() {
-  document.getElementById('set-groq').value = S.groqKey || '';
-  // set-ghtoken removed — token viene via OAuth GitHub
-
-  // Model selection
-  S.MODELS.forEach((m, i) => {
-    const check = document.getElementById('model-check-' + i);
-    if (check) check.style.display = m === S.model ? '' : 'none';
-  });
-
   const maToggle = document.getElementById('multiagent-toggle');
   if (maToggle) { if (S.multiAgentEnabled) maToggle.classList.add('on'); else maToggle.classList.remove('on'); }
 
   const pmToggle = document.getElementById('planmode-toggle');
   if (pmToggle) { if (S.planModeEnabled) pmToggle.classList.add('on'); else pmToggle.classList.remove('on'); }
-}
-
-function selectModel(model) {
-  S.model = model;
-  S.MODELS.forEach((m, i) => {
-    const check = document.getElementById('model-check-' + i);
-    if (check) check.style.display = m === model ? '' : 'none';
-  });
-  updateModelBtn();
-  showToast('Modelo actualizado');
 }
 
 // Refleja S.pendingEdits (archivos con diffs REALMENTE aplicados
@@ -236,53 +214,38 @@ function toggleSetting(name) {
 }
 
 function saveSettings() {
-  const key = document.getElementById('set-groq').value.trim();
-
-  if (!key && !S.serverConfig?.groqPreconfigured) { showToast('La API key de Groq es requerida'); return; }
-
-  localStorage.setItem('da_groq_key', key);
-  localStorage.setItem('da_model', S.model);
   localStorage.setItem('da_multi_agent', S.multiAgentEnabled ? 'true' : 'false');
   localStorage.setItem('da_plan_mode', S.planModeEnabled ? 'true' : 'false');
-
-  S.groqKey = key;
 
   // Persistir en Firebase para que se carguen en cualquier dispositivo
   if (window.FB?.currentUser) {
     FB.saveUserData({
-      groqKey: key,
-      ghToken: S.ghToken,   // token sigue guardado (viene de OAuth)
-      model: S.model,
+      ghToken: S.ghToken,
       multiAgentEnabled: S.multiAgentEnabled,
       planModeEnabled: S.planModeEnabled,
     });
   }
 
   updateStatusBadges();
-  updateModelBtn();
   showToast('Configuracion guardada ✓');
   showScreen('chat');
 }
 
 function updateStatusBadges() {
-  const groqOk = !!S.groqKey || !!S.serverConfig?.groqPreconfigured;
   const el = (id) => document.getElementById(id);
+  const ollamaOk = !!S.serverConfig?.ollamaReady;
 
-  el('groq-ok-badge') && (el('groq-ok-badge').style.display = groqOk ? '' : 'none');
-  el('groq-warn-badge') && (el('groq-warn-badge').style.display = groqOk ? 'none' : '');
-  el('groq-settings-sub') && (el('groq-settings-sub').textContent = groqOk
-    ? (S.groqKey ? 'API key activa' : 'Usando la clave configurada en el servidor')
-    : 'Configura tu API key (gratis)');
+  el('ollama-ok-badge') && (el('ollama-ok-badge').style.display = ollamaOk ? '' : 'none');
+  el('ollama-warn-badge') && (el('ollama-warn-badge').style.display = ollamaOk ? 'none' : '');
+  el('ollama-settings-sub') && (el('ollama-settings-sub').textContent = ollamaOk
+    ? `Modelo local activo — ${S.serverConfig?.ollamaModel || 'qwen2.5-coder:1.5b'}`
+    : 'Iniciando modelo local...');
 
   const ghOk = !!S.repoData;
   el('gh-settings-badge') && (el('gh-settings-badge').style.display = ghOk ? 'none' : '');
   el('gh-settings-badge-ok') && (el('gh-settings-badge-ok').style.display = ghOk ? '' : 'none');
   el('gh-settings-sub') && (el('gh-settings-sub').textContent = ghOk ? S.repoData.full_name : 'Conecta un repositorio');
   el('gh-dot') && (el('gh-dot').style.display = ghOk ? '' : 'none');
-}
-
-function updateModelBtn() {
-  // model brand names are hidden from UI — selection only via Config screen
 }
 
 // ═══════════════════════════════════════════
@@ -1072,23 +1035,16 @@ function finalStream(div, text) {
 // ═══════════════════════════════════════════
 async function callAI(msg, onStream) {
   if (!S.sessionId) await initSession();
-  if (!S.groqKey && !S.serverConfig?.groqPreconfigured) {
-    throw new Error('No hay API key de Groq. Ve a Configuracion.');
-  }
 
   S.abortController = new AbortController();
 
   const resp = await fetch(`${API}/chat`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(S.groqKey ? { 'x-groq-key': S.groqKey } : {}),
-    },
+    headers: { 'Content-Type': 'application/json' },
     signal: S.abortController.signal,
     body: JSON.stringify({
       sessionId: S.sessionId,
       message: msg,
-      model: S.model,
       planMode: S.planModeEnabled,
       fileLimit: S.fileLimit,
     }),
@@ -1185,12 +1141,6 @@ async function send() {
   const msg = inp.value.trim();
   if (!msg || S.busy) return;
 
-  if (!S.groqKey && !S.serverConfig?.groqPreconfigured) {
-    showToast('Configura tu API key primero');
-    showScreen('settings');
-    return;
-  }
-
   S.busy = true;
   inp.value = '';
   inp.style.height = 'auto';
@@ -1217,7 +1167,7 @@ async function send() {
     if (e.name === 'AbortError') {
       finalStream(streamEl, result || '_Generacion detenida._');
     } else {
-      finalStream(streamEl, `**Error:** ${e.message}\n\n${(!S.groqKey && !S.serverConfig?.groqPreconfigured) ? 'Ve a **Configuracion** para agregar tu API key de Groq.' : ''}`);
+      finalStream(streamEl, `**Error:** ${e.message}`);
       updateLastLog('err', 'Error', e.message);
     }
     showActivity(false);
@@ -1548,9 +1498,7 @@ window.onFirebaseAuthReady = async function(user) {
 
 async function initSession() {
   try {
-    // Le pregunta al backend si ya trae Groq/GitHub configurados
-    // como variable de entorno en Railway, para no pedirle
-    // claves al usuario si el dueño de la instancia ya las puso.
+    // Consulta configuración del servidor (Ollama, GitHub OAuth).
     const cfgResp = await fetch(`${API}/config`);
     S.serverConfig = await cfgResp.json();
 
@@ -1590,10 +1538,4 @@ async function initSession() {
     return;
   }
 
-  if (!S.groqKey && !S.serverConfig?.groqPreconfigured) {
-    setTimeout(() => {
-      showToast('Configura tu API key de Groq para comenzar');
-      setTimeout(() => showScreen('settings'), 600);
-    }, 1000);
-  }
 }

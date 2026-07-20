@@ -137,7 +137,6 @@ async function _loadUserData() {
 function _applyToLocalStorage(data) {
   if (!data) return;
   const s = data.settings || {};
-  if (s.groqKey      !== undefined) localStorage.setItem('da_groq_key',    s.groqKey);
   if (s.ghToken      !== undefined) localStorage.setItem('da_gh_token',     s.ghToken);
   if (s.model        !== undefined) localStorage.setItem('da_model',        s.model);
   if (s.multiAgentEnabled !== undefined) localStorage.setItem('da_multi_agent', s.multiAgentEnabled ? 'true' : 'false');

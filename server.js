@@ -21,7 +21,10 @@ const chatRoutes = require('./chatRoutes');
 const agentRoutes = require('./agentRoutes');
 const authRoutes = require('./authRoutes');
 
+const { checkHealth } = require('./ollamaClient');
+
 const app = express();
+app.set('trust proxy', 1);   // Requerido para express-rate-limit detrás de Railway proxy
 const PORT = process.env.PORT || 3000;
 // index.html vive en esta misma carpeta (todo el proyecto es plano,
 // sin subcarpetas), asi que la raiz del proyecto es __dirname mismo.
@@ -32,7 +35,7 @@ app.disable('x-powered-by');
 app.use(cors({ origin: process.env.CORS_ORIGIN === '*' || !process.env.CORS_ORIGIN ? true : process.env.CORS_ORIGIN.split(',') }));
 app.use(express.json({ limit: '2mb' }));
 
-// El chat/comandos/push pegan a GitHub y Groq, asi que van con
+// El chat/comandos/push pegan a GitHub y Ollama, asi que van con
 // rate limit para que una sola sesion no agote la instancia.
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -56,11 +59,11 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'devagent', time: new Date().toISOString() });
 });
 
-app.get('/api/config', (_req, res) => {
-  // Le dice al frontend que capacidades ya vienen preconfiguradas
-  // desde el servidor, para no pedirle claves al usuario si no hace falta.
+app.get('/api/config', async (_req, res) => {
+  const ollama = await checkHealth();
   res.json({
-    groqPreconfigured: !!process.env.GROQ_API_KEY,
+    ollamaReady: ollama.ready,
+    ollamaModel: ollama.model,
     githubPreconfigured: !!process.env.GITHUB_TOKEN,
     githubOAuthEnabled: !!process.env.GITHUB_CLIENT_ID,
   });
