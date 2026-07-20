@@ -166,10 +166,42 @@ _fbAuth.onAuthStateChanged(async (user) => {
   }
 });
 
+// ── Chat history ──────────────────────────
+async function _saveChatHistory(chatId, data) {
+  if (!_fbUser) return;
+  try {
+    await _fbDb.ref(`users/${_fbUser.uid}/chats/${chatId}`).set({ ...data, id: chatId });
+  } catch (e) { console.warn('[firebase] saveChatHistory:', e.message); }
+}
+
+async function _loadChatHistory() {
+  if (!_fbUser) return [];
+  try {
+    const snap = await _fbDb.ref(`users/${_fbUser.uid}/chats`)
+      .orderByChild('updatedAt').limitToLast(50).get();
+    if (!snap.exists()) return [];
+    const items = [];
+    snap.forEach(child => items.push(child.val()));
+    // Más recientes primero
+    return items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  } catch (e) { console.warn('[firebase] loadChatHistory:', e.message); return []; }
+}
+
+async function _loadChatById(chatId) {
+  if (!_fbUser) return null;
+  try {
+    const snap = await _fbDb.ref(`users/${_fbUser.uid}/chats/${chatId}`).get();
+    return snap.exists() ? snap.val() : null;
+  } catch (e) { console.warn('[firebase] loadChatById:', e.message); return null; }
+}
+
 // ── API pública ───────────────────────────
 window.FB = {
   get currentUser() { return _fbUser; },
   saveUserData: _saveUserData,
   saveLastRepo: _saveLastRepo,
   loadUserData: _loadUserData,
+  saveChatHistory: _saveChatHistory,
+  loadChatHistory: _loadChatHistory,
+  loadChatById: _loadChatById,
 };

@@ -46,7 +46,7 @@
       <div id="empty">
         <div class="empty-hero">
           <div class="empty-icon" style="background:none;box-shadow:none">
-            <img src="https://i.ibb.co/0pysKTcw/IMG-4453.png" alt="Logo" style="height:72px;width:auto;object-fit:contain;">
+            <img src="https://i.ibb.co/0pysKTcw/IMG-4453.png" alt="Logo" style="height:130px;width:auto;object-fit:contain;">
           </div>
           <div id="empty-connect-cta" style="display:none">
             <button class="empty-gh-btn" onclick="openModal()">
@@ -141,6 +141,26 @@
     </div>
   </div>
 
+  <!-- ════ SCREEN: HISTORY ════ -->
+  <div class="screen" id="screen-history">
+    <div class="screen-header">
+      <div class="screen-header-title">Historial de chats</div>
+    </div>
+    <div id="history-list-wrap">
+      <div id="history-list"></div>
+    </div>
+    <!-- CHAT VIEWER (dentro de historial) -->
+    <div id="history-viewer" class="history-viewer">
+      <div class="hv-head">
+        <button class="fv-back" onclick="closeHistoryViewer()">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.78 12.78a.75.75 0 01-1.06 0L4.47 8.53a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 1.06L6.06 8l3.72 3.72a.75.75 0 010 1.06z"/></svg>
+        </button>
+        <div class="hv-title" id="hv-title">Conversación</div>
+      </div>
+      <div id="hv-msgs" class="hv-msgs"></div>
+    </div>
+  </div>
+
   <!-- ════ SCREEN: TASKS ════ -->
   <div class="screen" id="screen-tasks">
     <div class="tasks-content">
@@ -194,15 +214,6 @@
           <label class="fl">Groq API Key <span style="color:var(--red);font-size:10px">requerido</span></label>
           <input class="fi" type="password" id="set-groq" placeholder="gsk_...">
           <div class="fh">Gratis en <strong>console.groq.com</strong> — soporta Llama 3, Mixtral, DeepSeek</div>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <div class="settings-section-label">GitHub</div>
-        <div class="fg">
-          <label class="fl">Personal Access Token <span style="color:var(--text3);font-size:10px">para push</span></label>
-          <input class="fi" type="password" id="set-ghtoken" placeholder="ghp_...">
-          <div class="fh">Necesario para push de cambios y repos privados. Permisos: <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:10px">repo</code></div>
         </div>
       </div>
 
@@ -270,6 +281,10 @@
     <button class="nav-item active" id="nav-chat" onclick="showScreen('chat')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
       Chat
+    </button>
+    <button class="nav-item" id="nav-history" onclick="showScreen('history')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Historial
     </button>
     <button class="nav-item" id="nav-files" onclick="showScreen('files')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>

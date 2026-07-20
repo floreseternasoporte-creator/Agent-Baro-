@@ -20,6 +20,7 @@ const S = {
   maxTokens: 131072,
   sessionId: null,       // id de la sesion/workspace real en el servidor
   serverConfig: null,    // { groqPreconfigured, githubPreconfigured }
+  chatId: null,          // id del chat activo para guardar en Firebase
   MODELS: [
     'llama-3.3-70b-versatile',
     'deepseek-r1-distill-llama-70b',
@@ -169,6 +170,7 @@ function showScreen(name) {
   if (name === 'settings') syncSettingsUI();
   if (name === 'files') renderFileList();
   if (name === 'tasks') renderTaskScreen();
+  if (name === 'history') renderHistoryScreen();
 }
 
 // ═══════════════════════════════════════════
@@ -187,7 +189,7 @@ function loadSettings() {
 
 function syncSettingsUI() {
   document.getElementById('set-groq').value = S.groqKey || '';
-  document.getElementById('set-ghtoken').value = S.ghToken || '';
+  // set-ghtoken removed — token viene via OAuth GitHub
 
   // Model selection
   S.MODELS.forEach((m, i) => {
@@ -237,24 +239,21 @@ function toggleSetting(name) {
 
 function saveSettings() {
   const key = document.getElementById('set-groq').value.trim();
-  const tok = document.getElementById('set-ghtoken').value.trim();
 
   if (!key && !S.serverConfig?.groqPreconfigured) { showToast('La API key de Groq es requerida'); return; }
 
   localStorage.setItem('da_groq_key', key);
-  localStorage.setItem('da_gh_token', tok);
   localStorage.setItem('da_model', S.model);
   localStorage.setItem('da_multi_agent', S.multiAgentEnabled ? 'true' : 'false');
   localStorage.setItem('da_plan_mode', S.planModeEnabled ? 'true' : 'false');
 
   S.groqKey = key;
-  S.ghToken = tok;
 
   // Persistir en Firebase para que se carguen en cualquier dispositivo
   if (window.FB?.currentUser) {
     FB.saveUserData({
       groqKey: key,
-      ghToken: tok,
+      ghToken: S.ghToken,   // token sigue guardado (viene de OAuth)
       model: S.model,
       multiAgentEnabled: S.multiAgentEnabled,
       planModeEnabled: S.planModeEnabled,
@@ -1200,6 +1199,7 @@ async function send() {
   document.getElementById('sndbtn').disabled = true;
 
   addMsg('me', msg);
+  S.history.push({ role: 'user', content: msg });
   clearActivityLog();
   showActivity(true, 'Analizando tarea...');
 
@@ -1213,6 +1213,7 @@ async function send() {
   try {
     result = await callAI(msg, (text) => { patchStream(streamEl, text); });
     finalStream(streamEl, result);
+    S.history.push({ role: 'assistant', content: result });
     updateLastLog('ok', 'Completado');
     showActivity(false);
     detectEditsAndShowPushBanner(result);
@@ -1229,6 +1230,13 @@ async function send() {
   S.busy = false;
   S.abortController = null;
   document.getElementById('sndbtn').disabled = false;
+
+  // Guardar chat en Firebase después de cada respuesta
+  if (!S.chatId) {
+    S.chatId = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+    S._chatCreatedAt = Date.now();
+  }
+  _saveChatNow();
 }
 
 function doQuick(text) {
@@ -1239,6 +1247,9 @@ function doQuick(text) {
 
 function clearChat() {
   if (S.busy) { showToast('El agente esta trabajando'); return; }
+  // Guardar chat actual en Firebase antes de limpiar
+  _saveChatNow();
+  S.chatId = null;
   document.getElementById('msgs').innerHTML = '';
   document.getElementById('empty').classList.remove('gone');
   showActivity(false);
@@ -1249,6 +1260,82 @@ function clearChat() {
   clearActivityLog();
   document.getElementById('context-bar')?.classList.remove('show');
   showToast('Conversacion nueva');
+}
+
+// Guarda el chat activo en Firebase (si hay mensajes)
+function _saveChatNow() {
+  if (!window.FB?.currentUser || !S.history.length) return;
+  const id = S.chatId || (S.chatId = Date.now().toString(36) + Math.random().toString(36).slice(2,6));
+  const firstUser = S.history.find(m => m.role === 'user');
+  const title = firstUser ? firstUser.content.slice(0, 80) : 'Conversacion';
+  FB.saveChatHistory(id, {
+    title,
+    repo: S.repoData?.full_name || '',
+    updatedAt: Date.now(),
+    createdAt: S._chatCreatedAt || Date.now(),
+    messages: S.history.map(m => ({ role: m.role, content: m.content.slice(0, 4000) })),
+  });
+}
+
+// ═══════════════════════════════════════════
+// HISTORIAL DE CHATS
+// ═══════════════════════════════════════════
+async function renderHistoryScreen() {
+  const wrap = document.getElementById('history-list');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="history-loading"><svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>';
+  if (!window.FB?.currentUser) { wrap.innerHTML = '<div class="history-empty">Inicia sesion para ver tu historial</div>'; return; }
+  try {
+    const chats = await FB.loadChatHistory();
+    if (!chats || !chats.length) {
+      wrap.innerHTML = '<div class="history-empty">Aun no hay conversaciones guardadas.<br>Empieza un chat y se guardara automaticamente.</div>';
+      return;
+    }
+    wrap.innerHTML = chats.map(c => {
+      const d = new Date(c.updatedAt);
+      const dateStr = d.toLocaleDateString('es', { day:'numeric', month:'short', year:'numeric' });
+      const msgCount = c.messages?.length || 0;
+      return `<div class="history-item" onclick="openHistoryChat(${JSON.stringify(c.id)})">
+        <div class="hi-top">
+          <span class="hi-title">${esc(c.title || 'Conversacion')}</span>
+          <span class="hi-date">${dateStr}</span>
+        </div>
+        <div class="hi-meta">
+          ${c.repo ? `<span class="hi-repo"><svg viewBox="0 0 16 16" fill="currentColor" width="10" height="10"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> ${esc(c.repo)}</span>` : ''}
+          <span class="hi-count">${msgCount} mensajes</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    wrap.innerHTML = `<div class="history-empty">Error cargando historial</div>`;
+  }
+}
+
+async function openHistoryChat(chatId) {
+  const viewer = document.getElementById('history-viewer');
+  const msgsEl = document.getElementById('hv-msgs');
+  const titleEl = document.getElementById('hv-title');
+  if (!viewer || !msgsEl) return;
+  msgsEl.innerHTML = '<div class="history-loading"><svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>';
+  viewer.classList.add('open');
+  try {
+    const chat = await FB.loadChatById(chatId);
+    if (!chat) { msgsEl.innerHTML = '<div class="history-empty">No se encontro la conversacion</div>'; return; }
+    if (titleEl) titleEl.textContent = chat.repo || chat.title || 'Conversacion';
+    msgsEl.innerHTML = (chat.messages || []).map(m => {
+      const isUser = m.role === 'user';
+      return `<div class="hv-msg ${isUser ? 'hv-me' : 'hv-ai'}">
+        <div class="hv-av">${isUser ? 'Tu' : 'DA'}</div>
+        <div class="hv-body">${isUser ? `<p>${esc(m.content)}</p>` : md(m.content)}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    msgsEl.innerHTML = `<div class="history-empty">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+function closeHistoryViewer() {
+  document.getElementById('history-viewer')?.classList.remove('open');
 }
 
 
