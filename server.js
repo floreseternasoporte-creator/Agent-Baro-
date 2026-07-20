@@ -73,7 +73,7 @@ app.get('/api/config', (_req, res) => {
 // igual si no se filtra, permitiendo descargar el codigo fuente del
 // servidor con un GET directo (ej. /gitAgent.js). Esta lista blanca
 // evita eso: solo estos archivos y extensiones se sirven como estaticos.
-const PUBLIC_FILES = new Set(['index.html', 'style.css', 'script.js']);
+const PUBLIC_FILES = new Set(['index.html', 'style.css', 'script.js', 'firebase-auth.js']);
 const PUBLIC_EXT_RE = /\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|ttf)$/i;
 
 app.use((req, res, next) => {

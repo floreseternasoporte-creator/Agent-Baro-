@@ -261,6 +261,7 @@
       </div>
 
       <button class="save-btn" onclick="saveSettings()">Guardar configuracion</button>
+      <button class="save-btn" onclick="logoutFirebase()" style="background:var(--rb);color:var(--red);border:1px solid var(--rd);margin-top:8px">Cerrar sesión</button>
     </div>
   </div>
 
@@ -387,6 +388,34 @@
 </div>
 
 <div id="toast"></div>
+
+<!-- AUTH OVERLAY -->
+<div id="auth-overlay">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <img src="https://i.ibb.co/0pysKTcw/IMG-4453.png" alt="Logo" style="height:64px;width:auto;object-fit:contain;">
+    </div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="auth-tab-login" onclick="switchAuthMode('login')">Iniciar sesión</button>
+      <button class="auth-tab" id="auth-tab-register" onclick="switchAuthMode('register')">Registrarse</button>
+    </div>
+    <div class="auth-form">
+      <div id="auth-name-wrap" style="display:none">
+        <input class="fi" type="text" id="auth-name" placeholder="Tu nombre" autocomplete="name">
+      </div>
+      <input class="fi" type="email" id="auth-email" placeholder="Email" autocomplete="email">
+      <input class="fi" type="password" id="auth-password" placeholder="Contraseña (mín. 6 caracteres)" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitAuth()">
+      <div id="auth-error" class="auth-error" style="display:none"></div>
+      <button class="btn btn-p auth-submit" id="auth-submit-btn" onclick="submitAuth()">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDK (compat v9) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="firebase-auth.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

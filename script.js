@@ -250,6 +250,17 @@ function saveSettings() {
   S.groqKey = key;
   S.ghToken = tok;
 
+  // Persistir en Firebase para que se carguen en cualquier dispositivo
+  if (window.FB?.currentUser) {
+    FB.saveUserData({
+      groqKey: key,
+      ghToken: tok,
+      model: S.model,
+      multiAgentEnabled: S.multiAgentEnabled,
+      planModeEnabled: S.planModeEnabled,
+    });
+  }
+
   updateStatusBadges();
   updateModelBtn();
   showToast('Configuracion guardada ✓');
@@ -457,6 +468,11 @@ async function connectRepo(repo) {
 
   updateStatusBadges();
   renderFileList();
+
+  // Guardar ultimo repo en Firebase para auto-reconexion
+  if (window.FB?.currentUser) {
+    FB.saveLastRepo({ fullName: repo, branch: S.branch, instructions: S.instructions || '' });
+  }
 }
 
 async function fetchFile(path) {
@@ -1492,10 +1508,22 @@ document.getElementById('inp').addEventListener('input', function() {
 
 // ═══════════════════════════════════════════
 // INIT
+// initSession() se llama desde firebase-auth.js
+// via window.onFirebaseAuthReady, una vez que el
+// usuario ya esta autenticado y sus datos estan
+// cargados en localStorage.
 // ═══════════════════════════════════════════
 loadSettings();
 renderQuickCards();
-initSession();
+// NO llamamos initSession() aqui: esperamos a Firebase Auth.
+
+// Firebase llama esto cuando el usuario esta listo.
+window.onFirebaseAuthReady = async function(user) {
+  // Re-leer settings (Firebase pudo haber actualizado localStorage)
+  loadSettings();
+  syncSettingsUI();
+  await initSession();
+};
 
 async function initSession() {
   try {
@@ -1522,6 +1550,24 @@ async function initSession() {
   // Mostrar el CTA de conectar repo en el empty state
   const ctaEl = document.getElementById('empty-connect-cta');
   if (ctaEl) ctaEl.style.display = '';
+
+  // Auto-reconectar el ultimo repo guardado en Firebase
+  if (window._fbLastRepo && window._fbLastRepo.fullName) {
+    const { fullName, branch, instructions } = window._fbLastRepo;
+    S.branch = branch || 'main';
+    S.instructions = instructions || '';
+    S._pendingRepo = fullName;
+    const name = fullName.split('/').pop();
+    showToast('Reconectando ' + name + '...');
+    try {
+      await connectRepo(fullName);
+      showToast(name + ' conectado ✓');
+    } catch (e) {
+      showToast('No se pudo reconectar el repo anterior');
+      // No bloqueamos: el usuario puede conectar manualmente
+    }
+    return;
+  }
 
   if (!S.groqKey && !S.serverConfig?.groqPreconfigured) {
     setTimeout(() => {
