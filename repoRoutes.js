@@ -79,8 +79,22 @@ router.post('/repo/connect', async (req, res) => {
       files,
     });
   } catch (e) {
-    session.addLog({ type: 'err', title: 'Error al clonar', detail: e.message });
-    res.status(500).json({ error: e.message });
+    // simple-git mete todo el output de git en e.message (incluyendo "Cloning into...").
+    // Extraemos solo la línea fatal: para mostrar un mensaje legible.
+    const raw = e.message || '';
+    const fatalLine = raw.split('\n').find(l => /fatal:|error:/i.test(l));
+    let friendly = fatalLine ? fatalLine.replace(/^.*?(fatal:|error:)/i, '$1').trim() : raw;
+
+    if (/Authentication failed/i.test(raw)) {
+      friendly = 'Autenticación fallida. Verifica que el GITHUB_TOKEN tenga acceso al repositorio.';
+    } else if (/not found/i.test(raw)) {
+      friendly = 'Repositorio no encontrado. Verifica la URL y que el token tenga acceso.';
+    } else if (/could not read Username/i.test(raw)) {
+      friendly = 'El repositorio es privado y no hay token configurado. Añade un GITHUB_TOKEN.';
+    }
+
+    session.addLog({ type: 'err', title: 'Error al clonar', detail: friendly });
+    res.status(500).json({ error: friendly });
   }
 });
 
