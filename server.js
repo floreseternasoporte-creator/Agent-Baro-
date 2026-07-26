@@ -21,7 +21,9 @@ const chatRoutes = require('./chatRoutes');
 const agentRoutes = require('./agentRoutes');
 const authRoutes = require('./authRoutes');
 
-const { checkHealth } = require('./ollamaClient');
+const openrouter = require('./openrouterClient');
+const ollama = require('./ollamaClient');
+const feedbackRoutes = require('./feedbackRoutes');
 
 const app = express();
 app.set('trust proxy', 1);   // Requerido para express-rate-limit detrás de Railway proxy
@@ -54,16 +56,20 @@ app.use('/api', authRoutes);
 app.use('/api', repoRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', agentRoutes);
+app.use('/api', feedbackRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'devagent', time: new Date().toISOString() });
 });
 
 app.get('/api/config', async (_req, res) => {
-  const ollama = await checkHealth();
+  const ai = process.env.OPENROUTER_API_KEY
+    ? await openrouter.checkHealth()
+    : await ollama.checkHealth();
   res.json({
-    ollamaReady: ollama.ready,
-    ollamaModel: ollama.model,
+    ollamaReady: ai.ready,
+    ollamaModel: ai.model,
+    aiProvider: process.env.OPENROUTER_API_KEY ? 'OpenRouter' : 'Ollama local',
     githubPreconfigured: !!process.env.GITHUB_TOKEN,
     githubOAuthEnabled: !!process.env.GITHUB_CLIENT_ID,
   });

@@ -33,7 +33,7 @@ const ALLOWED_BINARIES = {
   git: ['status', 'log', 'diff', 'branch', 'show'],
 };
 
-const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 200_000;
 
 /**
@@ -105,6 +105,28 @@ function isAllowed(binary, args) {
   return allowedSubcommands.includes(args[0]);
 }
 
+function isSafeWorkspaceArgument(value) {
+  return typeof value === 'string'
+    && !path.isAbsolute(value)
+    && !value.split(/[\\/]+/).includes('..')
+    && !/[;&|<>$`()]/.test(value);
+}
+
+function validateExecution(binary, args) {
+  if (!isAllowed(binary, args)) return `Comando no permitido: "${binary} ${args.join(' ')}". Solo se permiten binarios en la lista blanca del agente.`;
+  // Python puede ejecutar scripts del workspace y módulos de test, pero no
+  // código inline arbitrario ni rutas fuera del clon.
+  if (binary === 'python' || binary === 'python3') {
+    if (args[0] === '-c' || args[0] === '-') return 'Python inline no permitido; usa un archivo del workspace o "python -m pytest".';
+    const script = args[0] === '-m' ? null : args.find((arg) => /\.(py|pyw)$/i.test(arg));
+    if (script && !isSafeWorkspaceArgument(script)) return 'La ruta del script Python no es segura.';
+  }
+  if (binary === 'pytest' && args.some((arg) => path.isAbsolute(arg) || arg.split(/[\\/]+/).includes('..'))) {
+    return 'pytest no puede apuntar fuera del workspace.';
+  }
+  return null;
+}
+
 /**
  * Corre un comando real dentro de `cwd`.
  * @param {string} binary  ej. "npm"
@@ -114,13 +136,14 @@ function isAllowed(binary, args) {
  */
 function runCommand(binary, args, cwd, timeoutMs = DEFAULT_TIMEOUT_MS) {
   return new Promise((resolve) => {
-    if (!isAllowed(binary, args)) {
+    const validationError = validateExecution(binary, args);
+    if (validationError) {
       resolve({
         ok: false,
         code: null,
         stdout: '',
         stderr: '',
-        error: `Comando no permitido: "${binary} ${args.join(' ')}". Solo se permiten binarios en la lista blanca del agente.`,
+        error: validationError,
       });
       return;
     }
@@ -170,6 +193,7 @@ module.exports = {
   parseCommandLine,
   extractAutomaticCommands,
   isAllowed,
+  validateExecution,
   ALLOWED_BINARIES,
   TASK_PRESETS,
   DEFAULT_TIMEOUT_MS,

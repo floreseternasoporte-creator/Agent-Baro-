@@ -1,6 +1,6 @@
 # DevAgent
 
-Agente de codigo con capacidades reales: clona repos de verdad, lee y escribe archivos reales, ejecuta comandos reales (`npm`, `pytest`, etc.) y hace commit + push real a GitHub — todo desde una interfaz movil.
+Agente de codigo con capacidades reales: clona repos de verdad, lee y escribe archivos reales, ejecuta comandos reales (`npm`, `python`, `pytest`, etc.), verifica los cambios automáticamente y hace commit + push real a GitHub — todo desde una interfaz movil.
 
 ## Arquitectura
 
@@ -13,8 +13,8 @@ style.css           → Frontend: estilos
 
 server.js           → Backend: entry point, sirve el frontend + monta la API (esto arranca "npm start")
 sessionStore.js      → Backend: sesiones/workspaces en memoria + disco
-gitAgent.js          → Backend: clonado, lectura/escritura, aplicacion de diffs, commit+push
-commandRunner.js     → Backend: ejecucion de comandos reales con lista blanca de seguridad
+gitAgent.js          → Backend: clonado, lectura/escritura, aplicacion segura de diffs, commit+push
+commandRunner.js     → Backend: ejecucion automatica de comandos reales con lista blanca de seguridad
 groqClient.js        → Backend: cliente de Groq (streaming SSE) con el prompt del agente
 repoRoutes.js        → Backend: conectar repo, listar/leer archivos
 chatRoutes.js        → Backend: chat con streaming, enriquecido con archivos reales
@@ -24,6 +24,8 @@ workspaces/          → Clones reales de repos (uno por sesion, no se versiona 
 ```
 
 El servidor filtra explicitamente que solo `index.html`, `script.js`, `style.css` y assets de imagen/fuente se sirvan como archivos publicos — el resto de los `.js` (el codigo del backend) nunca se expone via GET aunque vivan en la misma carpeta.
+
+Al conectar un repositorio, el agente crea un perfil estructural leyendo manifiestos, documentación, puntos de entrada y archivos de pruebas. Los diffs seguros se aplican y se verifican automáticamente dentro del workspace; el push a GitHub sigue siendo una acción explícita del usuario.
 
 El frontend nunca habla directo con Groq o GitHub — todo pasa por `/api/*`, que es quien realmente clona, lee, escribe y ejecuta contra un contenedor Linux real (el mismo principio que usan Codex, Claude Code o Copilot Agent, a menor escala).
 
@@ -36,6 +38,8 @@ npm start
 ```
 
 Abre `http://localhost:3000`.
+
+El agente puede ejecutar proyectos JavaScript y Python. En Replit se incluye Python 3.11 para permitir `python`, `python3`, `pytest` y validaciones como `python -m compileall`. Los comandos siguen ejecutándose sin `shell: true`, dentro del workspace aislado y con límites de tiempo y salida.
 
 ## Desplegar en Railway
 

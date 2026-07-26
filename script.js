@@ -19,7 +19,8 @@ const S = {
   totalTokens: 0,
   maxTokens: 131072,
   sessionId: null,       // id de la sesion/workspace real en el servidor
-  serverConfig: null,    // { ollamaReady, ollamaModel, githubPreconfigured }
+  serverConfig: null,    // { ollamaReady, ollamaModel, aiProvider, githubPreconfigured }
+  lastAutoAppliedPaths: [],
   MODELS: [
     'llama-3.3-70b-versatile',
     'deepseek-r1-distill-llama-70b',
@@ -231,15 +232,82 @@ function saveSettings() {
   showScreen('chat');
 }
 
+function openFeedbackModal() {
+  const modal = document.getElementById('feedback-modal');
+  if (!modal) return;
+  document.getElementById('feedback-title').value = '';
+  document.getElementById('feedback-description').value = '';
+  document.getElementById('feedback-steps').value = '';
+  document.getElementById('feedback-severity').value = 'medium';
+  document.getElementById('feedback-result').style.display = 'none';
+  document.getElementById('feedback-submit').disabled = false;
+  document.getElementById('feedback-submit').textContent = 'Enviar reporte';
+  modal.classList.add('open');
+}
+
+function closeFeedbackModal() {
+  document.getElementById('feedback-modal')?.classList.remove('open');
+}
+
+async function submitFeedback() {
+  const title = document.getElementById('feedback-title')?.value.trim();
+  const description = document.getElementById('feedback-description')?.value.trim();
+  const steps = document.getElementById('feedback-steps')?.value.trim();
+  const severity = document.getElementById('feedback-severity')?.value || 'medium';
+  const result = document.getElementById('feedback-result');
+  const button = document.getElementById('feedback-submit');
+
+  if (!title || !description) {
+    result.textContent = 'Completa el título y la descripción del problema.';
+    result.className = 'feedback-result error';
+    result.style.display = '';
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = 'Enviando...';
+  try {
+    const response = await fetch(`${API}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        description,
+        steps,
+        severity,
+        sessionId: S.sessionId,
+        page: S.currentScreen,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Error ${response.status}`);
+    result.textContent = `Reporte enviado. ID: ${data.id}`;
+    result.className = 'feedback-result success';
+    result.style.display = '';
+    button.textContent = 'Enviado';
+    setTimeout(closeFeedbackModal, 1600);
+  } catch (error) {
+    result.textContent = error.message;
+    result.className = 'feedback-result error';
+    result.style.display = '';
+    button.disabled = false;
+    button.textContent = 'Reintentar';
+  }
+}
+
 function updateStatusBadges() {
   const el = (id) => document.getElementById(id);
   const ollamaOk = !!S.serverConfig?.ollamaReady;
 
   el('ollama-ok-badge') && (el('ollama-ok-badge').style.display = ollamaOk ? '' : 'none');
   el('ollama-warn-badge') && (el('ollama-warn-badge').style.display = ollamaOk ? 'none' : '');
+  const provider = S.serverConfig?.aiProvider || 'IA configurada';
+  const model = S.serverConfig?.ollamaModel || 'modelo disponible';
   el('ollama-settings-sub') && (el('ollama-settings-sub').textContent = ollamaOk
-    ? `Modelo local activo — ${S.serverConfig?.ollamaModel || 'qwen2.5-coder:1.5b'}`
-    : 'Iniciando modelo local...');
+    ? `${provider} activo — ${model}`
+    : `${provider} no disponible todavía`);
+  el('ai-model-label') && (el('ai-model-label').textContent = model);
+  el('ai-model-sub') && (el('ai-model-sub').textContent = `${provider} · ejecución autónoma con verificación`);
 
   const ghOk = !!S.repoData;
   el('gh-settings-badge') && (el('gh-settings-badge').style.display = ghOk ? 'none' : '');
@@ -1097,6 +1165,7 @@ async function callAI(msg, onStream) {
     message: msg,
     planMode: S.planModeEnabled,
     fileLimit: S.fileLimit,
+    autoApply: true,
   });
 
   let resp = await fetch(`${API}/chat`, {
@@ -1160,6 +1229,11 @@ async function callAI(msg, onStream) {
         throw new Error(payload.error);
       } else if (eventName === 'done') {
         finalText = payload.text ?? finalText;
+        S.lastAutoAppliedPaths = Array.isArray(payload.autoAppliedPaths) ? payload.autoAppliedPaths : [];
+        for (const path of S.lastAutoAppliedPaths) {
+          if (!S.pendingEdits.some((edit) => edit.path === path)) S.pendingEdits.push({ path });
+        }
+        updateTasksBadge();
       }
     }
   }
@@ -1182,7 +1256,12 @@ function detectEditsAndShowPushBanner(text) {
   const matches = text.match(/--- a\/(.+)/g) || [];
   if (!matches.length) return;
   const files = [...new Set(matches.map((m) => m.replace('--- a/', '').trim()))];
-  showToast(`${files.length} cambio(s) propuesto(s) — toca "Aplicar" en el diff para escribirlos de verdad`);
+  if (S.lastAutoAppliedPaths.length) {
+    showToast(`${S.lastAutoAppliedPaths.length} cambio(s) aplicado(s) automáticamente`);
+    showPushBanner(S.lastAutoAppliedPaths);
+  } else {
+    showToast(`${files.length} cambio(s) generado(s); revisa el mensaje del agente`);
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -1190,8 +1269,8 @@ function detectEditsAndShowPushBanner(text) {
 // ═══════════════════════════════════════════
 function autoAnalyze() {
   if (!S.repoData) return;
-  const msg = `✓ **${S.repoData.full_name}** conectado — **${S.files.length} archivos** en la rama **${S.branch}**\n\nPuedo analizar el repositorio, detectar bugs, hacer auditorias de seguridad, optimizar rendimiento o generar tests. ¿Por donde empezamos?`;
-  addMsg('ai', msg);
+  const msg = `He conectado **${S.repoData.full_name}** en la rama **${S.branch}**. Empieza ahora una revisión autónoma del proyecto: inspecciona su estructura y manifiestos, identifica el stack, ejecuta las comprobaciones y tests seguros disponibles, corrige los bugs importantes que puedas confirmar, aplica los cambios, vuelve a verificar y termina con un resumen de lo que hiciste y lo que necesita atención. No me pidas confirmación para leer, editar o ejecutar validaciones; solo deja el push manual como acción explícita.`;
+  doQuick(msg);
 }
 
 // ═══════════════════════════════════════════
@@ -1541,6 +1620,9 @@ document.getElementById('modal')?.addEventListener('click', e => {
 });
 document.getElementById('push-modal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('push-modal')) closePushModal();
+});
+document.getElementById('feedback-modal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('feedback-modal')) closeFeedbackModal();
 });
 
 document.getElementById('inp').addEventListener('input', function() {

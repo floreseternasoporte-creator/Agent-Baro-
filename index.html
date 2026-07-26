@@ -178,7 +178,7 @@
             </div>
             <div class="settings-row-content">
               <div class="settings-row-label">IA local</div>
-              <div class="settings-row-sub" id="ollama-settings-sub">Iniciando modelo local...</div>
+              <div class="settings-row-sub" id="ollama-settings-sub">Comprobando proveedor de IA...</div>
             </div>
             <div class="settings-row-right">
               <span class="badge-warn" id="ollama-warn-badge" style="display:none">Iniciando</span>
@@ -196,8 +196,8 @@
               <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" style="color:var(--green)"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-5h2v2h-2zm0-8h2v6h-2z"/></svg>
             </div>
             <div class="settings-row-content">
-              <div class="settings-row-label">qwen2.5-coder:1.5b</div>
-              <div class="settings-row-sub">Modelo local · sin créditos · sin APIs externas</div>
+              <div class="settings-row-label" id="ai-model-label">Modelo de IA</div>
+              <div class="settings-row-sub" id="ai-model-sub">Comprobando proveedor y modelo...</div>
             </div>
             <span class="badge-ok">Local</span>
           </div>
@@ -217,10 +217,28 @@
           <div class="settings-row">
             <div class="settings-row-content">
               <div class="settings-row-label">Plan antes de ejecutar</div>
-              <div class="settings-row-sub">Muestra un plan y espera confirmacion</div>
+              <div class="settings-row-sub">Solo planifica sin editar cuando lo actives</div>
             </div>
             <div class="toggle" id="planmode-toggle" onclick="toggleSetting('planmode')"></div>
           </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Ayuda</div>
+        <div class="settings-group">
+          <button class="settings-row settings-button-row" onclick="openFeedbackModal()">
+            <div class="settings-row-icon report-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 4h16v13H7l-3 3V4z"/><path d="M8 9h8M8 13h5"/>
+              </svg>
+            </div>
+            <div class="settings-row-content">
+              <div class="settings-row-label">Reportar un problema</div>
+              <div class="settings-row-sub">Envía un bug con pasos y detalles</div>
+            </div>
+            <svg class="settings-row-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+          </button>
         </div>
       </div>
 
@@ -270,6 +288,48 @@
     <div class="mfoot">
       <button class="btn btn-g" id="modal-back" onclick="modalBack()" style="display:none;flex:0.4">Atras</button>
       <button class="btn btn-p" id="modal-next" onclick="modalNext()">Continuar</button>
+    </div>
+  </div>
+</div>
+
+<!-- BUG REPORT MODAL -->
+<div class="mo" id="feedback-modal">
+  <div class="mbox">
+    <div class="m-handle"></div>
+    <div class="mhead">
+      <span class="mtitle">Reportar un problema</span>
+      <button class="mx" onclick="closeFeedbackModal()" aria-label="Cerrar reporte">
+        <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 01-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+      </button>
+    </div>
+    <div class="mbdy">
+      <p class="feedback-intro">Cuéntanos qué pasó. El reporte se guarda con el contexto de esta sesión para poder investigarlo.</p>
+      <div class="fg">
+        <label class="fl" for="feedback-title">Título del problema</label>
+        <input class="fi" id="feedback-title" maxlength="160" placeholder="Ej: El agente no ejecutó los tests">
+      </div>
+      <div class="fg">
+        <label class="fl" for="feedback-severity">Importancia</label>
+        <select class="fi" id="feedback-severity">
+          <option value="low">Baja</option>
+          <option value="medium" selected>Media</option>
+          <option value="high">Alta</option>
+          <option value="blocking">Bloquea el uso</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label class="fl" for="feedback-description">Qué ocurrió</label>
+        <textarea class="fi" id="feedback-description" rows="4" maxlength="8000" placeholder="Describe el comportamiento observado..."></textarea>
+      </div>
+      <div class="fg">
+        <label class="fl" for="feedback-steps">Pasos para reproducir <span class="optional-label">opcional</span></label>
+        <textarea class="fi" id="feedback-steps" rows="3" maxlength="4000" placeholder="1. Abre...&#10;2. Pulsa...&#10;3. Observa..."></textarea>
+      </div>
+      <div id="feedback-result" class="feedback-result" style="display:none"></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-g" onclick="closeFeedbackModal()">Cancelar</button>
+      <button class="btn btn-p" id="feedback-submit" onclick="submitFeedback()">Enviar reporte</button>
     </div>
   </div>
 </div>
@@ -363,15 +423,15 @@
       <button class="auth-tab active" id="auth-tab-login" onclick="switchAuthMode('login')">Iniciar sesión</button>
       <button class="auth-tab" id="auth-tab-register" onclick="switchAuthMode('register')">Registrarse</button>
     </div>
-    <div class="auth-form">
+    <form class="auth-form" onsubmit="event.preventDefault();submitAuth()">
       <div id="auth-name-wrap" style="display:none">
         <input class="fi" type="text" id="auth-name" placeholder="Tu nombre" autocomplete="name">
       </div>
       <input class="fi" type="email" id="auth-email" placeholder="Email" autocomplete="email">
       <input class="fi" type="password" id="auth-password" placeholder="Contraseña (mín. 6 caracteres)" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitAuth()">
       <div id="auth-error" class="auth-error" style="display:none"></div>
-      <button class="btn btn-p auth-submit" id="auth-submit-btn" onclick="submitAuth()">Entrar</button>
-    </div>
+      <button class="btn btn-p auth-submit" id="auth-submit-btn" type="submit">Entrar</button>
+    </form>
   </div>
 </div>
 

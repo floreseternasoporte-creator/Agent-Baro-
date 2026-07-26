@@ -10,13 +10,18 @@
 const express = require('express');
 const { getSession } = require('./sessionStore');
 const git = require('./gitAgent');
-const { buildSystemPrompt, streamChat } = require('./openrouterClient');
+const openrouter = require('./openrouterClient');
+const ollama = require('./ollamaClient');
 const { runCommand, extractAutomaticCommands } = require('./commandRunner');
 
 const router = express.Router();
-const MAX_AUTOMATIC_ROUNDS = 3;
+const MAX_AUTOMATIC_ROUNDS = 4;
 const MAX_COMMANDS_PER_ROUND = 5;
 const MAX_COMMAND_CONTEXT_BYTES = 30_000;
+
+// OpenRouter se usa cuando existe una clave configurada. En entornos sin
+// clave, el agente intenta usar Ollama local en vez de fallar silenciosamente.
+const aiClient = process.env.OPENROUTER_API_KEY ? openrouter : ollama;
 
 function truncateCommandOutput(value) {
   const text = String(value || '');
@@ -99,8 +104,58 @@ function findRelevantFiles(files, msg, limit) {
     .slice(0, limit);
 }
 
+function projectProfile(files) {
+  const lower = files.map((file) => file.toLowerCase());
+  const languages = [
+    ['JavaScript/Node.js', ['.js', '.cjs', '.mjs', 'package.json']],
+    ['TypeScript', ['.ts', '.tsx', 'tsconfig.json']],
+    ['Python', ['.py', 'requirements.txt', 'pyproject.toml', 'setup.py']],
+    ['Go', ['.go', 'go.mod']],
+    ['Rust', ['.rs', 'cargo.toml']],
+    ['Java/Kotlin', ['.java', '.kt', 'pom.xml', 'build.gradle']],
+  ];
+  const detected = languages
+    .filter(([, markers]) => markers.some((marker) => lower.some((file) => file.endsWith(marker) || file.includes(marker))))
+    .map(([name]) => name);
+  const tests = files.filter((file) => /(^|\/)(__tests__|tests?|spec)(\/|\.|$)/i.test(file)).slice(0, 20);
+  const entrypoints = files.filter((file) => /(^|\/)(index|main|app|server)\.(js|ts|jsx|tsx|py|go|rs)$/i.test(file)).slice(0, 20);
+  return [
+    `Lenguajes detectados: ${detected.length ? detected.join(', ') : 'no determinado'}`,
+    `Archivos de pruebas detectados: ${tests.length ? tests.join(', ') : 'ninguno evidente'}`,
+    `Puntos de entrada probables: ${entrypoints.length ? entrypoints.join(', ') : 'ninguno evidente'}`,
+    `Estructura (primeros ${Math.min(files.length, 160)} archivos):`,
+    files.slice(0, 160).join('\n'),
+  ].join('\n');
+}
+
+async function readProjectProfile(dir, files) {
+  const candidates = files.filter((file) => /(^|\/)(readme(?:\.[^/]+)?|package\.json|pyproject\.toml|requirements(?:[-._].*)?\.txt|setup\.py|go\.mod|cargo\.toml|dockerfile|compose\.ya?ml|\.env\.example)$/i.test(file)).slice(0, 8);
+  const sections = [];
+  for (const file of candidates) {
+    try {
+      const content = await git.readFile(dir, file);
+      sections.push(`--- ${file}\n${content.split('\n').slice(0, 260).join('\n')}`);
+    } catch {
+      // Un archivo puede desaparecer mientras el repositorio cambia; el mapa
+      // estructural sigue siendo útil aunque falte un manifiesto.
+    }
+  }
+  return sections.join('\n\n');
+}
+
+function summarizeDiffResults(results) {
+  return results.map((result) => {
+    const state = result.applied
+      ? `aplicado automáticamente (${result.bytes} bytes)`
+      : result.alreadyApplied
+      ? 'ya estaba aplicado'
+      : `no aplicado: ${result.reason}`;
+    return `- ${result.path || '(sin archivo)'}: ${state}`;
+  }).join('\n');
+}
+
 router.post('/chat', async (req, res) => {
-  const { sessionId, message, model, planMode, fileLimit } = req.body || {};
+  const { sessionId, message, model, planMode, fileLimit, autoApply = true } = req.body || {};
   const session = getSession(sessionId);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada. Recarga la app.' });
 
@@ -123,6 +178,9 @@ router.post('/chat', async (req, res) => {
     if (session.repoFullName) {
       const allFiles = await git.listFiles(session.dir);
       fileCount = allFiles.length;
+      const profile = projectProfile(allFiles);
+      const manifestContext = await readProjectProfile(session.dir, allFiles);
+      send('log', { type: 'info', title: 'Perfil del proyecto listo', detail: `${fileCount} archivos · ${manifestContext ? 'manifiestos leídos' : 'sin manifiestos principales'}` });
 
       // 1. Resolver @menciones explicitas (maxima prioridad)
       const mentions = extractMentions(message);
@@ -170,7 +228,7 @@ router.post('/chat', async (req, res) => {
           }
         }
         if (ctx) {
-           enrichedMessage = `${message}\n\n## Archivos del repositorio (contenido real leido de disco)\n${ctx}\n\n## Instruccion critica\nUsa el codigo de arriba. Este contenido es la version mas reciente leida directamente del disco y tiene prioridad sobre cualquier archivo, diff o suposicion de mensajes anteriores. Genera diffs unified-format exactos y quirurgicos solo contra esta version. Estos diffs se APLICARAN de verdad sobre los archivos reales.`;
+           enrichedMessage = `${message}\n\n## Perfil estructural del repositorio\n${profile}\n\n## Manifiestos y documentación principal (contenido real)\n${manifestContext || '(no se encontraron manifiestos principales)'}\n\n## Archivos del repositorio (contenido real leido de disco)\n${ctx}\n\n## Instruccion critica\nUsa el codigo de arriba. Este contenido es la version mas reciente leida directamente del disco y tiene prioridad sobre cualquier archivo, diff o suposicion de mensajes anteriores. Genera diffs unified-format exactos y quirurgicos solo contra esta version. Los cambios seguros se aplican y se verifican automáticamente; no le pidas al usuario que copie, aplique o ejecute nada.`;
         }
       } else {
         send('log', { type: 'info', title: 'Contexto general del repo', detail: `${allFiles.length} archivos` });
@@ -178,7 +236,7 @@ router.post('/chat', async (req, res) => {
       }
     }
 
-    const systemPrompt = buildSystemPrompt({
+    const systemPrompt = aiClient.buildSystemPrompt({
       repo: session.repoFullName,
       branch: session.branch,
       fileCount,
@@ -195,7 +253,7 @@ router.post('/chat', async (req, res) => {
 
     send('log', { type: 'run', title: 'Generando respuesta...', detail: 'modelo local' });
 
-    let result = await streamChat({
+    let result = await aiClient.streamChat({
       model,   // ignorado si no coincide — ollamaClient usa DEFAULT_MODEL
       messages,
       signal: abortController.signal,
@@ -209,6 +267,8 @@ router.post('/chat', async (req, res) => {
     const seenCommands = new Set();
     let visibleResult = result;
 
+    const seenDiffs = new Set();
+    let autoAppliedPaths = [];
     for (let round = 0; round < MAX_AUTOMATIC_ROUNDS; round += 1) {
       const requested = extractAutomaticCommands(result);
       const commands = requested
@@ -220,9 +280,29 @@ router.post('/chat', async (req, res) => {
         })
         .slice(0, MAX_COMMANDS_PER_ROUND);
 
-      if (!commands.length) break;
-
       const commandResults = [];
+      const diffResults = [];
+      if (autoApply && session.repoFullName) {
+        const diffBlocks = git.extractDiffBlocks(result);
+        for (const diffBlock of diffBlocks) {
+          const diffKey = diffBlock.trim();
+          if (!diffKey || seenDiffs.has(diffKey)) continue;
+          seenDiffs.add(diffKey);
+          const results = await git.applyUnifiedDiff(session.dir, diffBlock);
+          diffResults.push(...results);
+          for (const applied of results) {
+            const event = applied.applied
+              ? { type: 'ok', title: `Cambio aplicado automáticamente: ${applied.path}`, detail: `${applied.bytes} bytes escritos y listos para verificar` }
+              : { type: applied.alreadyApplied ? 'info' : 'err', title: applied.alreadyApplied ? `Cambio ya aplicado: ${applied.path}` : `Cambio no aplicado: ${applied.path || 'diff'}`, detail: applied.reason };
+            send('log', event);
+            session.addLog(event);
+            if (applied.applied && applied.path && !autoAppliedPaths.includes(applied.path)) autoAppliedPaths.push(applied.path);
+          }
+        }
+      }
+
+      if (!commands.length && !diffResults.length) break;
+
       for (const command of commands) {
         const title = `Ejecutando automáticamente: ${command.display}`;
         send('log', { type: 'run', title });
@@ -245,15 +325,15 @@ router.post('/chat', async (req, res) => {
       conversation.push({
         role: 'user',
         content: [
-          '## Resultados de comandos ejecutados automáticamente',
-          commandResults.join('\n\n'),
+          commandResults.length ? `## Resultados de comandos ejecutados automáticamente\n${commandResults.join('\n\n')}` : '',
+          diffResults.length ? `## Cambios procesados automáticamente\n${summarizeDiffResults(diffResults)}` : '',
           '',
-          'Continúa trabajando con estos resultados. No le pidas al usuario que copie o ejecute nada: el sistema ya ejecutó el comando. Si necesitas otro comando, escribe una sola línea con el formato exacto `Ejecuta: comando`; si ya tienes suficiente información, responde con el análisis o el diff.',
+          'Continúa trabajando con estos resultados. No le pidas al usuario que copie, aplique o ejecute nada: el sistema ya realizó la acción. Verifica los cambios con pruebas o comprobaciones apropiadas. Si algo falla, corrígelo con otro diff exacto y vuelve a verificar. Si ya está todo correcto, responde con un resumen claro.',
         ].join('\n'),
       });
 
       const previous = visibleResult;
-      result = await streamChat({
+      result = await aiClient.streamChat({
         model,
         messages: conversation,
         signal: abortController.signal,
@@ -270,7 +350,7 @@ router.post('/chat', async (req, res) => {
 
     const diffBlocks = git.extractDiffBlocks(result);
     send('log', { type: 'ok', title: 'Completado', detail: diffBlocks.length ? `${diffBlocks.length} diff(s) propuesto(s)` : undefined });
-    send('done', { text: result, diffCount: diffBlocks.length });
+    send('done', { text: result, diffCount: diffBlocks.length, autoAppliedPaths });
     res.end();
   } catch (e) {
     if (e.name === 'AbortError') {
