@@ -1,1 +1,2 @@
 - [Aplicación segura de diffs](diff-application.md) — Los diffs de IA deben validarse contra el archivo actual y nunca sobrescribir si el contexto cambió.
+- [Comandos automáticos del agente](automatic-commands.md) — Las líneas Ejecuta deben correr en el workspace seguro y regresar su resultado a la IA sin intervención.

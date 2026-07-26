@@ -36,6 +36,67 @@ const ALLOWED_BINARIES = {
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_BYTES = 200_000;
 
+/**
+ * Convierte una línea "Ejecuta: ..." en argv sin usar un shell.
+ * Admite comillas simples/dobles y escapes básicos, pero rechaza
+ * metacaracteres que podrían convertir la línea en una cadena shell.
+ */
+function parseCommandLine(line) {
+  const input = String(line || '').trim().replace(/^`|`$/g, '').trim();
+  if (!input || /[;&|<>$()]/.test(input)) return null;
+
+  const args = [];
+  let current = '';
+  let quote = null;
+  let escaped = false;
+
+  for (const char of input) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+    } else if (char === '\\' && quote !== "'") {
+      escaped = true;
+    } else if (quote) {
+      if (char === quote) quote = null;
+      else current += char;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (/\s/.test(char)) {
+      if (current) {
+        args.push(current);
+        current = '';
+      }
+    } else {
+      current += char;
+    }
+  }
+
+  if (escaped || quote) return null;
+  if (current) args.push(current);
+  if (!args.length) return null;
+  return { binary: args[0], args: args.slice(1), display: args.join(' ') };
+}
+
+/**
+ * Extrae únicamente instrucciones en su propia línea. Así una explicación
+ * normal de la IA no dispara comandos por accidente.
+ */
+function extractAutomaticCommands(text) {
+  const commands = [];
+  const seen = new Set();
+  for (const rawLine of String(text || '').split(/\r?\n/)) {
+    const match = rawLine.match(/^\s*(?:[-*]\s*)?Ejecuta:\s*(.*?)\s*$/i);
+    if (!match) continue;
+    const command = parseCommandLine(match[1]);
+    if (!command) continue;
+    const key = `${command.binary}\u0000${command.args.join('\u0000')}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    commands.push(command);
+  }
+  return commands;
+}
+
 function isAllowed(binary, args) {
   if (!Object.prototype.hasOwnProperty.call(ALLOWED_BINARIES, binary)) return false;
   const allowedSubcommands = ALLOWED_BINARIES[binary];
@@ -106,6 +167,8 @@ const TASK_PRESETS = {
 
 module.exports = {
   runCommand,
+  parseCommandLine,
+  extractAutomaticCommands,
   isAllowed,
   ALLOWED_BINARIES,
   TASK_PRESETS,

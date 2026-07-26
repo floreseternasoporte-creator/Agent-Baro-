@@ -11,8 +11,31 @@ const express = require('express');
 const { getSession } = require('./sessionStore');
 const git = require('./gitAgent');
 const { buildSystemPrompt, streamChat } = require('./openrouterClient');
+const { runCommand, extractAutomaticCommands } = require('./commandRunner');
 
 const router = express.Router();
+const MAX_AUTOMATIC_ROUNDS = 3;
+const MAX_COMMANDS_PER_ROUND = 5;
+const MAX_COMMAND_CONTEXT_BYTES = 30_000;
+
+function truncateCommandOutput(value) {
+  const text = String(value || '');
+  if (text.length <= MAX_COMMAND_CONTEXT_BYTES) return text;
+  return `${text.slice(0, MAX_COMMAND_CONTEXT_BYTES)}\n...[salida recortada]`;
+}
+
+function commandResultForModel(command, result) {
+  const stdout = truncateCommandOutput(result.stdout);
+  const stderr = truncateCommandOutput(result.stderr);
+  const sections = [
+    `### ${command.display}`,
+    `Estado: ${result.ok ? 'completado' : 'falló'} (código ${result.code ?? 'desconocido'})`,
+  ];
+  if (stdout) sections.push(`stdout:\n\`\`\`\n${stdout}\n\`\`\``);
+  if (stderr) sections.push(`stderr:\n\`\`\`\n${stderr}\n\`\`\``);
+  if (result.error && !stderr.includes(result.error)) sections.push(`error: ${result.error}`);
+  return sections.join('\n');
+}
 
 // Extrae @menciones explicitas del mensaje (ej: @server.js, @src/app.ts)
 function extractMentions(message) {
@@ -172,12 +195,74 @@ router.post('/chat', async (req, res) => {
 
     send('log', { type: 'run', title: 'Generando respuesta...', detail: 'modelo local' });
 
-    const result = await streamChat({
+    let result = await streamChat({
       model,   // ignorado si no coincide — ollamaClient usa DEFAULT_MODEL
       messages,
       signal: abortController.signal,
       onDelta: (_delta, fullText) => send('delta', { text: fullText }),
     });
+
+    // La IA puede pedir comandos de inspección o validación en una línea
+    // "Ejecuta: ...". Los ejecutamos aquí, en el workspace de la sesión, y
+    // devolvemos el resultado a la IA para que continúe sin intervención.
+    const conversation = [...messages];
+    const seenCommands = new Set();
+    let visibleResult = result;
+
+    for (let round = 0; round < MAX_AUTOMATIC_ROUNDS; round += 1) {
+      const requested = extractAutomaticCommands(result);
+      const commands = requested
+        .filter((command) => {
+          const key = `${command.binary}\u0000${command.args.join('\u0000')}`;
+          if (seenCommands.has(key)) return false;
+          seenCommands.add(key);
+          return true;
+        })
+        .slice(0, MAX_COMMANDS_PER_ROUND);
+
+      if (!commands.length) break;
+
+      const commandResults = [];
+      for (const command of commands) {
+        const title = `Ejecutando automáticamente: ${command.display}`;
+        send('log', { type: 'run', title });
+        session.addLog({ type: 'run', title });
+
+        const commandResult = await runCommand(command.binary, command.args, session.dir);
+        commandResults.push(commandResultForModel(command, commandResult));
+
+        const output = truncateCommandOutput(commandResult.stdout || commandResult.stderr || commandResult.error);
+        const logEntry = {
+          type: commandResult.ok ? 'ok' : 'err',
+          title: commandResult.ok ? `Completado: ${command.display}` : `Falló: ${command.display}`,
+          detail: output,
+        };
+        send('log', logEntry);
+        session.addLog(logEntry);
+      }
+
+      conversation.push({ role: 'assistant', content: result });
+      conversation.push({
+        role: 'user',
+        content: [
+          '## Resultados de comandos ejecutados automáticamente',
+          commandResults.join('\n\n'),
+          '',
+          'Continúa trabajando con estos resultados. No le pidas al usuario que copie o ejecute nada: el sistema ya ejecutó el comando. Si necesitas otro comando, escribe una sola línea con el formato exacto `Ejecuta: comando`; si ya tienes suficiente información, responde con el análisis o el diff.',
+        ].join('\n'),
+      });
+
+      const previous = visibleResult;
+      result = await streamChat({
+        model,
+        messages: conversation,
+        signal: abortController.signal,
+        onDelta: (_delta, fullText) => send('delta', { text: `${previous}\n\n${fullText}` }),
+      });
+      visibleResult = `${previous}\n\n${result}`;
+    }
+
+    if (visibleResult !== result) result = visibleResult;
 
     session.history = session.history || [];
     session.history.push({ role: 'user', content: message });

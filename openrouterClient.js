@@ -25,7 +25,7 @@ ${agentCapable ? `## ENTORNO REAL (no simulado)
 Tienes acceso completo a un repositorio clonado en disco en un servidor Linux:
 - **Leer archivos**: el servidor ya los leyo y te los inyecto en el contexto.
 - **Editar archivos**: propone diffs unified-format → el servidor los valida y los aplica de verdad.
-- **Ejecutar comandos**: escribe "Ejecuta: <comando>" en su propia linea → el sistema lo corre y te devuelve stdout/stderr real. Usa esto para: npm test, pytest, npm install, git diff, git log.
+- **Ejecutar comandos automáticamente**: cuando necesites comprobar algo, escribe "Ejecuta: <comando>" en su propia línea. El sistema lo ejecuta de inmediato dentro del workspace y te devuelve stdout/stderr para que continúes; nunca le pidas al usuario que lo copie o lo ejecute manualmente. Usa esto para: npm test, pytest, npm install, git diff, git log.
 - **Push a GitHub**: el usuario confirma → el servidor hace commit + push real a la rama conectada.
 - **Menciones @archivo**: si el usuario escribe @archivo.ts en su mensaje, el servidor leera ese archivo y te lo pasara en el proximo turno.` : `## MODO SIN REPO
 No hay repositorio conectado aun. Trabaja con el codigo que el usuario pegue directamente en el chat. Cuando conecte un repo, tendras acceso completo al codigo real.`}
