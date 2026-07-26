@@ -932,7 +932,13 @@ async function applyDiff(id, btn) {
     if (failed.length) {
       btn.innerHTML = xSvg() + ' No aplicado';
       btn.classList.add('reject');
-      showToast(failed[0].reason || 'El diff no coincide con el archivo actual');
+      const failure = failed[0];
+      if (failure.alreadyApplied) {
+        btn.innerHTML = checkSvg() + ' Ya aplicado';
+        btn.classList.remove('reject');
+        btn.classList.add('done');
+      }
+      showToast(failure.reason || 'El diff no coincide con el archivo actual');
     } else {
       btn.innerHTML = checkSvg() + ' Aplicado';
       btn.classList.add('done');

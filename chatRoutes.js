@@ -132,10 +132,13 @@ router.post('/chat', async (req, res) => {
           try {
             const content = await git.readFile(session.dir, r.path);
             const lines = content.split('\n');
-            // Archivos @mencionados: hasta 400 lineas. Heuristicos: hasta 200.
-            const cap = r.explicit ? 400 : 220;
+            // Un diff solo puede aplicarse si el modelo vio el texto real.
+            // Los archivos mencionados explícitamente se envían completos
+            // (hasta un límite amplio); truncarlos era la causa principal de
+            // diffs que no coincidían con el archivo en disco.
+            const cap = r.explicit ? 4000 : 220;
             const snippet = lines.length > cap
-              ? lines.slice(0, cap).join('\n') + `\n... [${lines.length - cap} lineas mas]`
+              ? lines.slice(0, cap).join('\n') + `\n... [archivo truncado: ${lines.length - cap} lineas mas; no generes diffs para las lineas no mostradas]`
               : content;
             ctx += `\n\n---\n### ${r.path}${r.explicit ? ' ← mencionado con @' : ''}\n\`\`\`\n${snippet}\n\`\`\``;
             send('log', { type: 'ok', title: `Leido: ${r.path}`, detail: `${lines.length} lineas` });
@@ -144,7 +147,7 @@ router.post('/chat', async (req, res) => {
           }
         }
         if (ctx) {
-          enrichedMessage = `${message}\n\n## Archivos del repositorio (contenido real leido de disco)\n${ctx}\n\n## Instruccion critica\nUsa el codigo de arriba. Genera diffs unified-format exactos y quirurgicos. Estos diffs se APLICARAN de verdad sobre los archivos reales.`;
+           enrichedMessage = `${message}\n\n## Archivos del repositorio (contenido real leido de disco)\n${ctx}\n\n## Instruccion critica\nUsa el codigo de arriba. Este contenido es la version mas reciente leida directamente del disco y tiene prioridad sobre cualquier archivo, diff o suposicion de mensajes anteriores. Genera diffs unified-format exactos y quirurgicos solo contra esta version. Estos diffs se APLICARAN de verdad sobre los archivos reales.`;
         }
       } else {
         send('log', { type: 'info', title: 'Contexto general del repo', detail: `${allFiles.length} archivos` });

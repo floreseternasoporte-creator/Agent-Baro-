@@ -1,0 +1,1 @@
+- [Aplicación segura de diffs](diff-application.md) — Los diffs de IA deben validarse contra el archivo actual y nunca sobrescribir si el contexto cambió.

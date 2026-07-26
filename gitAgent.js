@@ -12,7 +12,7 @@ const fs = require('fs/promises');
 const fss = require('fs');
 const path = require('path');
 const simpleGit = require('simple-git');
-const { applyPatch, parsePatch } = require('diff');
+const { applyPatch, parsePatch, reversePatch } = require('diff');
 
 const IGNORED_DIR_RE = /^(node_modules|\.git|dist|build|\.next|coverage|vendor|\.cache|\.parcel-cache|__pycache__|\.venv|venv)$/i;
 const IGNORED_EXT_RE = /\.(png|jpe?g|gif|svg|ico|woff2?|ttf|eot|mp4|mp3|pdf|zip|gz|lock|bin|exe|dll)$/i;
@@ -78,7 +78,9 @@ async function listFiles(dir) {
 
 function safeResolve(dir, relPath) {
   const resolved = path.resolve(dir, relPath);
-  if (!resolved.startsWith(path.resolve(dir))) {
+  const root = path.resolve(dir);
+  const relative = path.relative(root, resolved);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('Ruta fuera del workspace no permitida');
   }
   return resolved;
@@ -101,14 +103,94 @@ async function writeFile(dir, relPath, content) {
  * vacio: si el patch no calza contra el archivo actual, falla con
  * un motivo claro en vez de borrar el archivo.
  */
+function comparableLine(line) {
+  // Los modelos suelen cambiar espacios al final de una línea al copiar
+  // código. Eso no cambia el código y no debe invalidar un parche entero.
+  return String(line ?? '').replace(/[ \t]+$/, '');
+}
+
+function patchTargetPath(patch) {
+  const oldName = String(patch.oldFileName || '').trim();
+  const newName = String(patch.newFileName || '').trim();
+  // En un diff de borrado el nombre útil está en ---; en uno nuevo, en +++.
+  const selected = newName === '/dev/null' ? oldName : oldName === '/dev/null' ? newName : newName || oldName;
+  return selected.replace(/^[ab]\//, '').trim();
+}
+
+function hasDeletions(patch) {
+  return patch.hunks.some((hunk) => hunk.lines.some((line) => line[0] === '-'));
+}
+
+function applyPatchSafely(source, patch, retryPatch) {
+  // Primero exigimos una coincidencia exacta. La mayoría de los diffs pasan
+  // por aquí y conserva exactamente los finales de línea del archivo real.
+  const exact = applyPatch(source, patch);
+  if (exact !== false) return exact;
+
+  // Segundo intento: permitimos únicamente diferencias de espacios al final
+  // y hasta tres líneas de contexto desplazadas. Nunca permitimos que falte
+  // una línea que el diff pretende borrar; de lo contrario podríamos duplicar
+  // código silenciosamente.
+  if (!hasDeletions(patch)) return false;
+  let invalidDeletion = false;
+  const tolerant = applyPatch(source, retryPatch || patch, {
+    fuzzFactor: 3,
+    compareLine: (_lineNumber, line, operation, patchContent) => {
+      const same = comparableLine(line) === comparableLine(patchContent);
+      if (operation === '-' && !same) invalidDeletion = true;
+      return same;
+    },
+  });
+  return invalidDeletion || tolerant === false ? false : tolerant;
+}
+
+function reversePatchSafely(source, patch) {
+  const reversed = reversePatch(patch);
+  const exact = applyPatch(source, reversed);
+  if (exact !== false) return true;
+  if (!hasDeletions(reversed)) return false;
+
+  let invalidDeletion = false;
+  const tolerant = applyPatch(source, reversePatch(patch), {
+    fuzzFactor: 3,
+    compareLine: (_lineNumber, line, operation, patchContent) => {
+      const same = comparableLine(line) === comparableLine(patchContent);
+      if (operation === '-' && !same) invalidDeletion = true;
+      return same;
+    },
+  });
+  return !invalidDeletion && tolerant !== false;
+}
+
 async function applyUnifiedDiff(dir, diffText) {
-  const patches = parsePatch(diffText);
+  const normalizedDiff = String(diffText || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .trim();
+  let patches;
+  try {
+    patches = parsePatch(normalizedDiff);
+  } catch (error) {
+    return [{
+      path: null,
+      applied: false,
+      reason: `El bloque no contiene un diff unified válido: ${error.message}`,
+    }];
+  }
+  patches = patches.filter((patch) => patch.oldFileName || patch.newFileName);
   const results = [];
 
-  for (const patch of patches) {
-    const targetPath = (patch.newFileName || patch.oldFileName || '')
-      .replace(/^[ab]\//, '')
-      .trim();
+  if (!patches.length) {
+    return [{
+      path: null,
+      applied: false,
+      reason: 'El bloque no contiene un diff unified válido. Usa las líneas ---/+++/@@ y no incluyas texto fuera del bloque.',
+    }];
+  }
+
+  for (let patchIndex = 0; patchIndex < patches.length; patchIndex += 1) {
+    const patch = patches[patchIndex];
+    const targetPath = patchTargetPath(patch);
     if (!targetPath) {
       results.push({ path: null, applied: false, reason: 'No se pudo determinar el archivo del diff' });
       continue;
@@ -119,18 +201,30 @@ async function applyUnifiedDiff(dir, diffText) {
     let isNewFile = false;
     try {
       original = await fs.readFile(abs, 'utf8');
-    } catch {
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
       isNewFile = true; // el diff puede estar creando un archivo nuevo
     }
 
-    const patched = applyPatch(original, patch);
+    // applyPatch mutates hunk offsets while searching, so every retry gets a
+    // fresh parsed patch rather than reusing a partially applied object.
+    const exactPatch = parsePatch(normalizedDiff)[patchIndex];
+    const retryPatch = parsePatch(normalizedDiff)[patchIndex];
+    const patched = applyPatchSafely(original, exactPatch, retryPatch);
     if (patched === false) {
+      let alreadyApplied = false;
+      try {
+        alreadyApplied = reversePatchSafely(original, parsePatch(normalizedDiff)[patchIndex]);
+      } catch {}
       results.push({
         path: targetPath,
         applied: false,
-        reason: isNewFile
+        alreadyApplied,
+        reason: alreadyApplied
+          ? 'Este cambio ya parece estar aplicado en el archivo actual'
+          : isNewFile
           ? 'El diff no coincide y el archivo no existe todavia'
-          : 'El diff no coincide con el contenido actual del archivo (puede haber cambiado desde que la IA lo leyo)',
+          : 'El diff no coincide con el contenido actual. Regenera el diff mencionando el archivo para que la IA lea su versión más reciente.',
       });
       continue;
     }
