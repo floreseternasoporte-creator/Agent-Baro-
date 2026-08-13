@@ -1,0 +1,137 @@
+// ═══════════════════════════════════════════════════════
+// server.js
+// Punto de entrada. Sirve el frontend (index.html/script.js/
+// style.css, en esta misma carpeta) y expone la API real
+// del agente bajo /api/*. Esto es lo que Railway arranca con
+// "npm start".
+// ═══════════════════════════════════════════════════════
+
+try { require('dotenv').config(); } catch (_) { /* en Railway las vars ya están inyectadas, dotenv es opcional */ }
+
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+const rateLimit = require('express-rate-limit');
+
+const { sweepExpired, WORKSPACES_ROOT } = require('./sessionStore');
+
+const repoRoutes = require('./repoRoutes');
+const chatRoutes = require('./chatRoutes');
+const agentRoutes = require('./agentRoutes');
+const authRoutes = require('./authRoutes');
+const toolsRoutes = require('./toolsRoutes');
+
+const openrouter = require('./openrouterClient');
+const groq = require('./groqClient');
+const ollama = require('./ollamaClient');
+const feedbackRoutes = require('./feedbackRoutes');
+
+const app = express();
+app.set('trust proxy', 1);   // Requerido para express-rate-limit detrás de Railway proxy
+const PORT = process.env.PORT || 3000;
+// index.html vive en esta misma carpeta (todo el proyecto es plano,
+// sin subcarpetas), asi que la raiz del proyecto es __dirname mismo.
+const PROJECT_ROOT = __dirname;
+
+// ── Seguridad basica de servidor publico ──────────────────
+app.disable('x-powered-by');
+app.use(cors({ origin: process.env.CORS_ORIGIN === '*' || !process.env.CORS_ORIGIN ? true : process.env.CORS_ORIGIN.split(',') }));
+app.use(express.json({ limit: '2mb' }));
+
+// El chat/comandos/push pegan a GitHub y Ollama, asi que van con
+// rate limit para que una sola sesion no agote la instancia.
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes, espera un momento.' },
+});
+app.use('/api', apiLimiter);
+
+// ── Workspaces (clones de repos reales) ───────────────────
+if (!fs.existsSync(WORKSPACES_ROOT)) fs.mkdirSync(WORKSPACES_ROOT, { recursive: true });
+
+// ── API real del agente ───────────────────────────────────
+app.use('/api', authRoutes);
+app.use('/api', repoRoutes);
+app.use('/api', chatRoutes);
+app.use('/api', agentRoutes);
+app.use('/api', feedbackRoutes);
+app.use('/api', toolsRoutes);
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, service: 'devagent', time: new Date().toISOString() });
+});
+
+app.get('/api/config', async (_req, res) => {
+  // Mismo orden de prioridad que chatRoutes.js: Groq > OpenRouter > Ollama.
+  const providerName = process.env.GROQ_API_KEY
+    ? 'Groq'
+    : process.env.OPENROUTER_API_KEY
+    ? 'OpenRouter'
+    : 'Ollama local';
+  const client = process.env.GROQ_API_KEY ? groq : process.env.OPENROUTER_API_KEY ? openrouter : ollama;
+  const ai = await client.checkHealth();
+  res.json({
+    ollamaReady: ai.ready,
+    ollamaModel: ai.model,
+    aiProvider: providerName,
+    githubPreconfigured: !!process.env.GITHUB_TOKEN,
+    githubOAuthEnabled: !!process.env.GITHUB_CLIENT_ID,
+    tools: {
+      webSearch: !!process.env.TAVILY_API_KEY,
+      wikipedia: true, // API pública, no requiere key
+      video: !!process.env.BYTEPLUS_API_KEY,
+      imageEdit: !!process.env.OPENROUTER_API_KEY,
+    },
+  });
+});
+
+// ── Frontend estatico (todo el proyecto vive en esta misma carpeta) ────
+// IMPORTANTE: al no haber subcarpetas, index.html/script.js/style.css
+// conviven en el mismo directorio que el codigo del backend
+// (server.js, gitAgent.js, etc). express.static serviria TODO por
+// igual si no se filtra, permitiendo descargar el codigo fuente del
+// servidor con un GET directo (ej. /gitAgent.js). Esta lista blanca
+// evita eso: solo estos archivos y extensiones se sirven como estaticos.
+const PUBLIC_FILES = new Set(['index.html', 'style.css', 'script.js', 'firebase-auth.js']);
+const PUBLIC_EXT_RE = /\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|ttf)$/i;
+
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  const requested = req.path.replace(/^\//, '') || 'index.html';
+  if (PUBLIC_FILES.has(requested) || PUBLIC_EXT_RE.test(requested)) return next();
+  // Un .js que no esta en la whitelist es casi siempre alguien
+  // pidiendo codigo del backend a proposito (ej. /gitAgent.js) —
+  // 404 real, no el HTML del frontend con codigo 200.
+  if (/\.js$/i.test(requested)) return res.status(404).json({ error: 'No encontrado' });
+  return res.sendFile(path.join(PROJECT_ROOT, 'index.html'));
+});
+
+app.use(express.static(PROJECT_ROOT, { index: 'index.html', extensions: ['html'] }));
+
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(PROJECT_ROOT, 'index.html'));
+});
+
+// ── Manejo de errores centralizado ────────────────────────
+app.use((err, _req, res, _next) => {
+  console.error('[devagent] error no manejado:', err);
+  res.status(500).json({ error: 'Error interno del servidor' });
+});
+
+app.listen(PORT, () => {
+  console.log(`DevAgent escuchando en el puerto ${PORT}`);
+});
+
+// Limpieza de sesiones/workspaces viejos cada hora, para no
+// llenar el disco de Railway con clones abandonados.
+setInterval(() => {
+  sweepExpired((session) => {
+    fs.rm(session.dir, { recursive: true, force: true }, () => {});
+    console.log(`[devagent] sesion expirada limpiada: ${session.id}`);
+  });
+}, 1000 * 60 * 60);
