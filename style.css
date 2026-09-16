@@ -1333,3 +1333,19 @@ html,body{
   line-height:1.45;
 }
 
+
+/* ── Modo computadora: pantalla en vivo del navegador del agente ── */
+.cv-desk{display:flex;flex-direction:column;gap:8px}
+.cv-desk-task{font-size:12.5px;color:var(--text2);background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 11px;line-height:1.4}
+.cv-desk-screen{background:#0b0e14;border:1px solid var(--line);border-radius:10px;overflow:hidden;min-height:120px}
+.cv-desk-screen img{display:block;width:100%;height:auto}
+.cv-desk-steps{display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto}
+.cv-desk-step{font-size:12px;color:var(--text2);background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 9px;line-height:1.45}
+.cv-desk-n{font-weight:700;color:var(--text)}
+.cv-desk-dim{color:var(--text3);font-size:11px}
+.cv-desk-why{color:var(--text3);font-size:11px;margin-top:2px;font-style:italic}
+.cv-desk-confirm{display:flex;gap:8px;margin-top:8px}
+.cv-desk-confirm button{border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer}
+.cv-btn-approve{background:#16a34a;color:#fff}
+.cv-btn-deny{background:#dc2626;color:#fff}
+.cv-desk-confirm button:disabled{opacity:.5;cursor:default}

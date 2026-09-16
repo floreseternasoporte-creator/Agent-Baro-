@@ -12,3 +12,7 @@ workspaces/
 # Logs y temporales del sistema
 *.log
 .DS_Store
+
+# Memorias persistentes de los clientes (datos privados del usuario).
+# Nunca se suben al repo.
+data/

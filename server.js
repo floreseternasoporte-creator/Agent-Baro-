@@ -27,6 +27,8 @@ const groq = require('./groqClient');
 const ollama = require('./ollamaClient');
 const pollinations = require('./pollinationsClient');
 const feedbackRoutes = require('./feedbackRoutes');
+const visionClient = require('./visionClient');
+const { closeAgentBrowser } = require('./computerUse');
 
 const app = express();
 app.set('trust proxy', 1);   // Requerido para express-rate-limit detrás de Railway proxy
@@ -123,6 +125,8 @@ app.get('/api/config', async (_req, res) => {
       documents: true, // Document Studio: .docx/.pptx/.xlsx reales, sin clave
       parallelTools: true, // multitarea: herramientas independientes en paralelo
       longContext: true, // compactación automática del historial largo
+      computerUse: true, // modo computadora: Chromium real que el agente ve y controla
+      vision: await visionClient.visionAvailable().catch(() => null), // modelo de visión local (ojos del agente) o null
     },
   });
 });
@@ -170,6 +174,8 @@ app.listen(PORT, () => {
 setInterval(() => {
   sweepExpired((session) => {
     fs.rm(session.dir, { recursive: true, force: true }, () => {});
+    // Cerrar también el navegador del modo computadora de esa sesión.
+    closeAgentBrowser(session.id).catch(() => {});
     console.log(`[devagent] sesion expirada limpiada: ${session.id}`);
   });
 }, 1000 * 60 * 60);

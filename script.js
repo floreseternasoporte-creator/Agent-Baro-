@@ -1,6 +1,23 @@
 // ═══════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════
+// ID persistente del cliente: se genera una vez y vive en localStorage.
+// Es lo que ata la memoria del agente a ESTE navegador entre sesiones,
+// pestañas y reinicios del servidor (el sessionId es temporal y expira).
+function getClientId() {
+  try {
+    let id = localStorage.getItem('devagent_client_id');
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(id || '')) {
+      id = 'c-' + Date.now().toString(36) + '-' +
+        Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem('devagent_client_id', id);
+    }
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 const S = {
   busy: false,
   ok: false,
@@ -19,6 +36,7 @@ const S = {
   totalTokens: 0,
   maxTokens: 131072,
   sessionId: null,       // id de la sesion/workspace real en el servidor
+  clientId: getClientId(), // ID persistente de ESTE navegador: la memoria sobrevive sesiones
   serverConfig: null,    // { ollamaReady, ollamaModel, aiProvider, githubPreconfigured }
   lastAutoAppliedPaths: [],
   lastAppliedDiffs: [],
@@ -1004,6 +1022,83 @@ function renderComputerEvent(payload) {
   if (mode === 'files') return cvFiles(payload);
   if (mode === 'image') return cvImage(payload);
   if (mode === 'docs') return cvDocs(payload);
+  if (mode === 'desktop') return cvDesktop(payload);
+}
+
+// ─────────────────────────────────────────────────────────
+// Modo computadora (estilo Astra): el agente VE una pantalla
+// real (Chromium en el servidor) y la controla de forma
+// autónoma. Aquí se muestra esa pantalla en vivo, paso a paso,
+// con el registro de lo que el agente decide y hace.
+// ─────────────────────────────────────────────────────────
+function cvDesktop(payload) {
+  if (_cvMode !== 'desktop') {
+    _cvMode = 'desktop';
+    cvSetBody(`
+      <div class="cv-desk">
+        <div class="cv-desk-task" id="cv-desk-task"></div>
+        <div class="cv-desk-screen"><img id="cv-desk-shot" alt="Pantalla del agente"></div>
+        <div class="cv-desk-steps" id="cv-desk-steps"></div>
+      </div>
+    `);
+  }
+  const shot = document.getElementById('cv-desk-shot');
+  const steps = document.getElementById('cv-desk-steps');
+  const taskEl = document.getElementById('cv-desk-task');
+  const log = (html) => {
+    if (!steps) return;
+    steps.insertAdjacentHTML('beforeend', `<div class="cv-desk-step">${html}</div>`);
+    const body = document.getElementById('cv-body');
+    if (body) body.scrollTop = body.scrollHeight;
+  };
+  const setShot = (b64) => { if (shot && b64) shot.src = 'data:image/jpeg;base64,' + b64; };
+
+  if (payload.action === 'start') {
+    if (taskEl) taskEl.innerHTML = `🖥️ <b>Tarea:</b> ${esc(payload.task || '')}`;
+    cvSetAddress('modo computadora — en vivo', true);
+    log(payload.vision
+      ? `👁️ El agente está <b>viendo</b> la pantalla con <b>${esc(payload.visionModel || 'visión')}</b>.`
+      : `⚙️ Visión no disponible: el agente trabaja con la estructura de la página.`);
+  } else if (payload.action === 'observe') {
+    setShot(payload.screenshot);
+    cvSetAddress(payload.url ? String(payload.url).replace(/^https?:\/\//, '').slice(0, 60) : 'navegador del agente', true);
+    log(`<span class="cv-desk-n">Paso ${payload.step}</span> 👁️ Observando${payload.title ? `: <i>${esc(payload.title)}</i>` : ''} <span class="cv-desk-dim">(${payload.elements || 0} elementos)</span>`);
+  } else if (payload.action === 'decide') {
+    const actLabel = { click: '👆 clic', type: '⌨️ escribir', press: '🔘 tecla', scroll: '↕️ scroll', navigate: '🌐 ir a', wait: '⏳ esperar', done: '✅ terminar', fail: '❌ abandonar' }[payload.act] || payload.act;
+    log(`<span class="cv-desk-n">🧠</span> ${actLabel}${payload.detail ? ` — ${esc(payload.detail)}` : ''}${payload.reasoning ? `<div class="cv-desk-why">${esc(payload.reasoning)}</div>` : ''}`);
+  } else if (payload.action === 'act') {
+    log(`<span class="cv-desk-n">⚡</span> ${esc(payload.detail || '')} <span class="cv-desk-dim">→ ${esc(payload.result || '')}</span>`);
+  } else if (payload.action === 'error') {
+    log(`<span class="cv-desk-n">⚠️</span> ${esc(payload.detail || 'Error')}`);
+  } else if (payload.action === 'finish') {
+    setShot(payload.screenshot);
+    cvSetAddress('modo computadora — terminado', false);
+    log(`${payload.ok ? '✅' : '⚠️'} <b>${esc(payload.summary || '')}</b>`);
+  } else if (payload.action === 'confirm-request') {
+    const cid = String(payload.confirmId || '').replace(/[^a-z0-9-]/gi, '');
+    log(`<span class="cv-desk-n">🛡️</span> <b>El agente pide tu aprobación:</b><div class="cv-desk-why">${esc(payload.detail || '')}${payload.reason ? `<br><span class="cv-desk-dim">${esc(payload.reason)}</span>` : ''}</div>
+      <div class="cv-desk-confirm" id="cv-confirm-${cid}">
+        <button class="cv-btn-approve" data-cid="${cid}" data-ok="1">✅ Aprobar</button>
+        <button class="cv-btn-deny" data-cid="${cid}" data-ok="0">❌ Denegar</button>
+      </div>`);
+    steps.querySelectorAll(`#cv-confirm-${cid} button`).forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const approved = btn.dataset.ok === '1';
+        try {
+          await fetch(`${API}/computer/confirm`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: S.sessionId, confirmId: cid, approved }),
+          });
+        } catch {}
+        const box = document.getElementById(`cv-confirm-${cid}`);
+        if (box) box.innerHTML = `<span class="cv-desk-dim">${approved ? '✅ Aprobada' : '❌ Denegada'}</span>`;
+      });
+    });
+  } else if (payload.action === 'confirm-result') {
+    log(`<span class="cv-desk-dim">${payload.approved ? '✅ Aprobación registrada, el agente continúa.' : '❌ Acción no aprobada.'}</span>`);
+  }
 }
 
 // Tarjeta visual para el Document Studio (documentos, presentaciones
@@ -1626,6 +1721,7 @@ async function callAI(msg, onStream) {
 
   const makeBody = () => JSON.stringify({
     sessionId: S.sessionId,
+    clientId: S.clientId,
     message: msg,
     planMode: S.planModeEnabled,
     fileLimit: S.fileLimit,

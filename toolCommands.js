@@ -16,6 +16,7 @@
 //   Crear documento: Plan de marketing :: para una cafetería, 5 secciones
 //   Crear presentación: Mi startup :: 8 diapositivas para inversores
 //   Hoja de cálculo: Presupuesto 2026 :: ingresos y gastos mensuales
+//   Usar computadora: busca en google el precio del iPhone 17 y dímelo
 // ═══════════════════════════════════════════════════════
 
 // "Título :: detalle" -> { title, brief }. El :: es opcional.
@@ -93,6 +94,13 @@ function extractToolCommands(text) {
       const [, imageUrl, instruction] = match;
       const key = `image\u0000${imageUrl}\u0000${instruction}`;
       if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'image', imageUrl, instruction }); }
+      continue;
+    }
+
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Usar computadora:\s*(.+?)\s*$/i))) {
+      const task = match[1];
+      const key = `computer\u0000${task}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'computer', task }); }
       continue;
     }
   }

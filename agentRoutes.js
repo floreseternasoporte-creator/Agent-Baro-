@@ -162,33 +162,52 @@ router.get('/agent/log', (req, res) => {
 });
 
 // ── Memoria a largo plazo ─────────────────────────────────
-// GET  /api/agent/memory?sessionId=  -> { memory: [...] }
-// POST /api/agent/memory { sessionId, text } -> guarda un dato
-// DELETE /api/agent/memory { sessionId, index } -> olvida un dato
-// Vive en workspaces/<id>/memory.json: sobrevive reinicios del
-// servidor y se inyecta en el system prompt de cada turno.
+// GET  /api/agent/memory?sessionId=&clientId=  -> { memory: [...] }
+// POST /api/agent/memory { sessionId, clientId, text } -> guarda un dato
+// DELETE /api/agent/memory { sessionId, clientId, index } -> olvida un dato
+// Con clientId, la memoria es PERSISTENTE: vive en data/memories/<clientId>.json
+// y sobrevive sesiones nuevas, pestañas y reinicios. Sin clientId, cae al
+// legacy por sesión (muere con el workspace).
 router.get('/agent/memory', (req, res) => {
   const session = getSession(req.query.sessionId);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
-  res.json({ memory: session.memory });
+  if (req.query.clientId) session.setClientId(req.query.clientId);
+  res.json({ memory: session.memory, persistent: !!session.clientId });
 });
 
 router.post('/agent/memory', (req, res) => {
-  const { sessionId, text } = req.body || {};
+  const { sessionId, clientId, text } = req.body || {};
   const session = getSession(sessionId);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  if (clientId) session.setClientId(clientId);
   if (!text || !String(text).trim()) return res.status(400).json({ error: 'Falta "text"' });
   const saved = session.addMemory(text);
-  res.json({ saved, memory: session.memory });
+  res.json({ saved, memory: session.memory, persistent: !!session.clientId });
 });
 
 router.delete('/agent/memory', (req, res) => {
-  const { sessionId, index } = req.body || {};
+  const { sessionId, clientId, index } = req.body || {};
   const session = getSession(sessionId);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  if (clientId) session.setClientId(clientId);
   const ok = session.forgetMemory(Number(index));
   if (!ok) return res.status(400).json({ error: 'Índice inválido' });
   res.json({ ok: true, memory: session.memory });
+});
+
+// ── Aprobación de acciones sensibles del modo computadora ──
+// POST /api/computer/confirm { sessionId, confirmId, approved }
+// El agente emite action:'confirm' y se queda esperando; el
+// frontend muestra el diálogo y responde aquí.
+router.post('/computer/confirm', (req, res) => {
+  const { sessionId, confirmId, approved } = req.body || {};
+  if (!sessionId || !confirmId) return res.status(400).json({ error: 'Faltan sessionId/confirmId' });
+  const session = getSession(sessionId);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  const { resolveConfirmation } = require('./computerUse');
+  const ok = resolveConfirmation(session.id, String(confirmId), !!approved);
+  if (!ok) return res.status(404).json({ error: 'Confirmación no encontrada o expirada' });
+  res.json({ ok: true, approved: !!approved });
 });
 
 module.exports = router;

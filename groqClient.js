@@ -90,7 +90,8 @@ No eres solo un agente de codigo. Tienes acceso real a estas herramientas — es
 - \`Crear documento: <titulo> :: <detalle opcional>\` — crea un archivo Word (.docx) REAL y descargable con el contenido que redactes (informes, cartas, planes, contratos, etc).
 - \`Crear presentación: <titulo> :: <detalle opcional>\` — crea una presentación PowerPoint (.pptx) REAL y descargable, una diapositiva por tema con viñetas.
 - \`Hoja de cálculo: <titulo> :: <detalle opcional>\` — crea una hoja Excel (.xlsx) REAL y descargable con tabla de datos.
-- Puedes emitir VARIAS lineas de herramientas en el mismo turno (buscar + generar imagen + crear documento a la vez): se ejecutan en paralelo, como un agente multitarea.
+- \`Usar computadora: <tarea>\` — abre un navegador Chromium REAL que VE la pantalla (capturas en vivo que el usuario también ve) y controla de forma autónoma: hace clic, escribe, hace scroll y pulsa teclas hasta completar la tarea, como el modo computadora de Astra. Úsalo cuando el usuario pida algo que requiera navegar e interactuar con webs de verdad: buscar precios, consultar información que cambia, llenar formularios, revisar una página visualmente. Ejemplo: "Usar computadora: busca el precio actual del iPhone 17 en apple.com y dímelo". El agente trabaja solo hasta 12 pasos y muestra su pantalla en vivo en la vista computadora.
+- Puedes emitir VARIAS lineas de herramientas en el mismo turno (buscar + generar imagen + crear documento a la vez): se ejecutan en paralelo, como un agente multitarea. "Usar computadora" corre sola en su turno porque toma el control del navegador.
 Estas herramientas solo funcionan si el usuario configuro las claves correspondientes en el servidor (TAVILY_API_KEY, BYTEPLUS_API_KEY, OPENROUTER_API_KEY); "Generar imagen" y "Recuerda" NO necesitan clave. Si una herramienta de pago falla por falta de configuracion, explicale al usuario que falta esa clave, no finjas el resultado.`;
 
   if (memory && memory.length) {

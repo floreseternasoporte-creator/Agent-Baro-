@@ -11,9 +11,10 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const memoryStore = require('./memoryStore');
 
 const WORKSPACES_ROOT = path.join(__dirname, 'workspaces');
-const MAX_MEMORY_ITEMS = 100;
+const MAX_MEMORY_ITEMS = 100; // legacy por sesión; el almacén persistente usa su propio tope
 
 /** @type {Map<string, Session>} */
 const sessions = new Map();
@@ -34,7 +35,20 @@ class Session {
     this.lastUsedAt = Date.now();
     this.history = [];          // [{role, content}] — historial de chat para dar contexto a la IA
     this.actionLog = [];        // log de acciones reales ejecutadas (para auditar, como hace Codex)
-    this.memory = this.loadMemory(); // memoria a largo plazo: sobrevive reinicios del servidor
+    this.clientId = null;       // ID persistente del cliente (localStorage) para memoria real
+    this.memory = this.loadMemory(); // legacy por sesión; se reemplaza con setClientId()
+  }
+
+  // Vincula la sesión a la memoria PERSISTENTE del cliente.
+  // Sin esto, la memoria muere con el workspace (6h). Con esto, sobrevive
+  // entre sesiones, pestañas y reinicios del servidor.
+  setClientId(rawId) {
+    const id = memoryStore.sanitizeClientId(rawId);
+    if (!id) return false;
+    if (this.clientId === id) return true;
+    this.clientId = id;
+    this.memory = memoryStore.loadMemory(id);
+    return true;
   }
 
   memoryFile() {
@@ -61,6 +75,13 @@ class Session {
   }
 
   addMemory(text) {
+    // Con cliente vinculado, la memoria es persistente de verdad.
+    if (this.clientId) {
+      const { saved, memory } = memoryStore.addMemory(this.clientId, text);
+      this.memory = memory;
+      return saved;
+    }
+    // Legacy: sin clientId, memoria atada a la sesión (muere con el workspace).
     const clean = String(text || '').trim();
     if (!clean) return false;
     if (this.memory.includes(clean)) return false; // no duplicados
@@ -71,6 +92,11 @@ class Session {
   }
 
   forgetMemory(index) {
+    if (this.clientId) {
+      const { ok, memory } = memoryStore.forgetMemory(this.clientId, Number(index));
+      this.memory = memory;
+      return ok;
+    }
     if (index < 0 || index >= this.memory.length) return false;
     this.memory.splice(index, 1);
     this.saveMemory();

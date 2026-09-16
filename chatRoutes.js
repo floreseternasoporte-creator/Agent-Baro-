@@ -16,6 +16,7 @@ const ollama = require('./ollamaClient');
 const { runCommand, extractAutomaticCommands } = require('./commandRunner');
 const { extractToolCommands } = require('./toolCommands');
 const tools = require('./toolsClient');
+const { runComputerTask } = require('./computerTask');
 
 const router = express.Router();
 const MAX_AUTOMATIC_ROUNDS = 4;
@@ -365,8 +366,11 @@ async function runToolCommand(command, send, session) {
     if (command.tool === 'memory') {
       const saved = session.addMemory(command.text);
       send('log', { type: saved ? 'ok' : 'info', title: saved ? 'Guardado en memoria' : 'Ya estaba en memoria', detail: command.text });
+      const scopeNote = session.clientId
+        ? 'Lo recordaré en futuras conversaciones, aunque cierres la app.'
+        : 'Lo recordaré durante esta sesión.';
       return saved
-        ? `### Memoria guardada\nHe guardado en mi memoria a largo plazo: "${command.text}". Lo recordaré en futuras conversaciones.`
+        ? `### Memoria guardada\nHe guardado en mi memoria: "${command.text}". ${scopeNote}`
         : `### Memoria\nEse dato ya estaba en mi memoria: "${command.text}".`;
     }
     if (command.tool === 'doc-gen') {
@@ -391,6 +395,19 @@ async function runToolCommand(command, send, session) {
       const cap = kindLabel[0].toUpperCase() + kindLabel.slice(1);
       return `### ${cap} creado: "${command.title}"\n\n[Descargar ${result.fileName}](${result.downloadUrl}) (${Math.round(result.bytes / 1024)} KB)`;
     }
+    if (command.tool === 'computer') {
+      // Modo computadora estilo Astra: un Chromium REAL que el agente
+      // VE (capturas en vivo) y controla de forma autónoma (clic,
+      // escritura, scroll, teclas) hasta completar la tarea.
+      send('log', { type: 'run', title: 'Modo computadora', detail: command.task });
+      const result = await runComputerTask({
+        task: command.task,
+        session,
+        send,
+        generateText: (prompt) => generateText(prompt),
+      });
+      return `### Modo computadora: "${command.task}"\n\n${result.ok ? '✅' : '⚠️'} ${result.summary}`;
+    }
   } catch (e) {
     send('log', { type: 'err', title: `Error en herramienta (${command.tool})`, detail: e.message });
     return `### Error ejecutando herramienta "${command.tool}"\n${e.message}`;
@@ -410,9 +427,12 @@ function summarizeDiffResults(results) {
 }
 
 router.post('/chat', async (req, res) => {
-  const { sessionId, message, model, planMode, fileLimit, autoApply = true } = req.body || {};
+  const { sessionId, clientId, message, model, planMode, fileLimit, autoApply = true } = req.body || {};
   const session = getSession(sessionId);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada. Recarga la app.' });
+  // Vincula la memoria persistente del cliente en cada turno: así el agente
+  // recuerda datos entre sesiones aunque el sessionId sea nuevo.
+  if (clientId) session.setClientId(clientId);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -558,10 +578,24 @@ router.post('/chat', async (req, res) => {
     if (userToolCommands.length) {
       // Multitarea estilo Astra: las herramientas independientes
       // corren en paralelo en vez de una por una.
-      send('log', { type: 'run', title: userToolCommands.length > 1 ? `Ejecutando ${userToolCommands.length} comandos en paralelo...` : 'Ejecutando tu comando...' });
-      const preToolTexts = await Promise.all(
-        userToolCommands.map((toolCommand) => runToolCommand(toolCommand, send, session))
-      );
+      // EXCEPCIÓN: "Usar computadora" abre un navegador real con
+      // pantalla en vivo y pasos secuenciales — siempre corre SOLO,
+      // nunca en paralelo con otras herramientas del mismo lote.
+      // El orden original de los resultados se conserva.
+      send('log', { type: 'run', title: userToolCommands.length > 1 ? `Ejecutando ${userToolCommands.length} comandos...` : 'Ejecutando tu comando...' });
+      const preToolTexts = new Array(userToolCommands.length);
+      const preComputerIdx = [];
+      const preRestIdx = [];
+      userToolCommands.forEach((c, i) => (c.tool === 'computer' ? preComputerIdx : preRestIdx).push(i));
+      for (const i of preComputerIdx) {
+        preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session);
+      }
+      if (preRestIdx.length) {
+        const rest = await Promise.all(
+          preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session))
+        );
+        preRestIdx.forEach((origI, k) => { preToolTexts[origI] = rest[k]; });
+      }
       const preToolResults = preToolTexts.filter(Boolean);
       if (preToolResults.length) {
         visibleResult = visibleResult
@@ -641,9 +675,20 @@ router.post('/chat', async (req, res) => {
 
       // Multitarea estilo Astra: herramientas independientes en
       // paralelo; el orden de los resultados se conserva.
-      const roundToolTexts = await Promise.all(
-        requestedTools.map((toolCommand) => runToolCommand(toolCommand, send, session))
-      );
+      // EXCEPCIÓN: "computer" abre un navegador real y corre SOLO.
+      const roundToolTexts = new Array(requestedTools.length);
+      const computerIdx = [];
+      const restIdx = [];
+      requestedTools.forEach((c, i) => (c.tool === 'computer' ? computerIdx : restIdx).push(i));
+      for (const i of computerIdx) {
+        roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session);
+      }
+      if (restIdx.length) {
+        const rest = await Promise.all(
+          restIdx.map((i) => runToolCommand(requestedTools[i], send, session))
+        );
+        restIdx.forEach((origI, k) => { roundToolTexts[origI] = rest[k]; });
+      }
       for (const toolText of roundToolTexts) {
         if (toolText) toolResults.push(toolText);
       }
