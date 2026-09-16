@@ -137,4 +137,34 @@ router.get('/agent/log', (req, res) => {
   res.json({ log: session.actionLog });
 });
 
+// ── Memoria a largo plazo ─────────────────────────────────
+// GET  /api/agent/memory?sessionId=  -> { memory: [...] }
+// POST /api/agent/memory { sessionId, text } -> guarda un dato
+// DELETE /api/agent/memory { sessionId, index } -> olvida un dato
+// Vive en workspaces/<id>/memory.json: sobrevive reinicios del
+// servidor y se inyecta en el system prompt de cada turno.
+router.get('/agent/memory', (req, res) => {
+  const session = getSession(req.query.sessionId);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  res.json({ memory: session.memory });
+});
+
+router.post('/agent/memory', (req, res) => {
+  const { sessionId, text } = req.body || {};
+  const session = getSession(sessionId);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  if (!text || !String(text).trim()) return res.status(400).json({ error: 'Falta "text"' });
+  const saved = session.addMemory(text);
+  res.json({ saved, memory: session.memory });
+});
+
+router.delete('/agent/memory', (req, res) => {
+  const { sessionId, index } = req.body || {};
+  const session = getSession(sessionId);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  const ok = session.forgetMemory(Number(index));
+  if (!ok) return res.status(400).json({ error: 'Índice inválido' });
+  res.json({ ok: true, memory: session.memory });
+});
+
 module.exports = router;

@@ -9,9 +9,11 @@
 // ═══════════════════════════════════════════════════════
 
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 
 const WORKSPACES_ROOT = path.join(__dirname, 'workspaces');
+const MAX_MEMORY_ITEMS = 100;
 
 /** @type {Map<string, Session>} */
 const sessions = new Map();
@@ -32,6 +34,47 @@ class Session {
     this.lastUsedAt = Date.now();
     this.history = [];          // [{role, content}] — historial de chat para dar contexto a la IA
     this.actionLog = [];        // log de acciones reales ejecutadas (para auditar, como hace Codex)
+    this.memory = this.loadMemory(); // memoria a largo plazo: sobrevive reinicios del servidor
+  }
+
+  memoryFile() {
+    return path.join(this.dir, 'memory.json');
+  }
+
+  loadMemory() {
+    try {
+      const raw = fs.readFileSync(this.memoryFile(), 'utf8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((m) => typeof m === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveMemory() {
+    try {
+      fs.mkdirSync(this.dir, { recursive: true });
+      fs.writeFileSync(this.memoryFile(), JSON.stringify(this.memory, null, 2));
+    } catch (e) {
+      console.error('[devagent] no se pudo guardar memory.json:', e.message);
+    }
+  }
+
+  addMemory(text) {
+    const clean = String(text || '').trim();
+    if (!clean) return false;
+    if (this.memory.includes(clean)) return false; // no duplicados
+    this.memory.push(clean);
+    if (this.memory.length > MAX_MEMORY_ITEMS) this.memory.shift();
+    this.saveMemory();
+    return true;
+  }
+
+  forgetMemory(index) {
+    if (index < 0 || index >= this.memory.length) return false;
+    this.memory.splice(index, 1);
+    this.saveMemory();
+    return true;
   }
 
   touch() {

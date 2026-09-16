@@ -357,10 +357,52 @@ async function editImageBatch({ images, instruction, onStep }) {
   return results;
 }
 
+// ─────────────────────────────────────────────────────────
+// GENERACIÓN DE IMÁGENES — Pollinations (GRATIS, SIN CLAVE)
+// Verificado en vivo 2026-09-16: GET
+// https://image.pollinations.ai/prompt/<prompt>?width=&height=&model=flux
+// devuelve la imagen generada directamente (HTTP 200,
+// image/jpeg), sin autenticacion. El propio GET dispara la
+// generacion, asi que la URL resultante ES el resultado y se
+// puede mostrar tal cual en el frontend.
+// ─────────────────────────────────────────────────────────
+const IMAGE_GEN_MODEL = process.env.IMAGE_GEN_MODEL || 'flux';
+
+function buildImageUrl(prompt, { width = 1024, height = 1024, seed = null } = {}) {
+  const s = seed ?? Math.floor(Math.random() * 1_000_000_000);
+  const params = new URLSearchParams({
+    width: String(width),
+    height: String(height),
+    seed: String(s),
+    model: IMAGE_GEN_MODEL,
+    nologo: 'true',
+    private: 'true',
+  });
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params.toString()}`;
+}
+
+/**
+ * Genera una imagen con IA sin necesidad de clave.
+ * onStep(evento): image_start { prompt } -> image_done { url }.
+ * Devuelve { imageUrl, prompt }. La generacion ocurre al
+ * resolverse la URL (el servidor de Pollinations la genera
+ * al recibir el GET); aqui solo construimos la URL real.
+ */
+async function generateImage({ prompt, width, height, onStep }) {
+  if (!prompt || !String(prompt).trim()) {
+    throw new Error('Falta el prompt para generar la imagen.');
+  }
+  onStep?.({ type: 'image_start', prompt: String(prompt).trim() });
+  const imageUrl = buildImageUrl(String(prompt).trim(), { width, height });
+  onStep?.({ type: 'image_done', url: imageUrl });
+  return { imageUrl, prompt: String(prompt).trim() };
+}
+
 module.exports = {
   webSearch,
   wikipediaLookup,
   generateVideo,
+  generateImage,
   editImage,
   editImageBatch,
   getVideoUsageToday,

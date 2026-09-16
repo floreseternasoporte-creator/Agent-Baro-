@@ -1,0 +1,14 @@
+# Dependencias (se instalan con npm install)
+node_modules/
+
+# Sesiones y workspaces: contienen clones de repos del usuario,
+# historiales de chat y memoria local. Nunca se suben.
+workspaces/
+
+# Variables de entorno con claves de API
+.env
+.env.local
+
+# Logs y temporales del sistema
+*.log
+.DS_Store

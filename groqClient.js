@@ -14,8 +14,19 @@ const MODELS = [
 
 const DEFAULT_MODEL = process.env.GROQ_MODEL || MODELS[0];
 
-function buildSystemPrompt({ repo, branch, fileCount, instructions, planMode, agentCapable }) {
+function buildSystemPrompt({ repo, branch, fileCount, instructions, planMode, agentCapable, memory }) {
+  // Fecha y hora REALES del servidor, en español. El modelo la usa para
+  // "qué día es hoy", "noticias de esta semana", etc. Sin esto el agente
+  // vive fuera del tiempo: no sabe ni en qué año está.
+  const now = new Date();
+  const fechaLarga = new Intl.DateTimeFormat('es', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+  }).format(now);
   let sys = `Eres DevAgent, un agente autonomo de ingenieria de software de nivel senior. Piensas con claridad, actuas de forma precisa y produces codigo de produccion real — no ejemplos ni placeholders.
+
+## FECHA Y HORA ACTUAL (tiempo real)
+Hoy es **${fechaLarga}**. Usala cuando el usuario pregunte por "hoy", "ahora", "esta semana", noticias recientes o fechas de lanzamientos. Nunca digas que no sabes qué día es.
 
 ${agentCapable ? `## ENTORNO REAL (no simulado)
 Tienes acceso completo a un repositorio clonado en disco en un servidor Linux:
@@ -73,8 +84,14 @@ No eres solo un agente de codigo. Tienes acceso real a estas herramientas — es
 - \`Buscar: <consulta>\` — busqueda web en tiempo real (Tavily). Usala para preguntas sobre eventos actuales, precios, noticias, datos que puedan haber cambiado, o cuando el usuario pida investigar/buscar algo en internet.
 - \`Wikipedia: <tema>\` — consulta directa a Wikipedia para datos enciclopedicos rapidos (definiciones, biografias, hechos historicos, etc).
 - \`Generar video: <descripcion>, <N>s\` — genera un video con IA (Seedance) de N segundos (maximo 600s = 10 minutos, encadenando clips de hasta 15s cada uno). Limite: 10 videos por dia en total. Avisa al usuario del limite si esta cerca de alcanzarlo.
+- \`Generar imagen: <descripcion>\` — genera una imagen con IA GRATIS y sin clave (Pollinations/FLUX). Usala cuando el usuario pida crear, dibujar, imaginar o visualizar algo. El resultado se muestra como tarjeta visual automaticamente.
 - \`Editar imagen: <url> :: <instruccion>\` — edita, anima o transforma una imagen con IA a partir de su URL y una instruccion en lenguaje natural. Para lotes de fotos, emite una linea "Editar imagen:" por cada una.
-Estas herramientas solo funcionan si el usuario configuro las claves correspondientes en el servidor (TAVILY_API_KEY, BYTEPLUS_API_KEY, OPENROUTER_API_KEY); si una falla por falta de configuracion, explicale al usuario que falta esa clave, no finjas el resultado.`;
+- \`Recuerda: <dato>\` — guarda un dato en tu memoria a largo plazo (nombre del usuario, preferencias, decisiones del proyecto, etc). La memoria sobrevive entre sesiones y la veras en cada conversacion futura.
+Estas herramientas solo funcionan si el usuario configuro las claves correspondientes en el servidor (TAVILY_API_KEY, BYTEPLUS_API_KEY, OPENROUTER_API_KEY); "Generar imagen" y "Recuerda" NO necesitan clave. Si una herramienta de pago falla por falta de configuracion, explicale al usuario que falta esa clave, no finjas el resultado.`;
+
+  if (memory && memory.length) {
+    sys += `\n\n## MEMORIA A LARGO PLAZO (datos que guardaste o el usuario te pidio recordar)\n${memory.map((m) => `- ${m}`).join('\n')}\nUsala de forma natural: no la recites sin motivo, pero tenla en cuenta en tus respuestas y decisiones.`;
+  }
 
   if (repo) {
     sys += `\n\n## REPOSITORIO ACTIVO

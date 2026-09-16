@@ -63,6 +63,13 @@ router.get('/tools/video/usage', (_req, res) => {
   });
 });
 
+// ── Generación de imágenes con IA (Pollinations, GRATIS sin clave) ──
+router.post('/tools/image', sseHandler(async (req, onStep) => {
+  const { prompt, width, height } = req.body || {};
+  if (!prompt) throw new Error('Falta "prompt"');
+  return tools.generateImage({ prompt, width, height, onStep });
+}));
+
 // ── Edición/animación de imágenes con IA ───────────────────
 router.post('/tools/image-edit', sseHandler(async (req, onStep) => {
   const { imageUrl, images, instruction } = req.body || {};

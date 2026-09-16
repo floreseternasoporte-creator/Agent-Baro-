@@ -10,7 +10,9 @@
 //   Buscar: últimas noticias sobre IA
 //   Wikipedia: torre eiffel
 //   Generar video: un gato astronauta caminando en la luna, 20s
+//   Generar imagen: un castillo flotante al atardecer, estilo anime
 //   Editar imagen: <url> :: ponle un sombrero de mago
+//   Recuerda: mi nombre es Darel y mi proyecto se llama Atenis
 // ═══════════════════════════════════════════════════════
 
 function extractToolCommands(text) {
@@ -40,6 +42,20 @@ function extractToolCommands(text) {
       const prompt = durMatch ? raw.slice(0, durMatch.index).trim() : raw;
       const key = `video\u0000${prompt}\u0000${durationSec}`;
       if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'video', prompt, durationSec }); }
+      continue;
+    }
+
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Generar imagen:\s*(.+?)\s*$/i))) {
+      const prompt = match[1];
+      const key = `imagegen\u0000${prompt}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'image-gen', prompt }); }
+      continue;
+    }
+
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Recuerda:\s*(.+?)\s*$/i))) {
+      const text = match[1];
+      const key = `memory\u0000${text}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'memory', text }); }
       continue;
     }
 

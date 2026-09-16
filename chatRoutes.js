@@ -22,17 +22,57 @@ const MAX_AUTOMATIC_ROUNDS = 4;
 const MAX_COMMANDS_PER_ROUND = 5;
 const MAX_COMMAND_CONTEXT_BYTES = 30_000;
 
-// Prioridad de proveedor: Groq primero si hay clave (API paga/con capa
-// gratuita real, rapida y con IDs de modelo estables — no se deslistan
-// como el catalogo ":free" de OpenRouter), despues OpenRouter (modelos
-// gratuitos, catalogo consultado en vivo), y por ultimo Ollama local para
-// entornos sin ninguna clave configurada.
-function pickAiClient() {
-  if (process.env.GROQ_API_KEY) return groq;
-  if (process.env.OPENROUTER_API_KEY) return openrouter;
-  return ollama;
+// ── Cadena de proveedores con FAILOVER AUTOMATICO ──────────
+// Antes: pickAiClient() se evaluaba UNA SOLA VEZ al arrancar el
+// servidor. Si desplegabas sin claves, el chat moria con 503 para
+// siempre hasta reiniciar; y sin GROQ_API_KEY ni OPENROUTER_API_KEY
+// no habia ningun proveedor funcional (Ollama no existe en Railway).
+// Ahora: la cadena se resuelve EN CADA REQUEST y siempre termina en
+// Pollinations, que es GRATIS y SIN CLAVE (verificado en vivo).
+// El agente funciona out-of-the-box, como ChatGPT/Astra: abrir y hablar.
+const pollinations = require('./pollinationsClient');
+
+function providerChain() {
+  const chain = [];
+  if (process.env.GROQ_API_KEY) chain.push({ name: 'Groq', client: groq });
+  if (process.env.OPENROUTER_API_KEY) chain.push({ name: 'OpenRouter', client: openrouter });
+  chain.push({ name: 'Pollinations (gratis)', client: pollinations });
+  chain.push({ name: 'Ollama local', client: ollama });
+  return chain;
 }
-const aiClient = pickAiClient();
+
+/**
+ * Intenta cada proveedor en orden hasta que uno entregue el stream.
+ * Si un proveedor falla ANTES de emitir el primer token, se pasa al
+ * siguiente de forma transparente. Si falla a mitad del stream, se
+ * propaga el error (no hay failover limpio a mitad de respuesta).
+ */
+async function streamWithFailover({ model, messages, signal, onDelta, onProvider }) {
+  let lastError = null;
+  for (const { name, client } of providerChain()) {
+    let started = false;
+    try {
+      const result = await client.streamChat({
+        model,
+        messages,
+        signal,
+        onDelta: (delta, fullText) => {
+          if (!started) { started = true; onProvider?.(name); }
+          onDelta(delta, fullText);
+        },
+      });
+      return result;
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      lastError = e;
+      if (started) throw e;
+      console.error(`[devagent] proveedor ${name} fallo, probando siguiente:`, e.message);
+    }
+  }
+  const err = new Error(lastError ? `Ningún proveedor respondió. Último error: ${lastError.message}` : 'Ningún proveedor de IA disponible');
+  err.status = lastError?.status || 503;
+  throw err;
+}
 
 function truncateCommandOutput(value) {
   const text = String(value || '');
@@ -247,6 +287,31 @@ async function runToolCommand(command, send, session) {
       const result = await tools.editImage({ imageUrl: command.imageUrl, instruction: command.instruction, onStep });
       return `### Imagen editada\nInstrucción: ${command.instruction}\n${result.imageUrl ? `Resultado: ${result.imageUrl}` : 'No se pudo generar la imagen editada.'}${result.note ? `\nNota: ${result.note}` : ''}`;
     }
+    if (command.tool === 'image-gen') {
+      // Generación de imagen GRATIS y sin clave (Pollinations/FLUX).
+      // La URL resultante se inyecta como markdown para que el
+      // frontend la renderice, y además se emite un evento 'computer'
+      // con mode 'image' para la tarjeta visual en vivo.
+      send('log', { type: 'run', title: 'Generando imagen con IA', detail: command.prompt });
+      send('computer', { mode: 'image', action: 'start', prompt: command.prompt });
+      const result = await tools.generateImage({
+        prompt: command.prompt,
+        onStep: (step) => {
+          if (step.type === 'image_done') {
+            send('log', { type: 'ok', title: 'Imagen generada' });
+            send('computer', { mode: 'image', action: 'done', prompt: command.prompt, url: step.url });
+          }
+        },
+      });
+      return `### Imagen generada: "${command.prompt}"\n\n![imagen generada por IA](${result.imageUrl})\n\n[Ver imagen en tamaño completo](${result.imageUrl})`;
+    }
+    if (command.tool === 'memory') {
+      const saved = session.addMemory(command.text);
+      send('log', { type: saved ? 'ok' : 'info', title: saved ? 'Guardado en memoria' : 'Ya estaba en memoria', detail: command.text });
+      return saved
+        ? `### Memoria guardada\nHe guardado en mi memoria a largo plazo: "${command.text}". Lo recordaré en futuras conversaciones.`
+        : `### Memoria\nEse dato ya estaba en mi memoria: "${command.text}".`;
+    }
   } catch (e) {
     send('log', { type: 'err', title: `Error en herramienta (${command.tool})`, detail: e.message });
     return `### Error ejecutando herramienta "${command.tool}"\n${e.message}`;
@@ -357,13 +422,17 @@ router.post('/chat', async (req, res) => {
       }
     }
 
-    const systemPrompt = aiClient.buildSystemPrompt({
+    // El builder del system prompt es compartido (groqClient lo define,
+    // pollinationsClient lo reutiliza): un solo lugar para la fecha/hora
+    // real, la memoria a largo plazo y las herramientas.
+    const systemPrompt = groq.buildSystemPrompt({
       repo: session.repoFullName,
       branch: session.branch,
       fileCount,
       instructions: session.instructions,
       planMode: !!planMode,
       agentCapable: !!session.repoFullName,
+      memory: session.memory,
     });
 
     const messages = [
@@ -372,13 +441,18 @@ router.post('/chat', async (req, res) => {
       { role: 'user', content: enrichedMessage },
     ];
 
-    send('log', { type: 'run', title: 'Generando respuesta...', detail: 'modelo local' });
+    send('log', { type: 'run', title: 'Generando respuesta...', detail: 'buscando proveedor disponible' });
 
-    let result = await aiClient.streamChat({
-      model,   // ignorado si no coincide — ollamaClient usa DEFAULT_MODEL
+    // NOTA DE RENDIMIENTO: antes cada evento 'delta' llevaba el TEXTO
+    // COMPLETO acumulado (O(n²) de red por respuesta). Ahora solo viaja
+    // el fragmento nuevo y el frontend lo acumula — el stream es de
+    // verdad en tiempo real, sin reenviar megabytes.
+    let result = await streamWithFailover({
+      model,
       messages,
       signal: abortController.signal,
-      onDelta: (_delta, fullText) => send('delta', { text: fullText }),
+      onDelta: (delta) => send('delta', { delta }),
+      onProvider: (name) => send('log', { type: 'info', title: `Respondiendo con ${name}`, detail: model || 'modelo por defecto' }),
     });
 
     // La IA puede pedir comandos de inspección o validación en una línea
@@ -387,6 +461,39 @@ router.post('/chat', async (req, res) => {
     const conversation = [...messages];
     const seenCommands = new Set();
     let visibleResult = result;
+
+    // ── Comandos directos del usuario ────────────────────
+    // "Generar imagen: ...", "Recuerda: ...", "Buscar: ..." escritos
+    // por el USUARIO se ejecutan de forma determinista ANTES de que
+    // la IA hable: no dependen de que el modelo repita la línea en
+    // su respuesta (los modelos gratuitos a veces devuelven vacío y
+    // el comando se perdía sin dejar rastro). El resultado se inyecta
+    // en la conversación para que la IA lo comente, no lo re-ejecute.
+    const userToolCommands = extractToolCommands(message);
+    const seenToolCommands = new Set(userToolCommands.map((c) => JSON.stringify(c)));
+    if (userToolCommands.length) {
+      send('log', { type: 'run', title: 'Ejecutando tu comando...' });
+      const preToolResults = [];
+      for (const toolCommand of userToolCommands) {
+        const toolText = await runToolCommand(toolCommand, send, session);
+        if (toolText) preToolResults.push(toolText);
+      }
+      if (preToolResults.length) {
+        visibleResult = visibleResult
+          ? `${visibleResult}\n\n${preToolResults.join('\n\n')}`
+          : preToolResults.join('\n\n');
+        send('delta', { delta: `\n\n${preToolResults.join('\n\n')}` });
+        conversation.push({
+          role: 'user',
+          content: [
+            '## Comando directo del usuario YA EJECUTADO por el sistema (no repitas la línea de comando ni lo vuelvas a ejecutar)',
+            ...preToolResults,
+            '',
+            'Si el mensaje traía algo más además del comando, responde a eso. Si solo era el comando, basta un comentario breve.',
+          ].join('\n'),
+        });
+      }
+    }
 
     const seenDiffs = new Set();
     let autoAppliedPaths = [];
@@ -397,7 +504,6 @@ router.post('/chat', async (req, res) => {
     // fallaba ("el diff no coincide", porque el archivo ya cambio), que
     // era la fuente mas comun de "error al aplicar cambios" reportada.
     const appliedDiffs = [];
-    const seenToolCommands = new Set();
     for (let round = 0; round < MAX_AUTOMATIC_ROUNDS; round += 1) {
       const requested = extractAutomaticCommands(result);
       const commands = requested
@@ -493,16 +599,17 @@ router.post('/chat', async (req, res) => {
       // el bloque.
       if (toolResults.length) {
         visibleResult = `${visibleResult}\n\n${toolResults.join('\n\n')}`;
-        send('delta', { text: visibleResult });
+        send('delta', { delta: `\n\n${toolResults.join('\n\n')}` });
       }
 
-      const previous = visibleResult;
-      result = await aiClient.streamChat({
+      result = await streamWithFailover({
         model,
         messages: conversation,
         signal: abortController.signal,
-        onDelta: (_delta, fullText) => send('delta', { text: `${previous}\n\n${fullText}` }),
+        onDelta: (delta) => send('delta', { delta }),
+        onProvider: (name) => send('log', { type: 'info', title: `Continuando con ${name}` }),
       });
+      const previous = visibleResult;
       visibleResult = `${previous}\n\n${result}`;
     }
 

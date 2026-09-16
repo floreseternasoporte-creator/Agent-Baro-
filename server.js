@@ -25,6 +25,7 @@ const toolsRoutes = require('./toolsRoutes');
 const openrouter = require('./openrouterClient');
 const groq = require('./groqClient');
 const ollama = require('./ollamaClient');
+const pollinations = require('./pollinationsClient');
 const feedbackRoutes = require('./feedbackRoutes');
 
 const app = express();
@@ -36,8 +37,30 @@ const PROJECT_ROOT = __dirname;
 
 // ── Seguridad basica de servidor publico ──────────────────
 app.disable('x-powered-by');
-app.use(cors({ origin: process.env.CORS_ORIGIN === '*' || !process.env.CORS_ORIGIN ? true : process.env.CORS_ORIGIN.split(',') }));
+// CORS: ANTES reflejaba CUALQUIER origen (origin: true) cuando no se
+// definia CORS_ORIGIN — cualquier web podia usar tu instancia como
+// proxy gratuito y quemar tus claves de Groq/OpenRouter. Ahora, por
+// defecto, solo mismo-origen (el frontend vive en este mismo servidor,
+// asi que no necesita CORS). Define CORS_ORIGIN con dominios
+// explicitos solo si sirves el frontend desde otro dominio.
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
+  : false;
+app.use(cors({ origin: corsOrigins || false }));
 app.use(express.json({ limit: '2mb' }));
+
+// Token opcional para la API: si defines AGENT_API_TOKEN, todo /api/*
+// (menos /api/health) exige la cabecera `x-agent-token` con ese valor.
+// Util si expones la instancia en internet y no quieres que extraños
+// consuman tus claves de IA. El frontend lo envia solo si existe en
+// localStorage bajo la clave 'agent_token'.
+const AGENT_API_TOKEN = process.env.AGENT_API_TOKEN || null;
+app.use('/api', (req, res, next) => {
+  if (!AGENT_API_TOKEN) return next();
+  if (req.path === '/health') return next();
+  if (req.headers['x-agent-token'] === AGENT_API_TOKEN) return next();
+  return res.status(401).json({ error: 'No autorizado: falta o es invalido x-agent-token.' });
+});
 
 // El chat/comandos/push pegan a GitHub y Ollama, asi que van con
 // rate limit para que una sola sesion no agote la instancia.
@@ -66,18 +89,26 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.get('/api/config', async (_req, res) => {
-  // Mismo orden de prioridad que chatRoutes.js: Groq > OpenRouter > Ollama.
-  const providerName = process.env.GROQ_API_KEY
-    ? 'Groq'
-    : process.env.OPENROUTER_API_KEY
-    ? 'OpenRouter'
-    : 'Ollama local';
-  const client = process.env.GROQ_API_KEY ? groq : process.env.OPENROUTER_API_KEY ? openrouter : ollama;
+  // Cadena real de proveedores (misma que usa /api/chat con failover):
+  // Groq > OpenRouter > Pollinations (GRATIS, sin clave, siempre
+  // disponible) > Ollama local. El chat NUNCA muere por falta de
+  // claves: sin GROQ_API_KEY ni OPENROUTER_API_KEY responde igual.
+  const chain = [];
+  if (process.env.GROQ_API_KEY) chain.push('Groq');
+  if (process.env.OPENROUTER_API_KEY) chain.push('OpenRouter');
+  chain.push('Pollinations (gratis)');
+  chain.push('Ollama local');
+  const providerName = chain[0];
+  const client = process.env.GROQ_API_KEY ? groq : process.env.OPENROUTER_API_KEY ? openrouter : pollinations;
   const ai = await client.checkHealth();
   res.json({
     ollamaReady: ai.ready,
     ollamaModel: ai.model,
     aiProvider: providerName,
+    providerChain: chain,
+    freeProvider: 'Pollinations (gratis)',
+    authTokenRequired: !!process.env.AGENT_API_TOKEN,
+    serverTime: new Date().toISOString(),
     githubPreconfigured: !!process.env.GITHUB_TOKEN,
     githubOAuthEnabled: !!process.env.GITHUB_CLIENT_ID,
     tools: {
@@ -85,6 +116,9 @@ app.get('/api/config', async (_req, res) => {
       wikipedia: true, // API pública, no requiere key
       video: !!process.env.BYTEPLUS_API_KEY,
       imageEdit: !!process.env.OPENROUTER_API_KEY,
+      imageGen: true, // Pollinations/FLUX: gratis, sin clave, siempre
+      voice: true, // Web Speech API del navegador: dictado + lectura, sin clave
+      memory: true, // memoria a largo plazo por sesion, en disco
     },
   });
 });

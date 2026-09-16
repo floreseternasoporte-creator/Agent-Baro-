@@ -17,12 +17,34 @@
 const { execFile } = require('child_process');
 const path = require('path');
 
+// Paquetes permitidos via npx. ANTES: npx aceptaba CUALQUIER argumento
+// (null = wildcard), lo que permitia `npx -y paquete-malicioso` —
+// descarga y ejecucion de codigo arbitrario, haciendo inútil toda la
+// lista blanca. Ahora solo estos paquetes conocidos; el nombre se
+// compara sin el sufijo de version (@latest, @1.2.3).
+const NPX_ALLOWED_PACKAGES = new Set([
+  'create-vite', 'create-next-app', 'create-react-app',
+  'eslint', 'prettier', 'tsc', 'typescript',
+  'vite', 'vitest', 'jest', 'playwright',
+  'prisma', 'tailwindcss', 'tailwindcss-cli',
+  'serve', 'http-server', 'nodemon',
+]);
+
+function npxPackageName(arg) {
+  if (!arg || arg.startsWith('-')) return null;
+  return arg.split('@')[0] || null;
+}
+
 // Solo estos binarios pueden invocarse. Si el proyecto necesita
 // otro (por ejemplo "yarn" o "cargo"), se agrega aqui a mano —
 // nunca se acepta un binario que venga del usuario o de la IA.
+// null = cualquier argumento SOLO para binarios que no descargan
+// codigo (python/pytest/pip validan rutas aparte). npx descarga y
+// ejecuta paquetes: se valida contra NPX_ALLOWED_PACKAGES en
+// isAllowed(), nunca como wildcard.
 const ALLOWED_BINARIES = {
   npm: ['install', 'ci', 'run', 'test', 'run-script', 'ls', 'audit', 'outdated'],
-  npx: null, // null = cualquier argumento (npx ya es sandboxed por si mismo para paquetes conocidos)
+  npx: null, // validado aparte contra NPX_ALLOWED_PACKAGES en isAllowed()
   node: ['-v', '--version'],
   python: null,
   python3: null,
@@ -99,6 +121,13 @@ function extractAutomaticCommands(text) {
 
 function isAllowed(binary, args) {
   if (!Object.prototype.hasOwnProperty.call(ALLOWED_BINARIES, binary)) return false;
+  // npx: solo paquetes conocidos, sin flags de auto-instalacion ciega.
+  // `-y/--yes` descargaria cualquier cosa sin preguntar: bloqueado.
+  if (binary === 'npx') {
+    if (args.some((a) => a === '-y' || a === '--yes')) return false;
+    const pkg = npxPackageName(args.find((a) => !a.startsWith('-')));
+    return !!pkg && NPX_ALLOWED_PACKAGES.has(pkg);
+  }
   const allowedSubcommands = ALLOWED_BINARIES[binary];
   if (allowedSubcommands === null) return true;
   if (!args.length) return true;
@@ -195,6 +224,7 @@ module.exports = {
   isAllowed,
   validateExecution,
   ALLOWED_BINARIES,
+  NPX_ALLOWED_PACKAGES,
   TASK_PRESETS,
   DEFAULT_TIMEOUT_MS,
 };

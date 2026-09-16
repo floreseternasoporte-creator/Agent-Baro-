@@ -349,11 +349,13 @@ function updateStatusBadges() {
   el('ollama-warn-badge') && (el('ollama-warn-badge').style.display = ollamaOk ? 'none' : '');
   const provider = S.serverConfig?.aiProvider || 'IA configurada';
   const model = S.serverConfig?.ollamaModel || 'modelo disponible';
+  const chain = (S.serverConfig?.providerChain || []).filter((p) => p !== provider);
+  const chainTxt = chain.length ? ` · respaldo: ${chain.join(' → ')}` : '';
   el('ollama-settings-sub') && (el('ollama-settings-sub').textContent = ollamaOk
-    ? `${provider} activo — ${model}`
+    ? `${provider} activo — ${model}${chainTxt}`
     : `${provider} no disponible todavía`);
   el('ai-model-label') && (el('ai-model-label').textContent = model);
-  el('ai-model-sub') && (el('ai-model-sub').textContent = `${provider} · ejecución autónoma con verificación`);
+  el('ai-model-sub') && (el('ai-model-sub').textContent = `${provider}${chainTxt} · ejecución autónoma con verificación`);
 
   const ghOk = !!S.repoData;
   el('gh-settings-badge') && (el('gh-settings-badge').style.display = ghOk ? 'none' : '');
@@ -507,8 +509,15 @@ function isSessionGone(data) {
 
 async function apiFetch(url, options, retry = true) {
   await ensureSession();
+  // Si el servidor exige AGENT_API_TOKEN, se envia desde localStorage
+  // (clave 'agent_token'). Sin token configurado no se envia nada.
+  const agentToken = (() => { try { return localStorage.getItem('agent_token'); } catch { return null; } })();
   const resp = await fetch(url, {
     ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...(agentToken ? { 'x-agent-token': agentToken } : {}),
+    },
     body: options.body
       ? options.body.replace ? options.body.replace(/"sessionId":"[^"]*"/, `"sessionId":"${S.sessionId}"`) : options.body
       : undefined,
@@ -992,6 +1001,31 @@ function renderComputerEvent(payload) {
   if (mode === 'browser') return cvBrowser(payload);
   if (mode === 'terminal') return cvTerminal(payload);
   if (mode === 'files') return cvFiles(payload);
+  if (mode === 'image') return cvImage(payload);
+}
+
+// Tarjeta visual para imágenes generadas con IA (gratis, sin clave).
+function cvImage(payload) {
+  if (_cvMode !== 'image') { _cvMode = 'image'; cvSetBody(''); }
+  if (payload.action === 'start') {
+    cvSetAddress('generador de imágenes — IA', true);
+    cvSetBody(`
+      <div class="cv-image-gen">
+        <div class="cv-img-shimmer"></div>
+        <div class="cv-img-prompt">🎨 Generando: “${esc(payload.prompt || '')}”</div>
+      </div>
+    `);
+  } else if (payload.action === 'done' && payload.url) {
+    cvSetAddress('imagen generada', false);
+    const url = esc(payload.url);
+    cvSetBody(`
+      <div class="cv-image-gen">
+        <a href="${url}" target="_blank" rel="noopener"><img class="cv-img" src="${url}" alt="${esc(payload.prompt || 'imagen generada por IA')}" loading="lazy"></a>
+        <div class="cv-img-prompt">🎨 ${esc(payload.prompt || '')}</div>
+        <a class="cv-img-open" href="${url}" target="_blank" rel="noopener">Abrir en tamaño completo ↗</a>
+      </div>
+    `);
+  }
 }
 
 function cvBrowser(payload) {
@@ -1510,9 +1544,16 @@ function mkStream() {
   return div;
 }
 
-function patchStream(div, text) {
+// Throttle del re-render en vivo: re-pintar markdown en cada token
+// es O(n²) de DOM. Se pinta como maximo cada 120ms; el render final
+// siempre es forzado para no perder el ultimo fragmento.
+let _lastPatchMs = 0;
+function patchStream(div, text, force) {
   const body = div.querySelector('.mbody');
   if (!body) return;
+  const nowMs = Date.now();
+  if (!force && nowMs - _lastPatchMs < 120) return;
+  _lastPatchMs = nowMs;
   body.innerHTML = md(text) + '<span class="scursor"></span>';
   div.scrollIntoView({ behavior:'smooth', block:'end' });
 }
@@ -1526,6 +1567,7 @@ function finalStream(div, text) {
   actions.className = 'msg-actions';
   actions.innerHTML = `
     <button class="ma-btn" onclick="copyMsg(this)">${copySvg()} Copiar</button>
+    <button class="ma-btn" onclick="speakMsg(this)">🔊 Leer</button>
     <button class="ma-btn" onclick="regen(this)"><svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><path d="M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z"/></svg> Regenerar</button>
   `;
   div.appendChild(actions);
@@ -1552,9 +1594,12 @@ async function callAI(msg, onStream) {
     autoApply: true,
   });
 
+  const agentToken = (() => { try { return localStorage.getItem('agent_token'); } catch { return null; } })();
+  const chatHeaders = { 'Content-Type': 'application/json', ...(agentToken ? { 'x-agent-token': agentToken } : {}) };
+
   let resp = await fetch(`${API}/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: chatHeaders,
     signal: S.abortController.signal,
     body: makeBody(),
   });
@@ -1568,7 +1613,7 @@ async function callAI(msg, onStream) {
       S.abortController = new AbortController();
       resp = await fetch(`${API}/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: chatHeaders,
         signal: S.abortController.signal,
         body: makeBody(),
       });
@@ -1612,8 +1657,14 @@ async function callAI(msg, onStream) {
         // en vivo en vez de una linea de texto.
         renderComputerEvent(payload);
       } else if (eventName === 'delta') {
-        finalText = payload.text;
-        if (onStream) onStream(finalText);
+        // Protocolo nuevo: el servidor envia SOLO el fragmento nuevo
+        // ('delta') y el frontend lo acumula — O(n) de red en vez de O(n²).
+        // Se mantiene compatibilidad con servidores viejos que mandaban
+        // el texto completo en 'text'.
+        if (payload.delta !== undefined) S.streamAcc += payload.delta;
+        else if (payload.text !== undefined) S.streamAcc = payload.text;
+        finalText = S.streamAcc;
+        if (onStream) onStream(S.streamAcc);
       } else if (eventName === 'error') {
         throw new Error(payload.error);
       } else if (eventName === 'done') {
@@ -1664,6 +1715,77 @@ function autoAnalyze() {
 }
 
 // ═══════════════════════════════════════════
+// VOZ — dictado (STT) y lectura en voz alta (TTS)
+// Web Speech API del navegador: gratis, sin clave, sin
+// servidor. En iPhone funciona con Safari (dictado con el
+// idioma del sistema; la lectura usa voz en español si hay).
+// ═══════════════════════════════════════════
+let _recognition = null;
+let _dictating = false;
+
+function toggleDictation() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('Tu navegador no soporta dictado por voz'); return; }
+  if (_dictating) { try { _recognition && _recognition.stop(); } catch (_) {} return; }
+  const inp = document.getElementById('inp');
+  _recognition = new SR();
+  _recognition.lang = 'es-ES';
+  _recognition.interimResults = true;
+  _recognition.continuous = false;
+  const base = inp.value ? inp.value.replace(/\s+$/, '') + ' ' : '';
+  let finalTxt = '';
+  _recognition.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalTxt += t; else interim += t;
+    }
+    inp.value = base + finalTxt + interim;
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 160) + 'px';
+    document.getElementById('sndbtn').disabled = !inp.value.trim();
+  };
+  const stopUi = () => { _dictating = false; updateMicBtn(); };
+  _recognition.onend = stopUi;
+  _recognition.onerror = stopUi;
+  try {
+    _recognition.start();
+    _dictating = true;
+    updateMicBtn();
+    showToast('🎤 Escuchando… habla ahora');
+  } catch (_) { stopUi(); }
+}
+
+function updateMicBtn() {
+  const b = document.getElementById('micbtn');
+  if (b) b.classList.toggle('listening', _dictating);
+}
+
+// Lee en voz alta un mensaje de la IA. Segundo toque = detener.
+let _speakingBtn = null;
+function speakMsg(btn) {
+  try { window.speechSynthesis && speechSynthesis.cancel(); } catch (_) {}
+  if (_speakingBtn === btn) {
+    _speakingBtn = null;
+    btn.classList.remove('speaking');
+    return;
+  }
+  const msg = btn.closest('.msg');
+  const text = (msg && msg.querySelector('.mbody') ? msg.querySelector('.mbody').innerText : '').slice(0, 2000).trim();
+  if (!text || !window.speechSynthesis) { showToast('Sin voz disponible en este navegador'); return; }
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'es-ES';
+  try {
+    const es = speechSynthesis.getVoices().find((v) => v.lang && v.lang.toLowerCase().startsWith('es'));
+    if (es) u.voice = es;
+  } catch (_) {}
+  u.onend = u.onerror = () => { _speakingBtn = null; btn.classList.remove('speaking'); };
+  _speakingBtn = btn;
+  btn.classList.add('speaking');
+  speechSynthesis.speak(u);
+}
+
+// ═══════════════════════════════════════════
 // STOP / SEND
 // ═══════════════════════════════════════════
 function stopGeneration() {
@@ -1700,6 +1822,9 @@ async function send() {
   // en el servidor, contra el clon REAL en disco — cada paso
   // real (leyendo tal archivo, ejecutando tal cosa) llega aqui
   // como un evento "log" del stream y se pinta en vivo.
+  // El acumulador del stream se resetea por turno: el servidor nuevo
+  // envia deltas incrementales que el frontend va sumando.
+  S.streamAcc = '';
   const streamEl = mkStream();
   let result = '';
 
