@@ -118,7 +118,11 @@ app.get('/api/config', async (_req, res) => {
       imageEdit: !!process.env.OPENROUTER_API_KEY,
       imageGen: true, // Pollinations/FLUX: gratis, sin clave, siempre
       voice: true, // Web Speech API del navegador: dictado + lectura, sin clave
+      voiceMode: true, // conversación continua por voz (habla <-> escucha), sin clave
       memory: true, // memoria a largo plazo por sesion, en disco
+      documents: true, // Document Studio: .docx/.pptx/.xlsx reales, sin clave
+      parallelTools: true, // multitarea: herramientas independientes en paralelo
+      longContext: true, // compactación automática del historial largo
     },
   });
 });

@@ -22,6 +22,7 @@ const S = {
   serverConfig: null,    // { ollamaReady, ollamaModel, aiProvider, githubPreconfigured }
   lastAutoAppliedPaths: [],
   lastAppliedDiffs: [],
+  voiceMode: false,      // modo conversación por voz (habla <-> escucha en bucle)
   MODELS: [
     'llama-3.3-70b-versatile',
     'deepseek-r1-distill-llama-70b',
@@ -1002,6 +1003,43 @@ function renderComputerEvent(payload) {
   if (mode === 'terminal') return cvTerminal(payload);
   if (mode === 'files') return cvFiles(payload);
   if (mode === 'image') return cvImage(payload);
+  if (mode === 'docs') return cvDocs(payload);
+}
+
+// Tarjeta visual para el Document Studio (documentos, presentaciones
+// y hojas de cálculo reales .docx/.pptx/.xlsx, descargables).
+function cvDocs(payload) {
+  const kindIcon = { documento: '📝', presentacion: '📊', hoja: '📗' }[payload.kind] || '📄';
+  const kindLabel = { documento: 'documento Word', presentacion: 'presentación PowerPoint', hoja: 'hoja de cálculo Excel' }[payload.kind] || 'documento';
+  if (_cvMode !== 'docs') { _cvMode = 'docs'; cvSetBody('<div id="cv-docs-list"></div>'); }
+  const list = document.getElementById('cv-docs-list') || (() => { cvSetBody('<div id="cv-docs-list"></div>'); return document.getElementById('cv-docs-list'); })();
+  if (payload.action === 'start') {
+    cvSetAddress('document studio — IA', true);
+    list.insertAdjacentHTML('beforeend', `
+      <div class="cv-doc-gen">
+        <div class="cv-doc-icon">${kindIcon}</div>
+        <div class="cv-img-prompt">Creando ${esc(kindLabel)}: “${esc(payload.title || '')}”<span class="cv-term-caret"></span></div>
+      </div>
+    `);
+  } else if (payload.action === 'done' && payload.fileName) {
+    cvSetAddress('documento listo', false);
+    const url = esc(payload.url || '#');
+    const kb = payload.bytes ? `${Math.round(payload.bytes / 1024)} KB` : '';
+    const gens = list.querySelectorAll('.cv-doc-gen');
+    if (gens.length) gens[gens.length - 1].remove();
+    list.insertAdjacentHTML('beforeend', `
+      <div class="cv-doc-done">
+        <div class="cv-doc-icon">${kindIcon}</div>
+        <div class="cv-doc-meta">
+          <div class="cv-doc-name">${esc(payload.fileName)}</div>
+          <div class="cv-doc-sub">${esc(kindLabel)} · ${esc(payload.title || '')} ${kb ? `· ${kb}` : ''}</div>
+        </div>
+        <a class="cv-doc-dl" href="${url}" download>⬇ Descargar</a>
+      </div>
+    `);
+  }
+  const body = document.getElementById('cv-body');
+  if (body) body.scrollTop = body.scrollHeight;
 }
 
 // Tarjeta visual para imágenes generadas con IA (gratis, sin clave).
@@ -1745,7 +1783,13 @@ function toggleDictation() {
     inp.style.height = Math.min(inp.scrollHeight, 160) + 'px';
     document.getElementById('sndbtn').disabled = !inp.value.trim();
   };
-  const stopUi = () => { _dictating = false; updateMicBtn(); };
+  const stopUi = () => {
+    _dictating = false; updateMicBtn();
+    // Modo voz: si se dictó algo con contenido, se envía solo.
+    if (S.voiceMode && finalTxt.trim() && !S.busy) {
+      setTimeout(() => { if (S.voiceMode && !S.busy) send(); }, 700);
+    }
+  };
   _recognition.onend = stopUi;
   _recognition.onerror = stopUi;
   try {
@@ -1763,26 +1807,62 @@ function updateMicBtn() {
 
 // Lee en voz alta un mensaje de la IA. Segundo toque = detener.
 let _speakingBtn = null;
-function speakMsg(btn) {
+function speakMsg(btn, onDone) {
   try { window.speechSynthesis && speechSynthesis.cancel(); } catch (_) {}
   if (_speakingBtn === btn) {
     _speakingBtn = null;
     btn.classList.remove('speaking');
+    if (typeof onDone === 'function') onDone(false);
     return;
   }
   const msg = btn.closest('.msg');
   const text = (msg && msg.querySelector('.mbody') ? msg.querySelector('.mbody').innerText : '').slice(0, 2000).trim();
-  if (!text || !window.speechSynthesis) { showToast('Sin voz disponible en este navegador'); return; }
+  if (!text || !window.speechSynthesis) { showToast('Sin voz disponible en este navegador'); if (typeof onDone === 'function') onDone(false); return; }
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'es-ES';
   try {
     const es = speechSynthesis.getVoices().find((v) => v.lang && v.lang.toLowerCase().startsWith('es'));
     if (es) u.voice = es;
   } catch (_) {}
-  u.onend = u.onerror = () => { _speakingBtn = null; btn.classList.remove('speaking'); };
+  u.onend = u.onerror = () => { _speakingBtn = null; btn.classList.remove('speaking'); if (typeof onDone === 'function') onDone(true); };
   _speakingBtn = btn;
   btn.classList.add('speaking');
   speechSynthesis.speak(u);
+}
+
+// ─────────────────────────────────────────────────────────
+// MODO VOZ — conversación continua por voz estilo Astra:
+// el agente LEE su respuesta en voz alta y al terminar
+// ESCUCHA automáticamente; cuando dejas de hablar, tu mensaje
+// se envía solo. Toca el botón de nuevo para salir.
+// ─────────────────────────────────────────────────────────
+function setVoiceMode(on) {
+  S.voiceMode = !!on;
+  const b = document.getElementById('voicemodebtn');
+  if (b) b.classList.toggle('active', S.voiceMode);
+  if (!S.voiceMode) {
+    try { window.speechSynthesis && speechSynthesis.cancel(); } catch (_) {}
+    _speakingBtn = null;
+    if (_dictating) { try { _recognition && _recognition.stop(); } catch (_) {} }
+    showToast('Modo voz desactivado');
+  } else {
+    showToast('🎙️ Modo voz: habla y te respondo en voz alta');
+  }
+}
+
+// Lee automáticamente el div de mensaje recién generado y, al
+// terminar, arranca el dictado para continuar la conversación.
+function autoSpeakDiv(div) {
+  if (!S.voiceMode || !div) return;
+  const btn = div.querySelector('button[onclick^="speakMsg"]');
+  if (!btn) return;
+  // Pequeña pausa para que el render final asiente.
+  setTimeout(() => {
+    if (!S.voiceMode || S.busy) return;
+    speakMsg(btn, (finished) => {
+      if (finished && S.voiceMode && !S.busy && !_dictating) toggleDictation();
+    });
+  }, 500);
 }
 
 // ═══════════════════════════════════════════
@@ -1836,6 +1916,8 @@ async function send() {
     cvSetLive(false);
     cvHideDelayed();
     detectEditsAndShowPushBanner(result);
+    // Modo voz: lee la respuesta en voz alta y luego escucha.
+    autoSpeakDiv(streamEl);
   } catch(e) {
     if (e.name === 'AbortError') {
       finalStream(streamEl, result || '_Generacion detenida._');

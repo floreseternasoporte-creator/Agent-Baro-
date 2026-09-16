@@ -74,6 +74,63 @@ async function streamWithFailover({ model, messages, signal, onDelta, onProvider
   throw err;
 }
 
+/**
+ * Generación de texto SIN streaming por la misma cadena de
+ * proveedores (para tareas internas: redactar documentos,
+ * resumir historial). Devuelve el texto completo.
+ */
+async function generateText(prompt, signal) {
+  let lastError = null;
+  for (const { name, client } of providerChain()) {
+    try {
+      const text = await client.streamChat({
+        messages: [{ role: 'user', content: prompt }],
+        signal,
+      });
+      if (text && text.trim()) return text;
+      lastError = new Error(`${name} devolvió vacío`);
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      lastError = e;
+    }
+  }
+  throw new Error(`Ningún proveedor pudo generar texto: ${lastError?.message || 'desconocido'}`);
+}
+
+/**
+ * Contexto largo estilo Astra: cuando el historial crece
+ * demasiado, se resume la parte vieja en un bloque compacto
+ * en vez de truncarla a ciegas. Así el agente "recuerda" hilos
+ * largos sin quemar la ventana del modelo gratuito.
+ */
+const HISTORY_COMPACT_AT = 24;  // mensajes
+const HISTORY_KEEP_TAIL = 16;   // mensajes recientes intactos
+
+async function maybeCompactHistory(session, signal) {
+  const h = session.history || [];
+  if (h.length <= HISTORY_COMPACT_AT) return false;
+  const oldPart = h.slice(0, h.length - HISTORY_KEEP_TAIL);
+  const tail = h.slice(-HISTORY_KEEP_TAIL);
+  try {
+    const summary = await generateText(
+      'Resume esta conversación de forma compacta y fiel (máximo 25 líneas): ' +
+      'temas tratados, decisiones tomadas, datos importantes y en qué quedó lo último. ' +
+      'Sin adornos, solo el resumen.\n\n' +
+      oldPart.map((m) => `${m.role === 'user' ? 'Usuario' : 'Asistente'}: ${String(m.content || '').slice(0, 2000)}`).join('\n\n'),
+      signal
+    );
+    session.history = [
+      { role: 'user', content: `## Resumen del contexto anterior (compactado automáticamente)\n${summary}` },
+      ...tail,
+    ];
+    return true;
+  } catch (e) {
+    // Si el resumen falla, se trunca sin romper el turno.
+    session.history = tail;
+    return false;
+  }
+}
+
 function truncateCommandOutput(value) {
   const text = String(value || '');
   if (text.length <= MAX_COMMAND_CONTEXT_BYTES) return text;
@@ -312,6 +369,28 @@ async function runToolCommand(command, send, session) {
         ? `### Memoria guardada\nHe guardado en mi memoria a largo plazo: "${command.text}". Lo recordaré en futuras conversaciones.`
         : `### Memoria\nEse dato ya estaba en mi memoria: "${command.text}".`;
     }
+    if (command.tool === 'doc-gen') {
+      // Document Studio estilo Astra: la IA redacta el contenido,
+      // aquí se convierte a .docx/.pptx/.xlsx real y descargable.
+      const kindLabel = { documento: 'documento', presentacion: 'presentación', hoja: 'hoja de cálculo' }[command.kind] || command.kind;
+      send('log', { type: 'run', title: `Creando ${kindLabel}`, detail: command.title });
+      send('computer', { mode: 'docs', action: 'start', kind: command.kind, title: command.title });
+      const result = await tools.generateDocument({
+        kind: command.kind,
+        title: command.title,
+        brief: command.brief,
+        sessionId: session.id,
+        sessionDir: session.dir,
+        generateText: (prompt) => generateText(prompt),
+        onStep: (step) => {
+          if (step.type === 'doc_content') send('log', { type: 'info', title: 'Redactando contenido con IA...' });
+        },
+      });
+      send('log', { type: 'ok', title: `${kindLabel} listo: ${result.fileName}`, detail: `${Math.round(result.bytes / 1024)} KB` });
+      send('computer', { mode: 'docs', action: 'done', kind: command.kind, title: command.title, fileName: result.fileName, bytes: result.bytes, url: result.downloadUrl });
+      const cap = kindLabel[0].toUpperCase() + kindLabel.slice(1);
+      return `### ${cap} creado: "${command.title}"\n\n[Descargar ${result.fileName}](${result.downloadUrl}) (${Math.round(result.bytes / 1024)} KB)`;
+    }
   } catch (e) {
     send('log', { type: 'err', title: `Error en herramienta (${command.tool})`, detail: e.message });
     return `### Error ejecutando herramienta "${command.tool}"\n${e.message}`;
@@ -435,6 +514,11 @@ router.post('/chat', async (req, res) => {
       memory: session.memory,
     });
 
+    // Contexto largo estilo Astra: si el historial creció demasiado,
+    // se resume la parte vieja en un bloque compacto en vez de
+    // truncarla a ciegas. No rompe el turno si falla.
+    await maybeCompactHistory(session);
+
     const messages = [
       { role: 'system', content: systemPrompt },
       ...(session.history || []).slice(-14),
@@ -472,12 +556,13 @@ router.post('/chat', async (req, res) => {
     const userToolCommands = extractToolCommands(message);
     const seenToolCommands = new Set(userToolCommands.map((c) => JSON.stringify(c)));
     if (userToolCommands.length) {
-      send('log', { type: 'run', title: 'Ejecutando tu comando...' });
-      const preToolResults = [];
-      for (const toolCommand of userToolCommands) {
-        const toolText = await runToolCommand(toolCommand, send, session);
-        if (toolText) preToolResults.push(toolText);
-      }
+      // Multitarea estilo Astra: las herramientas independientes
+      // corren en paralelo en vez de una por una.
+      send('log', { type: 'run', title: userToolCommands.length > 1 ? `Ejecutando ${userToolCommands.length} comandos en paralelo...` : 'Ejecutando tu comando...' });
+      const preToolTexts = await Promise.all(
+        userToolCommands.map((toolCommand) => runToolCommand(toolCommand, send, session))
+      );
+      const preToolResults = preToolTexts.filter(Boolean);
       if (preToolResults.length) {
         visibleResult = visibleResult
           ? `${visibleResult}\n\n${preToolResults.join('\n\n')}`
@@ -554,8 +639,12 @@ router.post('/chat', async (req, res) => {
 
       if (!commands.length && !diffResults.length && !requestedTools.length) break;
 
-      for (const toolCommand of requestedTools) {
-        const toolText = await runToolCommand(toolCommand, send, session);
+      // Multitarea estilo Astra: herramientas independientes en
+      // paralelo; el orden de los resultados se conserva.
+      const roundToolTexts = await Promise.all(
+        requestedTools.map((toolCommand) => runToolCommand(toolCommand, send, session))
+      );
+      for (const toolText of roundToolTexts) {
         if (toolText) toolResults.push(toolText);
       }
 

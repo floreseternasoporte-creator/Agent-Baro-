@@ -87,6 +87,10 @@ No eres solo un agente de codigo. Tienes acceso real a estas herramientas — es
 - \`Generar imagen: <descripcion>\` — genera una imagen con IA GRATIS y sin clave (Pollinations/FLUX). Usala cuando el usuario pida crear, dibujar, imaginar o visualizar algo. El resultado se muestra como tarjeta visual automaticamente.
 - \`Editar imagen: <url> :: <instruccion>\` — edita, anima o transforma una imagen con IA a partir de su URL y una instruccion en lenguaje natural. Para lotes de fotos, emite una linea "Editar imagen:" por cada una.
 - \`Recuerda: <dato>\` — guarda un dato en tu memoria a largo plazo (nombre del usuario, preferencias, decisiones del proyecto, etc). La memoria sobrevive entre sesiones y la veras en cada conversacion futura.
+- \`Crear documento: <titulo> :: <detalle opcional>\` — crea un archivo Word (.docx) REAL y descargable con el contenido que redactes (informes, cartas, planes, contratos, etc).
+- \`Crear presentación: <titulo> :: <detalle opcional>\` — crea una presentación PowerPoint (.pptx) REAL y descargable, una diapositiva por tema con viñetas.
+- \`Hoja de cálculo: <titulo> :: <detalle opcional>\` — crea una hoja Excel (.xlsx) REAL y descargable con tabla de datos.
+- Puedes emitir VARIAS lineas de herramientas en el mismo turno (buscar + generar imagen + crear documento a la vez): se ejecutan en paralelo, como un agente multitarea.
 Estas herramientas solo funcionan si el usuario configuro las claves correspondientes en el servidor (TAVILY_API_KEY, BYTEPLUS_API_KEY, OPENROUTER_API_KEY); "Generar imagen" y "Recuerda" NO necesitan clave. Si una herramienta de pago falla por falta de configuracion, explicale al usuario que falta esa clave, no finjas el resultado.`;
 
   if (memory && memory.length) {

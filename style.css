@@ -754,6 +754,21 @@ html,body{
   0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.45)}
   50%{box-shadow:0 0 0 9px rgba(239,68,68,0)}
 }
+/* ── Botón de modo voz (conversación continua) ── */
+#voicemodebtn{
+  width:44px;height:44px;border-radius:14px;
+  border:1.5px solid var(--border);background:var(--bg2);color:var(--fg2);
+  cursor:pointer;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .14s;align-self:flex-end;
+}
+#voicemodebtn svg{width:20px;height:20px}
+#voicemodebtn:active{transform:scale(.91)}
+#voicemodebtn.active{
+  background:linear-gradient(135deg,#7c5cff,#00d4ff);
+  border-color:transparent;color:#fff;
+  animation:micpulse 1.6s ease-in-out infinite;
+}
 /* Botón "Leer" activo mientras habla */
 .ma-btn.speaking{background:var(--accent);color:#fff;border-color:var(--accent)}
 
@@ -775,6 +790,24 @@ html,body{
   animation:cvshimmer 1.2s linear infinite;
 }
 @keyframes cvshimmer{to{background-position:-200% 0}}
+
+/* ── Tarjetas del Document Studio (vista "computadora") ── */
+#cv-docs-list{display:flex;flex-direction:column;gap:10px}
+.cv-doc-gen,.cv-doc-done{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 14px;border-radius:12px;
+  border:1px solid var(--border);background:var(--bg2);
+}
+.cv-doc-icon{font-size:30px;line-height:1;flex-shrink:0}
+.cv-doc-meta{flex:1;min-width:0}
+.cv-doc-name{font-weight:700;font-size:14px;word-break:break-all}
+.cv-doc-sub{font-size:12px;color:var(--fg2);margin-top:2px;line-height:1.4}
+.cv-doc-dl{
+  flex-shrink:0;font-size:13px;font-weight:700;color:#fff;
+  background:linear-gradient(135deg,#7c5cff,#00d4ff);
+  padding:9px 14px;border-radius:10px;text-decoration:none;
+}
+.cv-doc-dl:active{transform:scale(.95)}
 
 /* ══ BOTTOM NAVIGATION ════════════════════ */
 #bottomnav{

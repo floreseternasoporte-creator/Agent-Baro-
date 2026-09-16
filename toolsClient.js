@@ -398,11 +398,200 @@ async function generateImage({ prompt, width, height, onStep }) {
   return { imageUrl, prompt: String(prompt).trim() };
 }
 
+// ─────────────────────────────────────────────────────────
+// DOCUMENT STUDIO — documentos, presentaciones y hojas de
+// cálculo REALES (.docx / .pptx / .xlsx), como las que crea
+// el modo agente de ChatGPT/Astra. Sin clave, sin servicios
+// externos: el contenido lo redacta la IA del agente y aquí
+// se convierte a archivo Office de verdad, descargable.
+// onStep(evento): doc_start { kind, title } ->
+//   doc_content (redactando) -> doc_done { fileName, bytes }.
+// Devuelve { fileName, bytes, downloadUrl, kind, title }.
+// ─────────────────────────────────────────────────────────
+const fs = require('fs');
+const path = require('path');
+const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = require('docx');
+const PptxGenJS = require('pptxgenjs');
+const ExcelJS = require('exceljs');
+
+const DOC_KINDS = {
+  documento: { ext: 'docx', label: 'documento' },
+  presentacion: { ext: 'pptx', label: 'presentación' },
+  hoja: { ext: 'xlsx', label: 'hoja de cálculo' },
+};
+
+function slugifyFileName(s) {
+  return String(s || 'documento')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '').slice(0, 60) || 'documento';
+}
+
+// Divide el markdown en bloques simples: h1/h2/h3/viñeta/párrafo.
+function parseDocBlocks(md) {
+  const blocks = [];
+  for (const rawLine of String(md || '').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    let m;
+    if ((m = line.match(/^###\s+(.*)/))) blocks.push({ type: 'h3', text: m[1] });
+    else if ((m = line.match(/^##\s+(.*)/))) blocks.push({ type: 'h2', text: m[1] });
+    else if ((m = line.match(/^#\s+(.*)/))) blocks.push({ type: 'h1', text: m[1] });
+    else if ((m = line.match(/^[-*]\s+(.*)/))) blocks.push({ type: 'li', text: m[1] });
+    else if (/^\|.*\|$/.test(line)) continue; // las tablas se manejan aparte en hojas
+    else if (/^---+$/.test(line)) continue;
+    else blocks.push({ type: 'p', text: line.replace(/\*\*/g, '') });
+  }
+  return blocks;
+}
+
+// Convierte **negrita** en segmentos { text, bold }.
+function inlineSegments(text) {
+  const segs = [];
+  const re = /\*\*(.+?)\*\*/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) segs.push({ text: text.slice(last, m.index) });
+    segs.push({ text: m[1], bold: true });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) segs.push({ text: text.slice(last) });
+  return segs.length ? segs : [{ text }];
+}
+
+function docxParagraph(block) {
+  const runs = inlineSegments(block.text).map((s) => new TextRun({ text: s.text, bold: !!s.bold, size: 22 }));
+  if (block.type === 'h1') return new Paragraph({ heading: HeadingLevel.HEADING_1, children: runs });
+  if (block.type === 'h2') return new Paragraph({ heading: HeadingLevel.HEADING_2, children: runs });
+  if (block.type === 'h3') return new Paragraph({ heading: HeadingLevel.HEADING_3, children: runs });
+  if (block.type === 'li') return new Paragraph({ bullet: { level: 0 }, children: runs });
+  return new Paragraph({ children: runs });
+}
+
+async function buildDocxFile(title, blocks, fullPath) {
+  const doc = new Document({
+    sections: [{
+      children: [
+        new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun({ text: title, size: 52, bold: true })] }),
+        new Paragraph({ children: [new TextRun({ text: ' ', size: 16 })] }),
+        ...blocks.map(docxParagraph),
+      ],
+    }],
+  });
+  const buffer = await Packer.toBuffer(doc);
+  fs.writeFileSync(fullPath, buffer);
+}
+
+async function buildPptxFile(title, blocks, fullPath) {
+  const pptx = new PptxGenJS();
+  pptx.defineLayout({ name: 'WIDE', width: 13.33, height: 7.5 });
+  pptx.layout = 'WIDE';
+  // Diapositiva de título
+  const cover = pptx.addSlide();
+  cover.background = { color: '1B1B22' };
+  cover.addText(title, { x: 0.8, y: 2.2, w: 11.7, h: 1.6, fontSize: 40, bold: true, color: 'FFFFFF', align: 'center' });
+  cover.addText('Generado por DevAgent', { x: 0.8, y: 4.2, w: 11.7, h: 0.6, fontSize: 16, color: '9A9AAD', align: 'center' });
+  // Una diapositiva por cada ## (o #), con sus viñetas
+  let current = null;
+  const slides = [];
+  for (const b of blocks) {
+    if (b.type === 'h1' || b.type === 'h2') { current = { title: b.text, bullets: [] }; slides.push(current); }
+    else if (current && (b.type === 'li' || b.type === 'p')) current.bullets.push(b.text);
+    else if (!current && b.type === 'p') { current = { title: title, bullets: [b.text] }; slides.push(current); }
+  }
+  for (const s of slides.slice(0, 20)) {
+    const slide = pptx.addSlide();
+    slide.background = { color: 'FFFFFF' };
+    slide.addText(s.title, { x: 0.7, y: 0.4, w: 11.9, h: 1.0, fontSize: 30, bold: true, color: '1B1B22' });
+    if (s.bullets.length) {
+      slide.addText(s.bullets.map((t) => ({ text: t, options: { bullet: { indent: 18 }, breakLine: true } })),
+        { x: 0.9, y: 1.7, w: 11.5, h: 5.2, fontSize: 18, color: '333333', valign: 'top' });
+    }
+  }
+  await pptx.writeFile({ fileName: fullPath });
+}
+
+// Extrae la primera tabla markdown (| a | b |) para la hoja.
+function parseMarkdownTable(md) {
+  const rows = [];
+  for (const rawLine of String(md || '').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!/^\|.*\|$/.test(line)) continue;
+    if (/^\|[\s|:-]+\|$/.test(line)) continue; // fila separadora
+    rows.push(line.split('|').slice(1, -1).map((c) => c.trim().replace(/\*\*/g, '')));
+  }
+  return rows.filter((r) => r.length > 0);
+}
+
+async function buildXlsxFile(title, md, fullPath) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'DevAgent';
+  const ws = wb.addWorksheet(slugifyFileName(title).slice(0, 28) || 'Hoja1');
+  const table = parseMarkdownTable(md);
+  if (table.length) {
+    const header = table[0];
+    ws.addRow(header);
+    ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C5CFF' } };
+    for (const row of table.slice(1, 200)) ws.addRow(row);
+    ws.columns = header.map((h) => ({ width: Math.min(42, Math.max(14, String(h).length + 4)) }));
+  } else {
+    // Sin tabla: vuelca los bloques como lista en la columna A.
+    ws.addRow([title]);
+    ws.getRow(1).font = { bold: true, size: 14 };
+    for (const b of parseDocBlocks(md).slice(0, 300)) ws.addRow([b.text]);
+    ws.getColumn(1).width = 90;
+  }
+  await wb.xlsx.writeFile(fullPath);
+}
+
+function docPromptFor(kind, title, brief) {
+  const extra = brief ? `\nEnfoque/contenido pedido: ${brief}` : '';
+  if (kind === 'presentacion') {
+    return `Escribe el contenido de una presentación profesional en español sobre: "${title}".${extra}\n\nFormato markdown estricto:\n- Cada diapositiva empieza con ## seguido del título de la diapositiva\n- Debajo, de 3 a 5 viñetas con "- " (frases cortas, impactantes)\n- Entre 6 y 10 diapositivas\n- Nada de introducciones ni comentarios meta: SOLO el contenido markdown.`;
+  }
+  if (kind === 'hoja') {
+    return `Genera los datos de una hoja de cálculo en español sobre: "${title}".${extra}\n\nFormato markdown estricto:\n- SOLO una tabla markdown: primera línea con encabezados entre | |, segunda línea con |---|, luego de 8 a 20 filas de datos realistas\n- Nada de texto fuera de la tabla: ni introducción ni comentarios.`;
+  }
+  return `Escribe un documento profesional en español sobre: "${title}".${extra}\n\nFormato markdown estricto:\n- Empieza con # seguido del título\n- Secciones con ##, párrafos desarrollados y listas con "- " donde ayuden\n- Tono claro y útil, contenido sustancial (no relleno)\n- Nada de comentarios meta: SOLO el contenido del documento.`;
+}
+
+async function generateDocument({ kind, title, brief, sessionId, sessionDir, generateText, onStep }) {
+  const def = DOC_KINDS[kind];
+  if (!def) throw new Error(`Tipo de documento desconocido: ${kind}`);
+  const cleanTitle = String(title || 'Sin título').trim();
+  if (!cleanTitle) throw new Error('Falta el título del documento.');
+  if (typeof generateText !== 'function') throw new Error('generateDocument necesita generateText (IA).');
+
+  onStep?.({ type: 'doc_start', kind, title: cleanTitle });
+  onStep?.({ type: 'doc_content', detail: 'redactando contenido con IA' });
+  const md = await generateText(docPromptFor(kind, cleanTitle, brief));
+  if (!md || !md.trim()) throw new Error('La IA no devolvió contenido para el documento.');
+
+  const docsDir = path.join(sessionDir, 'docs');
+  fs.mkdirSync(docsDir, { recursive: true });
+  const fileName = `${slugifyFileName(cleanTitle)}.${def.ext}`;
+  const fullPath = path.join(docsDir, fileName);
+
+  onStep?.({ type: 'doc_build', detail: `construyendo ${fileName}` });
+  if (kind === 'presentacion') await buildPptxFile(cleanTitle, parseDocBlocks(md), fullPath);
+  else if (kind === 'hoja') await buildXlsxFile(cleanTitle, md, fullPath);
+  else await buildDocxFile(cleanTitle, parseDocBlocks(md), fullPath);
+
+  const bytes = fs.statSync(fullPath).size;
+  onStep?.({ type: 'doc_done', kind, title: cleanTitle, fileName, bytes });
+  return {
+    kind, title: cleanTitle, fileName, bytes,
+    downloadUrl: `/api/files/download?sessionId=${encodeURIComponent(sessionId)}&file=${encodeURIComponent('docs/' + fileName)}`,
+  };
+}
+
 module.exports = {
   webSearch,
   wikipediaLookup,
   generateVideo,
   generateImage,
+  generateDocument,
   editImage,
   editImageBatch,
   getVideoUsageToday,

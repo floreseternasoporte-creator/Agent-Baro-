@@ -13,7 +13,16 @@
 //   Generar imagen: un castillo flotante al atardecer, estilo anime
 //   Editar imagen: <url> :: ponle un sombrero de mago
 //   Recuerda: mi nombre es Darel y mi proyecto se llama Atenis
+//   Crear documento: Plan de marketing :: para una cafetería, 5 secciones
+//   Crear presentación: Mi startup :: 8 diapositivas para inversores
+//   Hoja de cálculo: Presupuesto 2026 :: ingresos y gastos mensuales
 // ═══════════════════════════════════════════════════════
+
+// "Título :: detalle" -> { title, brief }. El :: es opcional.
+function splitDocArgs(raw) {
+  const parts = String(raw || '').split(/\s*::\s*/);
+  return { title: (parts[0] || '').trim(), brief: parts.slice(1).join(' :: ').trim() };
+}
 
 function extractToolCommands(text) {
   const commands = [];
@@ -56,6 +65,27 @@ function extractToolCommands(text) {
       const text = match[1];
       const key = `memory\u0000${text}`;
       if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'memory', text }); }
+      continue;
+    }
+
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Crear documento:\s*(.+?)\s*$/i))) {
+      const { title, brief } = splitDocArgs(match[1]);
+      const key = `docgen\u0000documento\u0000${title}\u0000${brief}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'doc-gen', kind: 'documento', title, brief }); }
+      continue;
+    }
+
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Crear presentaci[oó]n:\s*(.+?)\s*$/i))) {
+      const { title, brief } = splitDocArgs(match[1]);
+      const key = `docgen\u0000presentacion\u0000${title}\u0000${brief}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'doc-gen', kind: 'presentacion', title, brief }); }
+      continue;
+    }
+
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Hoja de c[aá]lculo:\s*(.+?)\s*$/i))) {
+      const { title, brief } = splitDocArgs(match[1]);
+      const key = `docgen\u0000hoja\u0000${title}\u0000${brief}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'doc-gen', kind: 'hoja', title, brief }); }
       continue;
     }
 

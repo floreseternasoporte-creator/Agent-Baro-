@@ -9,11 +9,35 @@
 // ═══════════════════════════════════════════════════════
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { getSession } = require('./sessionStore');
 const git = require('./gitAgent');
 const { runCommand, TASK_PRESETS, ALLOWED_BINARIES } = require('./commandRunner');
 
 const router = express.Router();
+
+// ─────────────────────────────────────────────────────────
+// Descarga de archivos generados por el agente (Document
+// Studio: .docx/.pptx/.xlsx en workspaces/<sid>/docs/).
+// Solo sirve archivos DENTRO del workspace de la sesión:
+// cualquier intento de salir (..) se rechaza.
+// ─────────────────────────────────────────────────────────
+router.get('/files/download', (req, res) => {
+  const session = getSession(req.query.sessionId);
+  if (!session) return res.status(404).json({ error: 'Sesión no encontrada o expirada' });
+  const rel = String(req.query.file || '').replace(/\\/g, '/');
+  if (!rel || rel.includes('\0')) return res.status(400).json({ error: 'Archivo inválido' });
+  const base = path.resolve(session.dir);
+  const full = path.resolve(base, rel);
+  if (full !== base && !full.startsWith(base + path.sep)) {
+    return res.status(400).json({ error: 'Ruta no permitida' });
+  }
+  if (!fs.existsSync(full) || !fs.statSync(full).isFile()) {
+    return res.status(404).json({ error: 'Archivo no encontrado' });
+  }
+  res.download(full, path.basename(full));
+});
 
 router.post('/agent/apply-diff', async (req, res) => {
   const { sessionId, diff } = req.body || {};
