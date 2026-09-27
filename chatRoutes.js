@@ -8,9 +8,10 @@
 // ═══════════════════════════════════════════════════════
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { getSession } = require('./sessionStore');
 const git = require('./gitAgent');
-const openrouter = require('./openrouterClient');
 const groq = require('./groqClient');
 const ollama = require('./ollamaClient');
 const { runCommand, extractAutomaticCommands } = require('./commandRunner');
@@ -21,30 +22,27 @@ const { runComputerTask } = require('./computerTask');
 const router = express.Router();
 // Rondas automáticas por turno: el modelo puede pedir herramientas,
 // diffs y comandos en cadena y el sistema los ejecuta y le devuelve
-// los resultados para que continúe. 8 rondas sostienen tareas de
-// horizonte largo estilo Astra (investigar → editar → probar →
-// corregir) sin cortar el flujo a la mitad.
+// los resultados para que continúe. 12 rondas sostienen tareas de
+// horizonte largo (investigar → editar → revisar → probar →
+// corregir) sin cortar el flujo a la mitad. Los topes por ronda
+// (5 comandos, diffs deduplicados) evitan loops infinitos.
 const MAX_AUTOMATIC_ROUNDS = 8;
 const MAX_COMMANDS_PER_ROUND = 5;
 const MAX_COMMAND_CONTEXT_BYTES = 30_000;
 
 // ── Cadena de proveedores con FAILOVER AUTOMATICO ──────────
-// Orden (2026-09-27, upgrade nivel Astra):
-//   1. OpenRouter → GPT-6 Astra, el flagship de OpenAI (de pago;
-//      requiere OPENROUTER_API_KEY con crédito). Si falla, cae
-//      a la rotación de modelos gratuitos del propio OpenRouter.
-//   2. Groq → Llama 3.3 70B (rápido, gratis con GROQ_API_KEY).
-//   3. Pollinations → GRATIS y SIN CLAVE, siempre disponible.
-//   4. Ollama local.
-// El chat NUNCA muere por falta de claves: sin ninguna
-// configurada responde igual con Pollinations. Se resuelve EN
-// CADA REQUEST (no al arrancar), así que agregar una key no
-// requiere reiniciar el servidor.
+// Stack 100% GRATUITO (2026-09-27, v3 brutal sin OpenRouter):
+//   1. Groq → Llama 3.3 70B (gratis con GROQ_API_KEY, rápido).
+//   2. Pollinations → GRATIS y SIN CLAVE, siempre disponible.
+//   3. Ollama local.
+// El chat NUNCA muere por falta de claves: sin GROQ_API_KEY
+// responde igual con Pollinations. Se resuelve EN CADA REQUEST
+// (no al arrancar), así que agregar una key no requiere
+// reiniciar el servidor.
 const pollinations = require('./pollinationsClient');
 
 function providerChain() {
   const chain = [];
-  if (process.env.OPENROUTER_API_KEY) chain.push({ name: 'OpenRouter · GPT-6 Astra', client: openrouter });
   if (process.env.GROQ_API_KEY) chain.push({ name: 'Groq', client: groq });
   chain.push({ name: 'Pollinations (gratis)', client: pollinations });
   chain.push({ name: 'Ollama local', client: ollama });
@@ -105,6 +103,54 @@ async function generateText(prompt, signal) {
     }
   }
   throw new Error(`Ningún proveedor pudo generar texto: ${lastError?.message || 'desconocido'}`);
+}
+
+/**
+ * Auto-review estilo Astra: antes de aplicar un diff, un segundo
+ * pase del modelo actúa como revisor senior. Si lo rechaza, el diff
+ * NO se aplica y el motivo vuelve al loop para que el agente lo
+ * corrija. Si el revisor falla, no se bloquea: se aplica y se
+ * verifica después con pruebas reales.
+ * Devuelve { approved: boolean, reason: string }.
+ */
+async function reviewDiffWithAI(diffBlock, generateTextFn) {
+  const verdict = await generateTextFn(
+    'Actúa como revisor de código senior, estricto pero justo. Analiza el siguiente diff unificado.\n' +
+    'Responde EXACTAMENTE en este formato (dos líneas):\n' +
+    'VEREDICTO: SI o NO\n' +
+    'MOTIVO: <una sola línea>\n\n' +
+    'Aprueba (SI) solo si el diff es sintácticamente válido, los paths parecen correctos y el cambio es seguro y coherente con lo que pretende. ' +
+    'Rechaza (NO) si ves errores de sintaxis, paths que no existen, cambios destructivos sin justificación, o secretos/credenciales hardcodeados.\n\n' +
+    '```diff\n' + diffBlock.slice(0, 6000) + '\n```'
+  );
+  const m = /VEREDICTO:\s*(SI|NO)/i.exec(verdict || '');
+  const approved = m ? m[1].toUpperCase() === 'SI' : true;
+  const reasonM = /MOTIVO:\s*(.+)/i.exec(verdict || '');
+  return { approved, reason: (reasonM ? reasonM[1] : 'sin motivo').trim().slice(0, 300) };
+}
+
+/**
+ * Verificación automática estilo Astra: si el repo tiene script de
+ * test en package.json, se ejecuta una vez por turno después de
+ * aplicar cambios y el resultado vuelve al loop del agente para
+ * que corrija fallos sin que el usuario mueva un dedo.
+ * Devuelve el bloque de texto para el modelo, o null si no aplica.
+ */
+async function runAutoTests(session, send) {
+  try {
+    const pkgPath = path.join(session.dir, 'package.json');
+    if (!fs.existsSync(pkgPath)) return null;
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    if (!pkg.scripts || !pkg.scripts.test) return null;
+    send('log', { type: 'run', title: 'Verificación automática: ejecutando npm test…' });
+    const res = await runCommand('npm', ['test', '--silent'], session.dir, 120000);
+    const out = truncateCommandOutput(res.stdout || res.stderr || res.error || '(sin salida)');
+    send('log', { type: res.ok ? 'ok' : 'err', title: res.ok ? 'Verificación: tests pasaron' : 'Verificación: tests fallaron', detail: out.slice(0, 300) });
+    session.addLog({ type: res.ok ? 'ok' : 'err', title: 'Auto-test npm', detail: out.slice(0, 300) });
+    return `### Verificación automática (npm test): ${res.ok ? '✅ PASARON' : '❌ FALLARON'}\n\`\`\`\n${out.slice(0, 3000)}\n\`\`\`${res.ok ? '' : '\nCorrige los fallos con otro diff exacto y vuelve a verificar.'}`;
+  } catch (e) {
+    return null;
+  }
 }
 
 /**
@@ -355,6 +401,13 @@ async function runToolCommand(command, send, session, signal) {
   };
 
   try {
+    if (command.tool === 'session-note') {
+      // Nota duradera de sesión estilo Astra: interna, no se muestra
+      // como bloque al usuario (return null la excluye del texto visible).
+      const saved = session.addNote(command.text);
+      send('log', { type: 'info', title: saved ? 'Nota guardada en la memoria de la sesión' : 'Nota duplicada, ignorada', detail: String(command.text).slice(0, 100) });
+      return null;
+    }
     if (command.tool === 'search') {
       const result = await tools.webSearch({ query: command.query, onStep });
       const lines = result.results.map((r, i) => `${i + 1}. **${r.title}** — ${r.url}\n   ${r.snippet}`).join('\n\n');
@@ -460,6 +513,7 @@ async function runToolCommand(command, send, session, signal) {
 
 function summarizeDiffResults(results) {
   return results.map((result) => {
+    if (typeof result === 'string') return result; // bloque de rechazo del revisor, ya formateado
     const state = result.applied
       ? `aplicado automáticamente (${result.bytes} bytes)`
       : result.alreadyApplied
@@ -659,6 +713,9 @@ router.post('/chat', async (req, res) => {
 
     const seenDiffs = new Set();
     let autoAppliedPaths = [];
+    // Verificación automática: una vez por turno como máximo.
+    let autoTestDone = false;
+    const verifyResults = [];
     // Registro de CADA bloque de diff que el backend ya proceso (aplicado
     // o no) durante este turno, junto con su texto crudo. El frontend lo
     // usa para no repintar un boton "Aplicar" activo sobre un diff que el
@@ -693,6 +750,24 @@ router.post('/chat', async (req, res) => {
           const diffKey = diffBlock.trim();
           if (!diffKey || seenDiffs.has(diffKey)) continue;
           seenDiffs.add(diffKey);
+          // ── Auto-review estilo Astra: segundo pase del modelo como
+          // revisor ANTES de tocar el disco. Un rechazo no rompe el
+          // turno: el motivo vuelve al loop y el agente lo corrige.
+          send('log', { type: 'run', title: 'Revisando cambio antes de aplicarlo…' });
+          let review = { approved: true, reason: '' };
+          try {
+            review = await reviewDiffWithAI(diffBlock, (p) => generateText(p, abortController.signal));
+          } catch (e) {
+            review = { approved: true, reason: `revisor no disponible (${e.message})` };
+          }
+          if (!review.approved) {
+            const reason = `Rechazado por revisión automática: ${review.reason}`;
+            send('log', { type: 'err', title: 'Cambio rechazado por el revisor', detail: review.reason });
+            session.addLog({ type: 'err', title: 'Diff rechazado por auto-review', detail: review.reason });
+            diffResults.push(`### Diff RECHAZADO por el revisor (NO aplicado)\n${reason}\nCorrige el diff y vuelve a intentarlo.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
+            appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason, alreadyApplied: false });
+            continue;
+          }
           const results = await git.applyUnifiedDiff(session.dir, diffBlock);
           diffResults.push(...results);
           appliedDiffs.push({
@@ -715,6 +790,16 @@ router.post('/chat', async (req, res) => {
       }
 
       if (!commands.length && !diffResults.length && !requestedTools.length) break;
+
+      // ── Verificación automática estilo Astra: si este turno aplicó
+      // cambios y el repo tiene script de test, se corre una vez y el
+      // resultado vuelve al loop para auto-corrección.
+      const anyApplied = diffResults.some((r) => r && typeof r === 'object' && r.applied);
+      if (anyApplied && !autoTestDone) {
+        autoTestDone = true;
+        const testBlock = await runAutoTests(session, send);
+        if (testBlock) verifyResults.push(testBlock);
+      }
 
       // Multitarea estilo Astra: herramientas independientes en
       // paralelo; el orden de los resultados se conserva.
@@ -763,6 +848,8 @@ router.post('/chat', async (req, res) => {
           commandResults.length ? `## Resultados de comandos ejecutados automáticamente\n${commandResults.join('\n\n')}` : '',
           diffResults.length ? `## Cambios procesados automáticamente\n${summarizeDiffResults(diffResults)}` : '',
           toolResults.length ? `## Resultados de herramientas ejecutadas automáticamente (ya mostrados al usuario tal cual: PROHIBIDO repetir el bloque "###", las URLs o las imágenes — solo agrega, si aporta, un comentario breve interpretando ese resultado)\n${toolResults.join('\n\n')}` : '',
+          verifyResults.length ? `${verifyResults.join('\n\n')}` : '',
+          session.notesBlock(),
           '',
           'Continúa trabajando con estos resultados. No le pidas al usuario que copie, aplique o ejecute nada: el sistema ya realizó la acción. Si se usó una herramienta (búsqueda, Wikipedia, video o imagen), su resultado YA se mostró al usuario en una tarjeta visual — no repitas las URLs ni el bloque "###"; solo agrega, si aporta, un comentario breve interpretando o resumiendo ese resultado. Verifica los cambios de código con pruebas o comprobaciones apropiadas. Si algo falla, corrígelo con otro diff exacto y vuelve a verificar. Si ya está todo correcto, responde con un resumen claro.',
         ].join('\n'),

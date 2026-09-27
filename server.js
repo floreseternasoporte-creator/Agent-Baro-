@@ -22,7 +22,6 @@ const agentRoutes = require('./agentRoutes');
 const authRoutes = require('./authRoutes');
 const toolsRoutes = require('./toolsRoutes');
 
-const openrouter = require('./openrouterClient');
 const groq = require('./groqClient');
 const ollama = require('./ollamaClient');
 const pollinations = require('./pollinationsClient');
@@ -41,7 +40,7 @@ const PROJECT_ROOT = __dirname;
 app.disable('x-powered-by');
 // CORS: ANTES reflejaba CUALQUIER origen (origin: true) cuando no se
 // definia CORS_ORIGIN — cualquier web podia usar tu instancia como
-// proxy gratuito y quemar tus claves de Groq/OpenRouter. Ahora, por
+// proxy gratuito y quemar tus claves de Groq. Ahora, por
 // defecto, solo mismo-origen (el frontend vive en este mismo servidor,
 // asi que no necesita CORS). Define CORS_ORIGIN con dominios
 // explicitos solo si sirves el frontend desde otro dominio.
@@ -91,21 +90,17 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.get('/api/config', async (_req, res) => {
-  // Cadena real de proveedores (misma que usa /api/chat con failover):
-  // OpenRouter → GPT-6 Astra (flagship de OpenAI; de pago, requiere
-  // OPENROUTER_API_KEY con crédito; si falla cae a la rotación de
-  // modelos gratuitos del propio OpenRouter) > Groq (rápido, gratis
-  // con key) > Pollinations (GRATIS, sin clave, siempre disponible) >
-  // Ollama local. El chat NUNCA muere por falta de claves: sin
-  // GROQ_API_KEY ni OPENROUTER_API_KEY responde igual.
+  // Cadena real de proveedores (misma que usa /api/chat con failover),
+  // 100% gratuita: Groq (gratis con key) > Pollinations (GRATIS, sin
+  // clave, siempre disponible) > Ollama local. El chat NUNCA muere
+  // por falta de claves: sin GROQ_API_KEY responde igual.
   const chain = [];
-  if (process.env.OPENROUTER_API_KEY) chain.push('OpenRouter · GPT-6 Astra');
   if (process.env.GROQ_API_KEY) chain.push('Groq');
   chain.push('Pollinations (gratis)');
   chain.push('Ollama local');
   const providerName = chain[0];
   // El cliente "principal" es el primero de la cadena que tenga key.
-  const client = process.env.OPENROUTER_API_KEY ? openrouter : process.env.GROQ_API_KEY ? groq : pollinations;
+  const client = process.env.GROQ_API_KEY ? groq : pollinations;
   const ai = await client.checkHealth();
   res.json({
     ollamaReady: ai.ready, // legacy: en realidad es el health del cliente principal
@@ -124,7 +119,7 @@ app.get('/api/config', async (_req, res) => {
       deepResearch: !!process.env.TAVILY_API_KEY,
       wikipedia: true, // API pública, no requiere key
       video: !!process.env.BYTEPLUS_API_KEY,
-      imageEdit: !!process.env.OPENROUTER_API_KEY,
+      imageEdit: true, // Pollinations: gratis, sin clave, siempre
       imageGen: true, // Pollinations/FLUX: gratis, sin clave, siempre
       voice: true, // Web Speech API del navegador: dictado + lectura, sin clave
       voiceMode: true, // conversación continua por voz (habla <-> escucha), sin clave

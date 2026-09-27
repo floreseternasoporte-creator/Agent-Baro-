@@ -12,7 +12,7 @@ PORT=5000 npm start
 
 The Replit workflow is named `Start application`.
 
-Python 3.11 is enabled in `.replit` for repository checks such as `python -m compileall` and `pytest`. The autonomous loop still requires an active AI provider: configure `OPENROUTER_API_KEY` or run Ollama with the configured model.
+Python 3.11 is enabled in `.replit` for repository checks such as `python -m compileall` and `pytest`. The autonomous loop still requires an active AI provider: configure `GROQ_API_KEY` (free) or run Ollama with the configured model. Pollinations works with no key at all.
 
 ## User preferences
 

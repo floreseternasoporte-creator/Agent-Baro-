@@ -9,6 +9,7 @@
 //
 //   Buscar: últimas noticias sobre IA
 //   Investigación profunda: el estado de la fusión nuclear en 2026
+//   Nota: el usuario prefiere npm sobre yarn (memoria de la sesión)
 //   Wikipedia: torre eiffel
 //   Generar video: un gato astronauta caminando en la luna, 20s
 //   Generar imagen: un castillo flotante al atardecer, estilo anime
@@ -36,6 +37,13 @@ function extractToolCommands(text) {
       const query = match[1];
       const key = `search\u0000${query}`;
       if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'search', query }); }
+      continue;
+    }
+
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Nota:\s*(.+?)\s*$/i))) {
+      const text = match[1];
+      const key = `note\u0000${text}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'session-note', text }); }
       continue;
     }
 

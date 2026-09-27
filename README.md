@@ -1,8 +1,8 @@
 # Baro
 
-Agente autónomo de código e investigación de nivel élite: clona repos de verdad, lee y escribe archivos reales, ejecuta comandos reales (`npm`, `python`, `pytest`, etc.), verifica los cambios automáticamente y hace commit + push real a GitHub — todo desde una interfaz móvil. Piensa y trabaja como un modelo frontera: razona a fondo antes de actuar, sostiene tareas de horizonte largo sin perder el hilo (hasta 8 rondas automáticas por turno con herramientas, diffs y comandos encadenados) y verifica todo contra la realidad.
+Agente autónomo de código e investigación de nivel élite: clona repos de verdad, lee y escribe archivos reales, ejecuta comandos reales (`npm`, `python`, `pytest`, etc.), verifica los cambios automáticamente y hace commit + push real a GitHub — todo desde una interfaz móvil. Piensa y trabaja con arquitectura estilo Astra: auto-revisión de cada cambio antes de aplicarlo, verificación automática con tests reales, memoria duradera de sesión que sobrevive a los resúmenes, herramientas en paralelo y hasta 12 rondas automáticas por turno.
 
-Su cerebro principal es **GPT-6 Astra** (el flagship de OpenAI, vía OpenRouter) cuando hay `OPENROUTER_API_KEY` con crédito; si falla, cae automáticamente a una rotación de modelos gratuitos — y si no hay ninguna clave configurada, sigue funcionando gratis con Pollinations. Ver la sección [GPT-6 Astra y el failover](#gpt-6-astra-y-el-failover-de-proveedores).
+Stack **100% gratuito**: Groq (Llama 3.3 70B, gratis con key) → Pollinations (gratis, sin clave, siempre disponible) → Ollama local. Sin OpenRouter, sin pagos, sin tarjetas. Ver [Proveedores](#proveedores-100-gratuitos).
 
 Además de código, el agente tiene herramientas generales tipo Perplexity:
 - **Investigación profunda** — análisis a fondo estilo Deep Research: 4–6 búsquedas desde ángulos distintos, lectura de fuentes reales e informe estructurado con citas (ver abajo).
@@ -27,7 +27,6 @@ sessionStore.js      → Backend: sesiones/workspaces en memoria + disco
 gitAgent.js          → Backend: clonado, lectura/escritura, aplicacion segura de diffs, commit+push
 commandRunner.js     → Backend: ejecucion automatica de comandos reales con lista blanca de seguridad
 groqClient.js        → Backend: cliente de Groq (streaming SSE) con el prompt del agente Baro
-openrouterClient.js   → Backend: cliente de OpenRouter — GPT-6 Astra como cerebro principal, fallback a modelos gratuitos
 repoRoutes.js        → Backend: conectar repo, listar/leer archivos
 chatRoutes.js        → Backend: chat con streaming, enriquecido con archivos reales
 agentRoutes.js       → Backend: aplicar diffs, ejecutar comandos, push
@@ -66,28 +65,33 @@ El agente puede ejecutar proyectos JavaScript y Python. En Replit se incluye Pyt
    - `GITHUB_TOKEN` — un Personal Access Token con permiso `repo` (Settings → Developer settings → Personal access tokens en GitHub)
    - `AGENT_GIT_NAME` / `AGENT_GIT_EMAIL` — nombre/email que apareceran en los commits que haga el agente
    - `TAVILY_API_KEY` — clave gratuita de [tavily.com](https://tavily.com) para busqueda web en tiempo real
-   - `OPENROUTER_API_KEY` — activa **GPT-6 Astra** como cerebro principal del agente (ver [GPT-6 Astra](#gpt-6-astra-y-el-failover-de-proveedores)). También se usa para edición de imágenes con IA.
    - `BYTEPLUS_API_KEY` — clave de pago de BytePlus ModelArk para generar video con Seedance (opcional; sin ella, el agente sigue funcionando normalmente pero sin generar video)
 5. Railway asigna la variable `PORT` automaticamente; el servidor ya la lee (`process.env.PORT`), no hay que tocarla.
 6. Deploy. El healthcheck vive en `/api/health` y Railway lo usa para saber cuando el servicio esta listo.
 
 Si prefieres no poner las claves como variables de entorno del servidor, cualquier usuario puede pegarlas en **Configuracion** dentro de la app; quedan solo en su navegador (`localStorage`), nunca en el servidor.
 
-## GPT-6 Astra y el failover de proveedores
+## Proveedores 100% gratuitos
 
-Baro piensa con el mejor modelo disponible, sin que el usuario tenga que configurar nada:
+Baro funciona sin pagar nada, sin tarjetas y sin OpenRouter:
 
-1. **OpenRouter → GPT-6 Astra** (el flagship de OpenAI): se usa automáticamente cuando existe `OPENROUTER_API_KEY` con crédito. Si Astra falla (crédito agotado, rate limit, modelo no disponible), el propio OpenRouter cae a una **rotación de modelos gratuitos** del catálogo.
-2. **Groq** → Llama 3.3 70B (rápido, gratis con `GROQ_API_KEY`).
-3. **Pollinations** → **gratis y sin clave, siempre disponible**: el chat NUNCA muere por falta de claves; sin ninguna configurada responde igual.
-4. **Ollama local** → último recurso si el servidor lo tiene instalado.
+1. **Groq** → Llama 3.3 70B (rápido, gratis con `GROQ_API_KEY` de console.groq.com/keys).
+2. **Pollinations** → **gratis y sin clave, siempre disponible**: el chat NUNCA muere por falta de claves; sin ninguna configurada responde igual.
+3. **Ollama local** → último recurso si el servidor lo tiene instalado.
 
-La cadena se resuelve en cada request (no al arrancar), así que agregar una clave no requiere reiniciar. `GET /api/config` expone el proveedor y modelo activos; la UI muestra "GPT-6 Astra" / "GPT-6 Astra Pro" cuando corresponde (nunca afirma Astra si realmente entró un fallback).
+La cadena se resuelve en cada request (no al arrancar), así que agregar una clave no requiere reiniciar. `GET /api/config` expone el proveedor y modelo activos; la UI muestra "Llama 3.3 70B", "DeepSeek R1" o "Pollinations (gratis)" según corresponda.
 
-### Costos de GPT-6 Astra (vía OpenRouter)
-- **No es gratis**: es un modelo de pago por uso. Precios observados: entrada $0.01 / 1M tokens, salida $0.05 / 1M tokens (verifica los precios actuales en openrouter.ai, pueden cambiar).
-- Sin crédito en la key, el sistema cae solo a los modelos gratuitos de la rotación — el chat sigue funcionando.
-- `max_tokens` por respuesta: 16,384 en OpenRouter y Groq.
+`max_tokens` por respuesta: 16,384 en Groq.
+
+## Lo que Baro toma de Astra (sin pagar Astra)
+
+Investigamos la arquitectura publicada de GPT-6 Astra y la reimplementamos a nivel de harness sobre el stack gratuito:
+
+- **Auto-review**: cada diff pasa por un segundo pase del modelo como revisor senior ANTES de aplicarse. Un rechazo no rompe el turno: el motivo vuelve al loop y el agente corrige.
+- **Verificación automática**: tras aplicar cambios, si el repo tiene script de test, se ejecuta `npm test` solo y el resultado vuelve al loop para auto-corrección en el mismo turno.
+- **Memoria de dos capas**: historial de trabajo + notas duraderas de sesión (`Nota: ...`) donde el agente guarda decisiones, intentos fallidos y evidencia verificada — sobreviven a la compactación del contexto.
+- **Herramientas en paralelo**: búsquedas, Wikipedia e imágenes independientes se ejecutan a la vez.
+- **Auto-reparación**: los diffs que fallan se regeneran contra el contenido real del archivo, nunca se reenvían igual.
 
 ## Herramientas nuevas: investigación profunda, búsqueda, Wikipedia, video e imágenes
 
@@ -119,7 +123,7 @@ Estas herramientas funcionan de dos maneras:
 - `GET /api/tools/video/usage` devuelve cuantos videos quedan disponibles hoy.
 
 ### Edicion y animacion de imagenes con IA
-- Usa un modelo con soporte de imagenes via OpenRouter (misma `OPENROUTER_API_KEY` que ya usa el chat). Sirve para "edita esta foto", "quitale el fondo", "animala", etc. Para animar una imagen (convertirla en video), el resultado se puede pasar como `referenceImageUrl` a la generacion de video.
+- Usa Pollinations (modelo `kontext`, **gratis y sin clave**). Sirve para "edita esta foto", "quitale el fondo", "animala", etc. Para animar una imagen (convertirla en video), el resultado se puede pasar como `referenceImageUrl` a la generacion de video.
 - Soporta lotes: si le pasas una lista de fotos con la misma instruccion, las procesa una por una y reporta el progreso en vivo.
 - Endpoint: `POST /api/tools/image-edit` `{ imageUrl, instruction }` o `{ images: [...], instruction }` para lotes.
 

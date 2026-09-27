@@ -373,9 +373,11 @@ function updateStatusBadges() {
   el('ollama-warn-badge') && (el('ollama-warn-badge').style.display = ollamaOk ? 'none' : '');
   const provider = S.serverConfig?.aiProvider || 'IA configurada';
   const rawModel = S.serverConfig?.aiModel || S.serverConfig?.ollamaModel || 'modelo disponible';
-  // Nombre comercial bonito para el flagship; el resto se muestra tal cual.
-  const model = rawModel.includes('gpt-6-astra-pro') ? 'GPT-6 Astra Pro'
-    : rawModel.includes('gpt-6-astra') ? 'GPT-6 Astra'
+  // Nombre bonito para los modelos 100% gratuitos; el resto se muestra tal cual.
+  const model = rawModel.includes('llama-3.3-70b') ? 'Llama 3.3 70B'
+    : rawModel.includes('deepseek-r1') ? 'DeepSeek R1'
+    : rawModel.includes('llama-3.1-8b') ? 'Llama 3.1 8B'
+    : rawModel.includes('openai-fast') ? 'Pollinations (gratis)'
     : rawModel;
   const chain = (S.serverConfig?.providerChain || []).filter((p) => p !== provider);
   const chainTxt = chain.length ? ` · respaldo: ${chain.join(' → ')}` : '';

@@ -3,11 +3,10 @@
 // Proveedor GRATUITO y SIN CLAVE: la API publica de
 // Pollinations, compatible con OpenAI, con streaming SSE real.
 // Es el respaldo universal en la cadena de failover: si no hay
-// GROQ_API_KEY ni OPENROUTER_API_KEY configuradas (o GPT-6 Astra
-// falla), el agente SIGUE FUNCIONANDO sin que el usuario tenga
-// que pegar ninguna clave. Verificado en vivo el 2026-09-16: POST
-// https://text.pollinations.ai/openai con {"stream": true}
-// devuelve deltas SSE reales sin autenticacion.
+// GROQ_API_KEY configurada, el agente SIGUE FUNCIONANDO sin que
+// el usuario tenga que pegar ninguna clave. Verificado en vivo
+// el 2026-09-16: POST https://text.pollinations.ai/openai con
+// {"stream": true} devuelve deltas SSE reales sin autenticacion.
 // ═══════════════════════════════════════════════════════
 
 const { buildSystemPrompt } = require('./groqClient');
@@ -17,7 +16,7 @@ const DEFAULT_MODEL = process.env.POLLINATIONS_MODEL || 'openai-fast';
 
 /**
  * Chat con streaming SSE real. Misma firma que groqClient/
- * openrouterClient/ollamaClient para que el failover sea
+ * ollamaClient para que el failover sea
  * transparente: onDelta(chunk, fullText) por cada fragmento.
  */
 async function streamChat({ model, messages, signal, onDelta }) {

@@ -35,6 +35,13 @@ class Session {
     this.lastUsedAt = Date.now();
     this.history = [];          // [{role, content}] — historial de chat para dar contexto a la IA
     this.actionLog = [];        // log de acciones reales ejecutadas (para auditar, como hace Codex)
+    // Memoria duradera de sesión estilo Astra (two-layer memory):
+    // decisiones, restricciones, intentos fallidos y evidencia de
+    // verificación que sobreviven a la compactación del historial.
+    // El agente las escribe con "Nota: <texto>" y se inyectan en
+    // cada ronda posterior. No es la memoria a largo plazo del
+    // cliente ("Recuerda:"); es el cuaderno de trabajo de ESTA tarea.
+    this.notes = [];
     this.clientId = null;       // ID persistente del cliente (localStorage) para memoria real
     this.memory = this.loadMemory(); // legacy por sesión; se reemplaza con setClientId()
   }
@@ -112,6 +119,22 @@ class Session {
     // No dejar crecer el log indefinidamente en memoria
     if (this.actionLog.length > 500) this.actionLog.shift();
     return this.actionLog[this.actionLog.length - 1];
+  }
+
+  // Guarda una nota duradera de la sesión. Deduplica y limita a 50.
+  addNote(text) {
+    const clean = String(text || '').trim().slice(0, 500);
+    if (!clean) return false;
+    if (this.notes.includes(clean)) return false;
+    this.notes.push(clean);
+    if (this.notes.length > 50) this.notes.shift();
+    return true;
+  }
+
+  // Bloque listo para inyectar en el prompt de la siguiente ronda.
+  notesBlock() {
+    if (!this.notes.length) return '';
+    return `## NOTAS DURADERAS DE LA SESIÓN (no las olvides: decisiones, intentos fallidos y evidencia ya verificada)\n${this.notes.map((n, i) => `${i + 1}. ${n}`).join('\n')}`;
   }
 }
 

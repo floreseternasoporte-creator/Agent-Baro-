@@ -3,7 +3,8 @@
 // Todo lo que convierte a Baro en algo más que "solo
 // código": búsqueda web en tiempo real, investigación
 // profunda con citas, Wikipedia, generación de video con IA
-// (Seedance/BytePlus) y edición/animación de imágenes con IA. Cada función emite pasos vía un callback
+// (Seedance/BytePlus) y edición/animación de imágenes con IA
+// (Pollinations, gratis y sin clave). Cada función emite pasos vía un callback
 // onStep(evento) para que el frontend pueda mostrar en vivo
 // "qué está haciendo" el agente (qué página abrió, qué buscó,
 // en qué paso va el video, etc).
@@ -282,62 +283,47 @@ async function generateVideo({ prompt, durationSec = 15, referenceImageUrl = nul
 
 // ─────────────────────────────────────────────────────────
 // EDICIÓN / ANIMACIÓN DE IMÁGENES CON IA
-// Usa un modelo de imagen a través de OpenRouter (mismo
-// proveedor que ya usa el chat como fallback), que expone
-// modelos de edición/generación de imágenes por texto. Sirve
-// para: "edítame estas fotos", "anímame esta imagen" (esto
-// último delega a generateVideo con referenceImageUrl).
+// EDICIÓN DE IMÁGENES — Pollinations (GRATIS, SIN CLAVE).
+// El endpoint image.pollinations.ai acepta ?image=<url> para
+// editar/transformar una imagen existente con un modelo de
+// imagen (kontext). La URL resultante ES la imagen editada y se
+// muestra tal cual en el frontend. Sin claves, sin pagos.
 // ─────────────────────────────────────────────────────────
-const OPENROUTER_IMAGE_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const IMAGE_EDIT_MODEL = process.env.IMAGE_EDIT_MODEL || 'google/gemini-2.5-flash-image-preview';
+const IMAGE_EDIT_MODEL = process.env.IMAGE_EDIT_MODEL || 'kontext';
 
 async function editImage({ imageUrl, instruction, onStep }) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    const err = new Error('Falta OPENROUTER_API_KEY para edición de imágenes. Agrégala en las variables de entorno del servidor.');
+  if (!imageUrl || !String(imageUrl).trim()) {
+    throw new Error('Falta la URL de la imagen a editar.');
+  }
+  if (!instruction || !String(instruction).trim()) {
+    throw new Error('Falta la instrucción de edición.');
+  }
+
+  onStep?.({ type: 'image_edit_start', instruction: String(instruction).trim() });
+
+  const params = new URLSearchParams({
+    image: String(imageUrl).trim(),
+    model: IMAGE_EDIT_MODEL,
+    nologo: 'true',
+    private: 'true',
+    seed: String(Math.floor(Math.random() * 1_000_000_000)),
+  });
+  const outputImage = `https://image.pollinations.ai/prompt/${encodeURIComponent(String(instruction).trim())}?${params.toString()}`;
+
+  // Verificación ligera: un HEAD confirma que Pollinations acepta
+  // la petición (200) antes de devolver la URL al usuario.
+  try {
+    const head = await fetch(outputImage, { method: 'HEAD', signal: AbortSignal.timeout(15000) });
+    if (!head.ok) throw new Error(`Pollinations devolvió HTTP ${head.status}`);
+  } catch (e) {
+    const err = new Error(`No se pudo editar la imagen: ${e.message}`);
     err.status = 503;
     throw err;
   }
 
-  onStep?.({ type: 'image_edit_start', instruction });
+  onStep?.({ type: 'image_edit_done', hasImage: true });
 
-  const resp = await fetch(OPENROUTER_IMAGE_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: IMAGE_EDIT_MODEL,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: instruction },
-          { type: 'image_url', image_url: { url: imageUrl } },
-        ],
-      }],
-      modalities: ['image', 'text'],
-    }),
-  });
-
-  if (!resp.ok) {
-    let message = `Error ${resp.status} editando la imagen`;
-    try { message = (await resp.json()).error?.message || message; } catch {}
-    const err = new Error(message);
-    err.status = resp.status;
-    throw err;
-  }
-
-  const data = await resp.json();
-  const choice = data.choices?.[0]?.message;
-  const outputImage = choice?.images?.[0]?.image_url?.url || null;
-
-  onStep?.({ type: 'image_edit_done', hasImage: !!outputImage });
-
-  return {
-    imageUrl: outputImage,
-    note: choice?.content || null,
-  };
+  return { imageUrl: outputImage, note: null };
 }
 
 /** Procesa un lote de imágenes con la misma instrucción, en secuencia,
