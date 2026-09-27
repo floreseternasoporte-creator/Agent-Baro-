@@ -19,24 +19,33 @@ const tools = require('./toolsClient');
 const { runComputerTask } = require('./computerTask');
 
 const router = express.Router();
-const MAX_AUTOMATIC_ROUNDS = 4;
+// Rondas automáticas por turno: el modelo puede pedir herramientas,
+// diffs y comandos en cadena y el sistema los ejecuta y le devuelve
+// los resultados para que continúe. 8 rondas sostienen tareas de
+// horizonte largo estilo Astra (investigar → editar → probar →
+// corregir) sin cortar el flujo a la mitad.
+const MAX_AUTOMATIC_ROUNDS = 8;
 const MAX_COMMANDS_PER_ROUND = 5;
 const MAX_COMMAND_CONTEXT_BYTES = 30_000;
 
 // ── Cadena de proveedores con FAILOVER AUTOMATICO ──────────
-// Antes: pickAiClient() se evaluaba UNA SOLA VEZ al arrancar el
-// servidor. Si desplegabas sin claves, el chat moria con 503 para
-// siempre hasta reiniciar; y sin GROQ_API_KEY ni OPENROUTER_API_KEY
-// no habia ningun proveedor funcional (Ollama no existe en Railway).
-// Ahora: la cadena se resuelve EN CADA REQUEST y siempre termina en
-// Pollinations, que es GRATIS y SIN CLAVE (verificado en vivo).
-// El agente funciona out-of-the-box, como ChatGPT/Astra: abrir y hablar.
+// Orden (2026-09-27, upgrade nivel Astra):
+//   1. OpenRouter → GPT-6 Astra, el flagship de OpenAI (de pago;
+//      requiere OPENROUTER_API_KEY con crédito). Si falla, cae
+//      a la rotación de modelos gratuitos del propio OpenRouter.
+//   2. Groq → Llama 3.3 70B (rápido, gratis con GROQ_API_KEY).
+//   3. Pollinations → GRATIS y SIN CLAVE, siempre disponible.
+//   4. Ollama local.
+// El chat NUNCA muere por falta de claves: sin ninguna
+// configurada responde igual con Pollinations. Se resuelve EN
+// CADA REQUEST (no al arrancar), así que agregar una key no
+// requiere reiniciar el servidor.
 const pollinations = require('./pollinationsClient');
 
 function providerChain() {
   const chain = [];
+  if (process.env.OPENROUTER_API_KEY) chain.push({ name: 'OpenRouter · GPT-6 Astra', client: openrouter });
   if (process.env.GROQ_API_KEY) chain.push({ name: 'Groq', client: groq });
-  if (process.env.OPENROUTER_API_KEY) chain.push({ name: 'OpenRouter', client: openrouter });
   chain.push({ name: 'Pollinations (gratis)', client: pollinations });
   chain.push({ name: 'Ollama local', client: ollama });
   return chain;
@@ -258,7 +267,7 @@ async function readProjectProfile(dir, files) {
 // pasando (qué página se visita, en qué clip de video va, etc), y
 // devuelve un bloque de texto con el resultado real para inyectarlo
 // de vuelta en la conversación.
-async function runToolCommand(command, send, session) {
+async function runToolCommand(command, send, session, signal) {
   const onStep = (step) => {
     switch (step.type) {
       case 'search_start':
@@ -321,6 +330,26 @@ async function runToolCommand(command, send, session) {
       case 'batch_item_done':
         send('log', { type: 'ok', title: `Imagen ${step.index + 1}/${step.total} lista` });
         send('computer', { mode: 'terminal', action: 'output', text: `[imagen ${step.index + 1}/${step.total}] lista`, ok: true });
+        break;
+      // ── Investigación profunda estilo Astra ──
+      case 'research_start':
+        send('log', { type: 'run', title: 'Investigación profunda iniciada', detail: step.topic });
+        send('computer', { mode: 'browser', action: 'search', engine: 'web', query: step.topic });
+        break;
+      case 'research_angle':
+        send('log', { type: 'run', title: `Ángulo ${step.index + 1}/${step.total}: "${step.query}"` });
+        send('computer', { mode: 'browser', action: 'search', engine: 'web', query: step.query });
+        break;
+      case 'research_visit':
+        send('log', { type: 'info', title: `Leyendo fuente: ${new URL(step.url).hostname}`, detail: step.title });
+        send('computer', { mode: 'browser', action: 'visit', url: step.url, title: step.title, snippet: step.snippet });
+        break;
+      case 'research_synthesize':
+        send('log', { type: 'run', title: 'Sintetizando informe con las fuentes…', detail: `${step.sources} fuente(s)` });
+        send('computer', { mode: 'browser', action: 'search_done', count: step.sources });
+        break;
+      case 'research_done':
+        send('log', { type: 'ok', title: 'Investigación completada', detail: `${step.sources} fuente(s) consultadas` });
         break;
     }
   };
@@ -385,7 +414,7 @@ async function runToolCommand(command, send, session) {
         brief: command.brief,
         sessionId: session.id,
         sessionDir: session.dir,
-        generateText: (prompt) => generateText(prompt),
+        generateText: (prompt) => generateText(prompt, signal),
         onStep: (step) => {
           if (step.type === 'doc_content') send('log', { type: 'info', title: 'Redactando contenido con IA...' });
         },
@@ -404,9 +433,23 @@ async function runToolCommand(command, send, session) {
         task: command.task,
         session,
         send,
-        generateText: (prompt) => generateText(prompt),
+        generateText: (prompt) => generateText(prompt, signal),
       });
       return `### Modo computadora: "${command.task}"\n\n${result.ok ? '✅' : '⚠️'} ${result.summary}`;
+    }
+    if (command.tool === 'deep-research') {
+      // Investigación profunda estilo Astra: varias búsquedas desde
+      // ángulos distintos + lectura de fuentes + informe sintetizado
+      // con citas. El bloque se muestra tal cual al usuario.
+      const result = await tools.deepResearch({
+        topic: command.topic,
+        generateText: (prompt) => generateText(prompt, abortController.signal),
+        onStep,
+      });
+      const sourceList = result.sources
+        .map((s, i) => `${i + 1}. **${s.title}** — ${s.url}`)
+        .join('\n');
+      return `### Investigación profunda: "${command.topic}"\n\n${result.report}\n\n### Fuentes\n${sourceList}`;
     }
   } catch (e) {
     send('log', { type: 'err', title: `Error en herramienta (${command.tool})`, detail: e.message });
@@ -537,7 +580,7 @@ router.post('/chat', async (req, res) => {
     // Contexto largo estilo Astra: si el historial creció demasiado,
     // se resume la parte vieja en un bloque compacto en vez de
     // truncarla a ciegas. No rompe el turno si falla.
-    await maybeCompactHistory(session);
+    await maybeCompactHistory(session, abortController.signal);
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -588,11 +631,11 @@ router.post('/chat', async (req, res) => {
       const preRestIdx = [];
       userToolCommands.forEach((c, i) => (c.tool === 'computer' ? preComputerIdx : preRestIdx).push(i));
       for (const i of preComputerIdx) {
-        preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session);
+        preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, abortController.signal);
       }
       if (preRestIdx.length) {
         const rest = await Promise.all(
-          preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session))
+          preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session, abortController.signal))
         );
         preRestIdx.forEach((origI, k) => { preToolTexts[origI] = rest[k]; });
       }
@@ -681,11 +724,11 @@ router.post('/chat', async (req, res) => {
       const restIdx = [];
       requestedTools.forEach((c, i) => (c.tool === 'computer' ? computerIdx : restIdx).push(i));
       for (const i of computerIdx) {
-        roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session);
+        roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session, abortController.signal);
       }
       if (restIdx.length) {
         const rest = await Promise.all(
-          restIdx.map((i) => runToolCommand(requestedTools[i], send, session))
+          restIdx.map((i) => runToolCommand(requestedTools[i], send, session, abortController.signal))
         );
         restIdx.forEach((origI, k) => { roundToolTexts[origI] = rest[k]; });
       }
@@ -719,7 +762,7 @@ router.post('/chat', async (req, res) => {
         content: [
           commandResults.length ? `## Resultados de comandos ejecutados automáticamente\n${commandResults.join('\n\n')}` : '',
           diffResults.length ? `## Cambios procesados automáticamente\n${summarizeDiffResults(diffResults)}` : '',
-          toolResults.length ? `## Resultados de herramientas ejecutadas automáticamente (ya mostrados al usuario tal cual, NO los repitas ni los reformatees)\n${toolResults.join('\n\n')}` : '',
+          toolResults.length ? `## Resultados de herramientas ejecutadas automáticamente (ya mostrados al usuario tal cual: PROHIBIDO repetir el bloque "###", las URLs o las imágenes — solo agrega, si aporta, un comentario breve interpretando ese resultado)\n${toolResults.join('\n\n')}` : '',
           '',
           'Continúa trabajando con estos resultados. No le pidas al usuario que copie, aplique o ejecute nada: el sistema ya realizó la acción. Si se usó una herramienta (búsqueda, Wikipedia, video o imagen), su resultado YA se mostró al usuario en una tarjeta visual — no repitas las URLs ni el bloque "###"; solo agrega, si aporta, un comentario breve interpretando o resumiendo ese resultado. Verifica los cambios de código con pruebas o comprobaciones apropiadas. Si algo falla, corrígelo con otro diff exacto y vuelve a verificar. Si ya está todo correcto, responde con un resumen claro.',
         ].join('\n'),

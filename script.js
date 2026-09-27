@@ -116,6 +116,11 @@ const QUICK_TASKS = {
 // progreso real se ve en vivo en el panel de actividad.
 const TOOL_TASKS = [
   {
+    id: 'deepresearch', color: 'red', title: 'Investigación profunda', sub: 'Informe con fuentes citadas',
+    icon: '<circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.35-4.35\"/><path d=\"M11 8v6M8 11h6\"/>',
+    prompt: 'Investigación profunda: ',
+  },
+  {
     id: 'websearch', color: 'blue', title: 'Buscar en internet', sub: 'Resultados en tiempo real',
     icon: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>',
     prompt: 'Busca en internet informacion actual y relevante sobre: ',
@@ -367,7 +372,11 @@ function updateStatusBadges() {
   el('ollama-ok-badge') && (el('ollama-ok-badge').style.display = ollamaOk ? '' : 'none');
   el('ollama-warn-badge') && (el('ollama-warn-badge').style.display = ollamaOk ? 'none' : '');
   const provider = S.serverConfig?.aiProvider || 'IA configurada';
-  const model = S.serverConfig?.ollamaModel || 'modelo disponible';
+  const rawModel = S.serverConfig?.aiModel || S.serverConfig?.ollamaModel || 'modelo disponible';
+  // Nombre comercial bonito para el flagship; el resto se muestra tal cual.
+  const model = rawModel.includes('gpt-6-astra-pro') ? 'GPT-6 Astra Pro'
+    : rawModel.includes('gpt-6-astra') ? 'GPT-6 Astra'
+    : rawModel;
   const chain = (S.serverConfig?.providerChain || []).filter((p) => p !== provider);
   const chainTxt = chain.length ? ` · respaldo: ${chain.join(' → ')}` : '';
   el('ollama-settings-sub') && (el('ollama-settings-sub').textContent = ollamaOk
@@ -776,7 +785,7 @@ function showPushBanner(files) {
 }
 
 function openPushModal() {
-  document.getElementById('push-commit-msg').value = `fix: update via DevAgent ${new Date().toISOString().slice(0,10)}`;
+  document.getElementById('push-commit-msg').value = `fix: update via Baro ${new Date().toISOString().slice(0,10)}`;
   document.getElementById('push-branch').value = S.branch;
   document.getElementById('push-result').style.display = 'none';
   document.getElementById('push-confirm-btn').disabled = false;
@@ -801,7 +810,7 @@ async function confirmPush() {
   if (!S.ghToken && !S.serverConfig?.githubPreconfigured) { showToast('Configura tu GitHub Token'); return; }
   if (!S.repoData) { showToast('No hay repo conectado'); return; }
 
-  const msg = document.getElementById('push-commit-msg').value.trim() || 'update via DevAgent';
+  const msg = document.getElementById('push-commit-msg').value.trim() || 'update via Baro';
   const branch = document.getElementById('push-branch').value.trim() || S.branch;
   const btn = document.getElementById('push-confirm-btn');
   const result = document.getElementById('push-result');
@@ -854,14 +863,14 @@ async function confirmPush() {
 function exportConversation() {
   const msgs = document.getElementById('msgs');
   if (!msgs?.children.length) { showToast('No hay mensajes para exportar'); return; }
-  let md = `# DevAgent — Conversacion\n\n`;
+  let md = `# Baro — Conversacion\n\n`;
   if (S.repoData) md += `**Repo:** ${S.repoData.full_name}\n`;
   md += `**Fecha:** ${new Date().toLocaleString('es')}\n\n---\n\n`;
   [...msgs.children].forEach(msg => {
     const isUser = msg.classList.contains('me');
     const body = msg.querySelector('.mbody');
     if (!body) return;
-    md += `**${isUser ? 'Tu' : 'DevAgent'}:**\n\n${body.innerText}\n\n---\n\n`;
+    md += `**${isUser ? 'Tu' : 'Baro'}:**\n\n${body.innerText}\n\n---\n\n`;
   });
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob([md], {type:'text/markdown'})),
@@ -1623,8 +1632,8 @@ function addMsg(role, text) {
   } else {
     div.innerHTML = `
       <div class="msg-meta">
-        <div class="av ai">DA</div>
-        <span class="mname">DevAgent</span>
+        <div class="av ai">B</div>
+        <span class="mname">Baro</span>
         <span class="mtime">${now()}</span>
       </div>
       <div class="mbubble"><div class="mbody">${md(text)}</div></div>
@@ -1666,8 +1675,8 @@ function mkStream() {
   div.className = 'msg ai';
   div.innerHTML = `
     <div class="msg-meta">
-      <div class="av ai">DA</div>
-      <span class="mname">DevAgent</span>
+      <div class="av ai">B</div>
+      <span class="mname">Baro</span>
       <span class="mtime">${now()}</span>
     </div>
     <div class="mbubble"><div class="mbody"><div class="typing-indicator"><div class="dots"><span></span><span></span><span></span></div> Generando...</div></div></div>

@@ -87,25 +87,31 @@ app.use('/api', feedbackRoutes);
 app.use('/api', toolsRoutes);
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'devagent', time: new Date().toISOString() });
+  res.json({ ok: true, service: 'baro', time: new Date().toISOString() });
 });
 
 app.get('/api/config', async (_req, res) => {
   // Cadena real de proveedores (misma que usa /api/chat con failover):
-  // Groq > OpenRouter > Pollinations (GRATIS, sin clave, siempre
-  // disponible) > Ollama local. El chat NUNCA muere por falta de
-  // claves: sin GROQ_API_KEY ni OPENROUTER_API_KEY responde igual.
+  // OpenRouter → GPT-6 Astra (flagship de OpenAI; de pago, requiere
+  // OPENROUTER_API_KEY con crédito; si falla cae a la rotación de
+  // modelos gratuitos del propio OpenRouter) > Groq (rápido, gratis
+  // con key) > Pollinations (GRATIS, sin clave, siempre disponible) >
+  // Ollama local. El chat NUNCA muere por falta de claves: sin
+  // GROQ_API_KEY ni OPENROUTER_API_KEY responde igual.
   const chain = [];
+  if (process.env.OPENROUTER_API_KEY) chain.push('OpenRouter · GPT-6 Astra');
   if (process.env.GROQ_API_KEY) chain.push('Groq');
-  if (process.env.OPENROUTER_API_KEY) chain.push('OpenRouter');
   chain.push('Pollinations (gratis)');
   chain.push('Ollama local');
   const providerName = chain[0];
-  const client = process.env.GROQ_API_KEY ? groq : process.env.OPENROUTER_API_KEY ? openrouter : pollinations;
+  // El cliente "principal" es el primero de la cadena que tenga key.
+  const client = process.env.OPENROUTER_API_KEY ? openrouter : process.env.GROQ_API_KEY ? groq : pollinations;
   const ai = await client.checkHealth();
   res.json({
-    ollamaReady: ai.ready,
-    ollamaModel: ai.model,
+    ollamaReady: ai.ready, // legacy: en realidad es el health del cliente principal
+    ollamaModel: ai.model, // legacy: en realidad es el modelo del cliente principal
+    aiReady: ai.ready,
+    aiModel: ai.model,
     aiProvider: providerName,
     providerChain: chain,
     freeProvider: 'Pollinations (gratis)',
@@ -115,6 +121,7 @@ app.get('/api/config', async (_req, res) => {
     githubOAuthEnabled: !!process.env.GITHUB_CLIENT_ID,
     tools: {
       webSearch: !!process.env.TAVILY_API_KEY,
+      deepResearch: !!process.env.TAVILY_API_KEY,
       wikipedia: true, // API pública, no requiere key
       video: !!process.env.BYTEPLUS_API_KEY,
       imageEdit: !!process.env.OPENROUTER_API_KEY,

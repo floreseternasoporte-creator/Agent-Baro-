@@ -8,6 +8,7 @@
 // exacto, en su propia línea, nada de intérpretes libres.
 //
 //   Buscar: últimas noticias sobre IA
+//   Investigación profunda: el estado de la fusión nuclear en 2026
 //   Wikipedia: torre eiffel
 //   Generar video: un gato astronauta caminando en la luna, 20s
 //   Generar imagen: un castillo flotante al atardecer, estilo anime
@@ -35,6 +36,13 @@ function extractToolCommands(text) {
       const query = match[1];
       const key = `search\u0000${query}`;
       if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'search', query }); }
+      continue;
+    }
+
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Investigaci[oó]n profunda:\s*(.+?)\s*$/i))) {
+      const topic = match[1];
+      const key = `deepresearch\u0000${topic}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'deep-research', topic }); }
       continue;
     }
 

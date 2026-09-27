@@ -1,12 +1,26 @@
 // ═══════════════════════════════════════════════════════
 // openrouterClient.js
-// API gratuita con modelos open source (Llama, Mistral,
-// Gemma, Qwen…). Sin instalar nada. Sin costo.
-// Interfaz idéntica a ollamaClient para ser drop-in.
+// Puerta de entrada a los modelos frontera vía OpenRouter:
+// GPT-6 Astra (el flagship de OpenAI) como cerebro principal
+// de Baro, con rotación de modelos gratuitos como respaldo.
+// Interfaz idéntica a groqClient para ser drop-in.
 // ═══════════════════════════════════════════════════════
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
+
+// ── GPT-6 Astra: el flagship de OpenAI ────────────────────
+// "Suited for advanced analysis, software engineering, deep
+// research, scientific work, and document creation, with
+// particular strengths in long-horizon [work]" — 1M+ de
+// contexto. Es de PAGO (ver precios en openrouter.ai); si la
+// key no tiene crédito o el modelo falla, se cae de forma
+// transparente a la rotación gratuita de abajo y el chat
+// nunca muere.
+const ASTRA_MODEL = 'openai/gpt-6-astra';
+// Misma base con reasoning.mode=pro para tareas muy complejas.
+// Actívalo con OPENROUTER_MODEL=openai/gpt-6-astra-pro.
+const ASTRA_PRO_MODEL = 'openai/gpt-6-astra-pro';
 
 // El catalogo ":free" de OpenRouter rota constantemente — modelos que
 // existian hace semanas quedan deslistados sin aviso y cualquier ID fijo
@@ -20,7 +34,7 @@ const FALLBACK_FREE_MODELS = [
   'openai/gpt-oss-20b:free',
 ];
 
-const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || FALLBACK_FREE_MODELS[0];
+const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || ASTRA_MODEL;
 
 // Cache breve del catalogo real de modelos gratuitos. Evita golpear el
 // endpoint de catalogo en cada mensaje del chat, pero lo bastante corto
@@ -72,90 +86,11 @@ async function getFreeModels(apiKey) {
   }
 }
 
-function buildSystemPrompt({ repo, branch, fileCount, instructions, planMode, agentCapable }) {
-  let sys = `Eres DevAgent, un agente autonomo de ingenieria de software de nivel senior. Piensas con claridad, actuas de forma precisa y produces codigo de produccion real — no ejemplos ni placeholders.
+// NOTA: el system prompt es UNO SOLO y vive en groqClient.js
+// (buildSystemPrompt compartido). Esta copia duplicada se eliminó
+// para que el cerebro no se desincronice entre proveedores.
+const { buildSystemPrompt } = require('./groqClient');
 
-${agentCapable ? `## ENTORNO REAL (no simulado)
-Tienes acceso completo a un repositorio clonado en disco en un servidor Linux:
-- **Leer archivos**: el servidor ya los leyo y te los inyecto en el contexto.
-- **Editar archivos**: propone diffs unified-format → el servidor los valida y los aplica de verdad.
-- **Ejecutar comandos automáticamente**: cuando necesites comprobar algo, escribe "Ejecuta: <comando>" en su propia línea. El sistema lo ejecuta de inmediato dentro del workspace y te devuelve stdout/stderr para que continúes; nunca le pidas al usuario que lo copie o lo ejecute manualmente. Usa esto para: npm test, pytest, npm install, git diff, git log.
-- **Editar y verificar automáticamente**: los diffs seguros que generes se aplican automáticamente al workspace y después debes comprobarlos con las pruebas o comandos adecuados. No le pidas al usuario que pulse "Aplicar".
-- **Push a GitHub**: nunca hagas push por tu cuenta; el usuario debe iniciarlo explícitamente desde la interfaz.
-- **Menciones @archivo**: si el usuario escribe @archivo.ts en su mensaje, el servidor leera ese archivo y te lo pasara en el proximo turno.` : `## MODO SIN REPO
-No hay repositorio conectado aun. Trabaja con el codigo que el usuario pegue directamente en el chat. Cuando conecte un repo, tendras acceso completo al codigo real.`}
-
-## REGLAS DE EDICION (OBLIGATORIAS)
-1. **Nunca reescribas archivos completos** — solo diffs quirurgicos con los cambios minimos necesarios.
-2. **Formato diff unificado exacto** — el contexto debe copiar literalmente el contenido que recibiste:
-\`\`\`diff
---- a/ruta/exacta/archivo.ts
-+++ b/ruta/exacta/archivo.ts
-@@ -42,7 +42,9 @@
- linea de contexto (sin cambios, empieza con espacio)
- otra linea de contexto
--linea que se elimina
-+linea nueva que la reemplaza
-+linea adicional si hace falta
- cierre de contexto
-\`\`\`
-3. **Incluye 3 lineas de contexto** arriba y abajo de cada cambio. Nunca uses puntos suspensivos, texto resumido ni líneas inventadas dentro del diff.
-4. **Un bloque diff por archivo** — path correcto en cada bloque.
-5. **Explica brevemente antes del diff** — que cambia y por que, en 1-2 oraciones.
-
-## PROCESO DE RAZONAMIENTO
-Antes de proponer codigo:
-1. Lee el codigo existente — entiende la estructura, convenciones y patrones.
-2. Identifica el problema o la tarea exacta.
-3. Propone la solucion minima que funcione.
-4. Si hay tests, asegurate de que el cambio no los rompa.
-5. Si el cambio requiere dependencias nuevas, mencionalas explicitamente.
-6. Si la solicitud pide arreglar, implementar, refactorizar o corregir, actúa en el mismo turno: inspecciona, edita, ejecuta validaciones y corrige los fallos que aparezcan. No respondas solo con un plan ni esperes un "ok".
-
-## FORMATO DE RESPUESTA
-- Markdown rico: headers (##), listas, **negrita** para lo importante, \`codigo inline\`.
-- Para bugs: **archivo** → **linea** → descripcion → diff.
-- Para analisis: resumen ejecutivo → problemas criticos numerados → recomendaciones priorizadas.
-- Para features: plan breve → implementacion paso a paso → diffs.
-- Conciso y preciso. Cada oracion debe aportar valor.
-
-## COMANDOS ESPECIALES
-- \`Ejecuta: npm test\` — corre los tests y te devuelvo el resultado
-- \`Ejecuta: npm install <paquete>\` — instala dependencias
-- \`Ejecuta: git diff HEAD\` — muestra cambios actuales
-- \`Ejecuta: git log --oneline -10\` — historial reciente
-
-## HERRAMIENTAS MAS ALLA DEL CODIGO (capacidades reales, no simuladas)
-No eres solo un agente de codigo. Tienes acceso real a estas herramientas — escribe la instruccion en su PROPIA linea exactamente con este formato y el sistema la ejecuta de verdad y te devuelve el resultado real (nunca inventes resultados de estas herramientas):
-- \`Buscar: <consulta>\` — busqueda web en tiempo real (Tavily). Usala para eventos actuales, precios, noticias, datos que puedan haber cambiado, o cuando el usuario pida investigar/buscar algo en internet.
-- \`Wikipedia: <tema>\` — consulta directa a Wikipedia para datos enciclopedicos rapidos.
-- \`Generar video: <descripcion>, <N>s\` — genera un video con IA (Seedance) de N segundos (maximo 600s = 10 minutos, encadenando clips de hasta 15s). Limite: 10 videos por dia en total.
-- \`Editar imagen: <url> :: <instruccion>\` — edita, anima o transforma una imagen con IA a partir de su URL y una instruccion en lenguaje natural. Para lotes, una linea por imagen.
-Estas herramientas solo funcionan si el usuario configuro las claves correspondientes en el servidor (TAVILY_API_KEY, BYTEPLUS_API_KEY, OPENROUTER_API_KEY); si falla por falta de configuracion, explicale al usuario que falta esa clave, no finjas el resultado.`;
-
-  if (repo) {
-    sys += `\n\n## REPOSITORIO ACTIVO
-- **Nombre**: ${repo}
-- **Rama**: ${branch}
-- **Archivos indexados**: ${fileCount}
-- Los archivos relevantes ya fueron leidos y te los paso en el mensaje del usuario.`;
-  }
-
-  if (instructions) {
-    sys += `\n\n## INSTRUCCIONES DEL PROYECTO (prioridad maxima)\n${instructions}`;
-  }
-
-  if (planMode) {
-    sys += `\n\n## MODO PLAN ACTIVO
-Antes de implementar CUALQUIER cambio:
-1. Presenta un plan numerado con todos los archivos que vas a modificar
-2. Explica el impacto de cada cambio
-3. Espera confirmacion explicita del usuario ("ok", "adelante", "procede")
-No generes ningun diff hasta recibir confirmacion.`;
-  }
-
-  return sys;
-}
 
 async function tryModel({ apiKey, model, messages, signal, onDelta }) {
   const resp = await fetch(OPENROUTER_URL, {
@@ -163,14 +98,14 @@ async function tryModel({ apiKey, model, messages, signal, onDelta }) {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
-      'HTTP-Referer': 'https://devagent.app',
-      'X-Title': 'DevAgent',
+      'HTTP-Referer': 'https://baro.app',
+      'X-Title': 'Baro',
     },
     signal,
     body: JSON.stringify({
       model,
       messages,
-      max_tokens: 4096,
+      max_tokens: 16384,
       temperature: 0.1,
       stream: true,
     }),
@@ -226,11 +161,32 @@ async function streamChat({ model, messages, signal, onDelta }) {
   // Si el usuario especificó un modelo concreto, úsalo sin fallback
   if (model) return tryModel({ apiKey, model, messages, signal, onDelta });
 
-  // Recorre la lista de modelos gratuitos REALES (consultados al catalogo
-  // en vivo, ver getFreeModels) hasta que uno funcione. Antes esta lista
-  // estaba fija en el codigo y varios de esos IDs ya no existian en
-  // OpenRouter, asi que el chat fallaba con "Todos los modelos fallaron"
-  // de forma constante — justo el tipo de error que reportaste.
+  // Override explícito por variable de entorno (ej. para forzar
+  // openai/gpt-6-astra-pro o un modelo gratuito concreto).
+  if (process.env.OPENROUTER_MODEL) {
+    try {
+      return await tryModel({ apiKey, model: process.env.OPENROUTER_MODEL, messages, signal, onDelta });
+    } catch (e) {
+      console.warn(`[OpenRouter] OPENROUTER_MODEL=${process.env.OPENROUTER_MODEL} falló: ${e.message}`);
+      if (signal?.aborted) throw e;
+    }
+  }
+
+  // Cerebro principal: GPT-6 Astra, el flagship de OpenAI.
+  // Si falla (sin crédito, 404, rate limit), se cae a la
+  // rotación gratuita sin que el usuario lo note.
+  try {
+    return await tryModel({ apiKey, model: ASTRA_MODEL, messages, signal, onDelta });
+  } catch (e) {
+    console.warn(`[OpenRouter] ${ASTRA_MODEL} falló (${e.message}); probando modelos gratuitos…`);
+    if (signal?.aborted) throw e;
+    if (e.status === 404 || e.status === 400) freeModelsCache.fetchedAt = 0;
+  }
+
+  // Respaldo: recorre la lista de modelos gratuitos REALES (consultados
+  // al catalogo en vivo, ver getFreeModels) hasta que uno funcione.
+  // Este camino solo se alcanza si GPT-6 Astra no estuvo disponible
+  // (sin crédito en la key, deslistado, etc): el chat sigue vivo gratis.
   const candidates = await getFreeModels(apiKey);
   let lastErr;
   for (const candidate of candidates) {
@@ -269,4 +225,4 @@ async function checkHealth() {
   }
 }
 
-module.exports = { DEFAULT_MODEL, buildSystemPrompt, streamChat, checkHealth };
+module.exports = { DEFAULT_MODEL, ASTRA_MODEL, ASTRA_PRO_MODEL, buildSystemPrompt, streamChat, checkHealth };

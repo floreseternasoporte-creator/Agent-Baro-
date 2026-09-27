@@ -1,12 +1,11 @@
 // ═══════════════════════════════════════════════════════
 // pollinationsClient.js
-// Proveedor GRATUITO y SIN CLAVE (el "modo Astra"): la API
-// publica de Pollinations, compatible con OpenAI, con
-// streaming SSE real. Es el ultimo recurso antes de Ollama
-// en la cadena de failover: si no hay GROQ_API_KEY ni
-// OPENROUTER_API_KEY configuradas, el agente SIGUE
-// FUNCIONANDO sin que el usuario tenga que pegar ninguna
-// clave. Verificado en vivo el 2026-09-16: POST
+// Proveedor GRATUITO y SIN CLAVE: la API publica de
+// Pollinations, compatible con OpenAI, con streaming SSE real.
+// Es el respaldo universal en la cadena de failover: si no hay
+// GROQ_API_KEY ni OPENROUTER_API_KEY configuradas (o GPT-6 Astra
+// falla), el agente SIGUE FUNCIONANDO sin que el usuario tenga
+// que pegar ninguna clave. Verificado en vivo el 2026-09-16: POST
 // https://text.pollinations.ai/openai con {"stream": true}
 // devuelve deltas SSE reales sin autenticacion.
 // ═══════════════════════════════════════════════════════

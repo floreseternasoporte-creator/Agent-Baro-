@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════
 // toolsClient.js
-// Todo lo que convierte a DevAgent en algo más que "solo
-// código": búsqueda web en tiempo real, Wikipedia, generación
-// de video con IA (Seedance/BytePlus) y edición/animación de
-// imágenes con IA. Cada función emite pasos vía un callback
+// Todo lo que convierte a Baro en algo más que "solo
+// código": búsqueda web en tiempo real, investigación
+// profunda con citas, Wikipedia, generación de video con IA
+// (Seedance/BytePlus) y edición/animación de imágenes con IA. Cada función emite pasos vía un callback
 // onStep(evento) para que el frontend pueda mostrar en vivo
 // "qué está haciendo" el agente (qué página abrió, qué buscó,
 // en qué paso va el video, etc).
@@ -93,7 +93,7 @@ async function wikipediaLookup({ query, lang = 'es', onStep }) {
   onStep?.({ type: 'wiki_start', query });
 
   const searchUrl = `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=1&origin=*`;
-  const searchResp = await fetch(searchUrl, { headers: { 'User-Agent': 'DevAgent/1.0' } });
+  const searchResp = await fetch(searchUrl, { headers: { 'User-Agent': 'Baro/2.0' } });
   if (!searchResp.ok) throw new Error(`Error ${searchResp.status} buscando en Wikipedia`);
   const searchData = await searchResp.json();
   const hit = searchData.query?.search?.[0];
@@ -107,7 +107,7 @@ async function wikipediaLookup({ query, lang = 'es', onStep }) {
 
   const title = encodeURIComponent(hit.title.replace(/ /g, '_'));
   const summaryUrl = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${title}`;
-  const summaryResp = await fetch(summaryUrl, { headers: { 'User-Agent': 'DevAgent/1.0' } });
+  const summaryResp = await fetch(summaryUrl, { headers: { 'User-Agent': 'Baro/2.0' } });
   if (!summaryResp.ok) throw new Error(`Error ${summaryResp.status} obteniendo resumen de Wikipedia`);
   const summary = await summaryResp.json();
 
@@ -399,6 +399,93 @@ async function generateImage({ prompt, width, height, onStep }) {
 }
 
 // ─────────────────────────────────────────────────────────
+// INVESTIGACIÓN PROFUNDA — estilo Astra Deep Research
+// Para preguntas que merecen análisis en serio (no un dato
+// puntual): lanza 4-6 búsquedas Tavily en paralelo desde
+// ángulos complementarios (panorama, análisis, datos,
+// actualidad, explicación), deduplica las fuentes por URL y
+// le pide a la IA del agente que redacte un informe
+// estructurado con citas [n] ancladas a fuentes reales.
+// Requiere TAVILY_API_KEY. onStep(evento): research_start { topic } ->
+//   research_angle { index, total, query } -> research_visit { url, title }
+//   -> research_synthesize { sources } -> research_done { sources }.
+// Devuelve { report, sources: [{ title, url, snippet }] }.
+// ─────────────────────────────────────────────────────────
+async function deepResearch({ topic, generateText, onStep, maxAngles = 5 }) {
+  const clean = String(topic || '').trim();
+  if (!clean) throw new Error('Falta el tema a investigar.');
+  if (typeof generateText !== 'function') throw new Error('deepResearch necesita generateText (IA).');
+  if (!process.env.TAVILY_API_KEY) {
+    const err = new Error('Falta TAVILY_API_KEY. Consigue una gratis en tavily.com y agrégala en las variables de entorno del servidor.');
+    err.status = 503;
+    throw err;
+  }
+
+  onStep?.({ type: 'research_start', topic: clean });
+
+  const angles = [
+    clean,
+    `${clean} análisis a fondo`,
+    `${clean} datos cifras estadísticas`,
+    `${clean} noticias recientes`,
+    `${clean} explicación qué es cómo funciona`,
+  ].slice(0, Math.max(2, Math.min(maxAngles, 6)));
+
+  // Las búsquedas son independientes: corren en paralelo como un
+  // agente multitarea. Si un ángulo falla, los demás siguen.
+  const perAngle = new Array(angles.length);
+  await Promise.all(angles.map(async (query, index) => {
+    onStep?.({ type: 'research_angle', index, total: angles.length, query });
+    try {
+      perAngle[index] = await webSearch({
+        query,
+        topic: /noticia/i.test(query) ? 'news' : 'general',
+        maxResults: 6,
+        onStep: (s) => {
+          if (s.type === 'search_visit') {
+            onStep?.({ type: 'research_visit', url: s.url, title: s.title, snippet: s.snippet });
+          }
+        },
+      });
+    } catch (e) {
+      perAngle[index] = { answer: null, results: [], error: e.message };
+    }
+  }));
+
+  // Deduplicar por URL: la misma fuente puede salir en varios ángulos.
+  const seen = new Map();
+  for (const pack of perAngle) {
+    for (const r of pack?.results || []) {
+      if (!r.url || seen.has(r.url)) continue;
+      seen.set(r.url, r);
+    }
+  }
+  const sources = [...seen.values()].slice(0, 18);
+
+  const material = sources
+    .map((s, i) => `[${i + 1}] ${s.title}\n${s.url}\n${s.snippet}`)
+    .join('\n\n');
+
+  onStep?.({ type: 'research_synthesize', sources: sources.length });
+
+  const report = await generateText(
+    `Redacta un informe de investigación profundo y bien estructurado en español sobre: "${clean}".\n\n` +
+    'Usa EXCLUSIVAMENTE el material de las fuentes de abajo; no inventes datos ni afirmes nada que las fuentes no respalden. Cita cada afirmación importante con [n] usando el número de la fuente.\n\n' +
+    'Estructura:\n' +
+    '- ## Resumen ejecutivo (3-5 líneas con lo esencial)\n' +
+    '- ## Análisis (lo importante, organizado por temas, con citas)\n' +
+    '- ## Datos clave (cifras, fechas y hechos concretos con citas)\n' +
+    '- ## Conclusión (qué significa esto en la práctica)\n\n' +
+    'Tono claro y denso, cero relleno. Si las fuentes se contradicen en algo, dilo explícitamente.\n\n' +
+    `FUENTES:\n${material || '(sin fuentes: indica claramente que no se encontró información verificable)'}\n`
+  );
+  if (!report || !report.trim()) throw new Error('La IA no devolvió el informe de investigación.');
+
+  onStep?.({ type: 'research_done', sources: sources.length });
+  return { report: report.trim(), sources };
+}
+
+// ─────────────────────────────────────────────────────────
 // DOCUMENT STUDIO — documentos, presentaciones y hojas de
 // cálculo REALES (.docx / .pptx / .xlsx), como las que crea
 // el modo agente de ChatGPT/Astra. Sin clave, sin servicios
@@ -490,7 +577,7 @@ async function buildPptxFile(title, blocks, fullPath) {
   const cover = pptx.addSlide();
   cover.background = { color: '1B1B22' };
   cover.addText(title, { x: 0.8, y: 2.2, w: 11.7, h: 1.6, fontSize: 40, bold: true, color: 'FFFFFF', align: 'center' });
-  cover.addText('Generado por DevAgent', { x: 0.8, y: 4.2, w: 11.7, h: 0.6, fontSize: 16, color: '9A9AAD', align: 'center' });
+  cover.addText('Generado por Baro', { x: 0.8, y: 4.2, w: 11.7, h: 0.6, fontSize: 16, color: '9A9AAD', align: 'center' });
   // Una diapositiva por cada ## (o #), con sus viñetas
   let current = null;
   const slides = [];
@@ -525,7 +612,7 @@ function parseMarkdownTable(md) {
 
 async function buildXlsxFile(title, md, fullPath) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'DevAgent';
+  wb.creator = 'Baro';
   const ws = wb.addWorksheet(slugifyFileName(title).slice(0, 28) || 'Hoja1');
   const table = parseMarkdownTable(md);
   if (table.length) {
@@ -588,6 +675,7 @@ async function generateDocument({ kind, title, brief, sessionId, sessionDir, gen
 
 module.exports = {
   webSearch,
+  deepResearch,
   wikipediaLookup,
   generateVideo,
   generateImage,
