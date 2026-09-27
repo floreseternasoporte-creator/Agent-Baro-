@@ -1546,6 +1546,7 @@ async function applyDiff(id, btn) {
     const applied = (data.results || []).filter((r) => r.applied);
 
     if (applied.length) {
+      buzz([20, 50, 20]);
       // Estos SI son archivos reales, modificados de verdad en
       // el clon en disco — es lo que se ve reflejado en el
       // modal de push (openPushModal) y lo que confirmPush sube.
@@ -1602,7 +1603,7 @@ function makeToolCard(type, name, detail, status='run') {
     agent: `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 3.25a2.25 2.25 0 114.5 0 2.25 2.25 0 01-4.5 0zm6.5 1.25a2.25 2.25 0 114.5 0 2.25 2.25 0 01-4.5 0z"/><path d="M0 12C0 9.51 2.01 8 4 8s4 1.51 4 4v.75a.75.75 0 01-.75.75h-6.5A.75.75 0 010 12.75V12zm8 0c0-2.49 2.01-4 4-4s4 1.51 4 4v.75a.75.75 0 01-.75.75h-6.5A.75.75 0 018 12.75V12z"/></svg>`,
   };
   const statusLabels = { run:'En proceso...', ok:'Completado', err:'Error' };
-  div.innerHTML = `<div class="tool-card-head" onclick="this.closest('.tool-card').classList.toggle('open')">
+  div.innerHTML = `<div class="tool-card-head" onclick="buzz(8);this.closest('.tool-card').classList.toggle('open')">
     <div class="tool-ic ${type}">${icons[type]||icons.run}</div>
     <span class="tool-name">${esc(name)}</span>
     <span class="tool-status ${status}">${statusLabels[status]||status}</span>
@@ -1630,6 +1631,9 @@ function addMsg(role, text) {
         <span class="mtime">${now()}</span>
       </div>
       <div class="mbubble"><div class="mbody"><p>${esc(text)}</p></div></div>
+      <div class="msg-actions">
+        <button class="ma-btn" onclick="copyMsg(this)">${copySvg()} Copiar</button>
+      </div>
     `;
   } else {
     div.innerHTML = `
@@ -1657,7 +1661,7 @@ function addMsg(role, text) {
 function copyMsg(btn) {
   const body = btn.closest('.msg')?.querySelector('.mbody');
   if (!body) return;
-  navigator.clipboard.writeText(body.innerText || body.textContent).then(() => showToast('Copiado'));
+  navigator.clipboard.writeText(body.innerText || body.textContent).then(() => { buzz(10); showToast('Copiado'); });
 }
 
 function regen(btn) {
@@ -1991,6 +1995,7 @@ async function send() {
   const msg = inp.value.trim();
   if (!msg || S.busy) return;
 
+  buzz([15, 40, 15]);
   S.busy = true;
   inp.value = '';
   inp.style.height = 'auto';
@@ -2353,11 +2358,7 @@ document.getElementById('feedback-modal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('feedback-modal')) closeFeedbackModal();
 });
 
-document.getElementById('inp').addEventListener('input', function() {
-  this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 140) + 'px';
-  document.getElementById('sndbtn').disabled = !this.value.trim() || S.busy;
-});
+document.getElementById('inp').addEventListener('input', autoGrow);
 
 // ═══════════════════════════════════════════
 // INIT
@@ -2369,6 +2370,57 @@ document.getElementById('inp').addEventListener('input', function() {
 loadSettings();
 renderQuickCards();
 // NO llamamos initSession() aqui: esperamos a Firebase Auth.
+
+// ═══════════════════════════════════════════
+// INTERACTIVIDAD MOVIL (v4)
+// - Haptics suaves, chips rapidos, auto-grow del input desde el
+//   primer render, boton flotante para volver abajo en el chat.
+// ═══════════════════════════════════════════
+
+// Vibracion tactil (solo movil; en desktop no hace nada).
+function buzz(pattern) {
+  try {
+    if (navigator.vibrate) navigator.vibrate(pattern || 12);
+  } catch (e) { /* noop */ }
+}
+
+// El textarea crece con el contenido. Se llama en cada 'input',
+// al iniciar (para que el placeholder multilinea no se corte en
+// pantallas angostas) y tras cada envio.
+function autoGrow() {
+  const inp = document.getElementById('inp');
+  if (!inp) return;
+  inp.style.height = 'auto';
+  inp.style.height = Math.min(inp.scrollHeight, 140) + 'px';
+  document.getElementById('sndbtn').disabled = !inp.value.trim() || S.busy;
+}
+
+// Chip rapido: deja el comando en el input para que el usuario lo
+// complete o lo envie directo.
+function chipTap(text) {
+  if (S.busy) { showToast('El agente esta trabajando...'); return; }
+  buzz(10);
+  doQuickPrefill(text);
+  autoGrow();
+}
+
+function scrollChatToBottom(smooth) {
+  const sc = document.getElementById('chat-scroll');
+  if (!sc) return;
+  sc.scrollTo({ top: sc.scrollHeight, behavior: smooth === false ? 'auto' : 'smooth' });
+}
+
+function updateScrollFab() {
+  const sc = document.getElementById('chat-scroll');
+  const fab = document.getElementById('scroll-fab');
+  if (!sc || !fab) return;
+  const away = sc.scrollHeight - sc.scrollTop - sc.clientHeight;
+  fab.classList.toggle('show', away > 320);
+}
+
+document.getElementById('chat-scroll').addEventListener('scroll', updateScrollFab, { passive: true });
+window.addEventListener('resize', autoGrow);
+autoGrow();
 
 // Firebase llama esto cuando el usuario esta listo.
 window.onFirebaseAuthReady = async function(user) {

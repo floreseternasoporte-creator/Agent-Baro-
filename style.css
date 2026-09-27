@@ -58,7 +58,9 @@ html,body{
   height:100dvh;width:100%;
   overflow:hidden;
   padding-top:var(--safe-top);
-  padding-bottom:var(--safe-bottom);
+  /* Sin padding-bottom aqui: #input-wrap y #bottomnav ya aplican
+     var(--safe-bottom) cada uno; sumarlo otra vez dejaba ~100px
+     de espacio muerto en iPhone. */
 }
 
 /* ══ TOP APP BAR ══════════════════════════ */
@@ -78,8 +80,16 @@ html,body{
 }
 .tb-logo svg{width:17px;height:17px;color:#fff}
 .tb-title{flex:1;min-width:0}
-.tb-title-main{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.3px}
-.tb-title-sub{font-size:10.5px;color:var(--text3);margin-top:-1px}
+.tb-title-main{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.3px;line-height:1.2}
+.tb-title-sub{font-size:10.5px;color:var(--text3);margin-top:-1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Fallback del logo cuando la imagen externa no carga (offline) */
+.tb-logo-fb{
+  height:32px;width:32px;border-radius:9px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff;font-weight:800;font-size:17px;
+  display:flex;align-items:center;justify-content:center;
+}
+.tb-logo-fb.big{height:110px;width:110px;border-radius:30px;font-size:52px}
 .tb-actions{display:flex;gap:4px;flex-shrink:0}
 .tba{
   width:36px;height:36px;border-radius:10px;
@@ -695,6 +705,9 @@ html,body{
   color:var(--text);font:inherit;font-size:14px;
   resize:none;line-height:1.55;max-height:140px;
   scrollbar-width:none;display:block;
+  /* Chrome 123+: el textarea crece solo con el contenido, sin JS.
+     El handler 'input' de script.js sigue como respaldo. */
+  field-sizing:content;
 }
 #inp::placeholder{color:var(--text3)}
 #inp::-webkit-scrollbar{display:none}
@@ -1221,6 +1234,41 @@ html,body{
   box-shadow:0 8px 24px rgba(0,0,0,.2);
 }
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ══ QUICK CHIPS + SCROLL FAB (interactividad movil) ══ */
+#screen-chat{position:relative}
+#quick-chips{
+  display:flex;gap:8px;overflow-x:auto;flex-shrink:0;
+  padding:8px 12px 2px;background:var(--bg);
+  scrollbar-width:none;
+}
+#quick-chips::-webkit-scrollbar{display:none}
+.qchip{
+  flex-shrink:0;display:flex;align-items:center;gap:6px;
+  padding:8px 14px;border-radius:20px;
+  border:1.5px solid var(--border);background:var(--bg2);
+  color:var(--text2);font:inherit;font-size:12.5px;font-weight:500;
+  cursor:pointer;transition:all .12s;white-space:nowrap;
+  -webkit-tap-highlight-color:transparent;
+}
+.qchip:active{transform:scale(.94);background:var(--accent-bg);border-color:var(--accent-border);color:var(--accent)}
+#scroll-fab{
+  position:absolute;right:14px;bottom:14px;z-index:45;
+  width:44px;height:44px;border-radius:50%;
+  border:1px solid var(--border);background:var(--bg2);color:var(--text2);
+  display:none;align-items:center;justify-content:center;cursor:pointer;
+  box-shadow:0 6px 18px rgba(0,0,0,.14);
+  transition:opacity .18s, transform .18s;
+  opacity:0;transform:translateY(8px);pointer-events:none;
+}
+#scroll-fab.show{display:flex;opacity:1;transform:none;pointer-events:auto}
+#scroll-fab:active{transform:scale(.9)}
+
+/* En movil el codigo largo se corta sin affordance de scroll:
+   mejor envolverlo que dejarlo truncado. */
+@media (max-width:480px){
+  .cblock pre{white-space:pre-wrap;word-break:break-word;overflow-x:visible}
+}
 
 /* ══ UTILS ════════════════════════════════ */
 .spin{animation:spin 1s linear infinite}
