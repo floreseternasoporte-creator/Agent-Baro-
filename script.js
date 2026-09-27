@@ -62,8 +62,68 @@ const API = '/api';
 // sola vez aqui y ambas pantallas se pintan desde esta
 // misma lista con renderQuickCards()/renderTaskList().
 // ═══════════════════════════════════════════
+// Acciones rapidas del inicio: UNA sola lista por seccion para que
+// el inicio (#empty) y la pantalla Tareas se pinten igual sin
+// desincronizarse. Baro es un agente de proposito general: la
+// seccion "Crear" no necesita repositorio (documentos, scripts
+// Python que se ejecutan de verdad, imagenes, video...).
+// ═══════════════════════════════════════════
 const QUICK_TASKS = {
-  analysis: [
+  create: [
+    {
+      id: 'doc', color: 'blue', title: 'Crear documento', sub: 'Word real y descargable',
+      icon: '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
+      prompt: 'Crear documento: ',
+    },
+    {
+      id: 'pyscript', color: 'green', title: 'Script Python', sub: 'Lo escribo y lo ejecuto',
+      icon: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+      prompt: 'Quiero un script Python que ',
+    },
+    {
+      id: 'image', color: 'amber', title: 'Crear imagen', sub: 'IA gratis, sin clave',
+      icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/>',
+      prompt: 'Generar imagen: ',
+    },
+    {
+      id: 'video', color: 'purple', title: 'Generar video', sub: 'Hasta 10 min · 10/dia',
+      icon: '<rect x="2" y="4" width="15" height="16" rx="2"/><path d="M17 9l5-3v12l-5-3"/>',
+      prompt: 'Generar video: ',
+    },
+    {
+      id: 'sheet', color: 'green', title: 'Hoja de cálculo', sub: 'Excel real y descargable',
+      icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>',
+      prompt: 'Hoja de cálculo: ',
+    },
+    {
+      id: 'slides', color: 'red', title: 'Presentación', sub: 'PowerPoint descargable',
+      icon: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+      prompt: 'Crear presentación: ',
+    },
+  ],
+  investigate: [
+    {
+      id: 'deepresearch', color: 'red', title: 'Investigación profunda', sub: 'Informe con fuentes citadas',
+      icon: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/>',
+      prompt: 'Investigación profunda: ',
+    },
+    {
+      id: 'websearch', color: 'blue', title: 'Buscar en internet', sub: 'Resultados en tiempo real',
+      icon: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>',
+      prompt: 'Buscar: ',
+    },
+    {
+      id: 'wikipedia', color: 'green', title: 'Consultar Wikipedia', sub: 'Datos enciclopédicos',
+      icon: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20 15.3 15.3 0 010-20z"/>',
+      prompt: 'Wikipedia: ',
+    },
+    {
+      id: 'imageedit', color: 'amber', title: 'Editar/animar imagen', sub: 'Sube o pega una URL',
+      icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/>',
+      prompt: 'Editar imagen: ',
+    },
+  ],
+  code: [
     {
       id: 'analyze', color: 'accent', title: 'Analizar repo', sub: 'Arquitectura y stack',
       icon: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/>',
@@ -85,62 +145,7 @@ const QUICK_TASKS = {
       prompt: 'Optimiza el rendimiento: lazy loading, N+1 queries, bundle size, caching, async/await mal usado. Muestra el codigo optimizado.',
     },
   ],
-  generate: [
-    {
-      id: 'tests', color: 'blue', title: 'Generar tests', sub: 'Unitarios e integracion',
-      icon: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
-      prompt: 'Genera tests unitarios completos para el proyecto con el framework adecuado. Incluye casos edge y mocks.',
-    },
-    {
-      id: 'refactor', color: 'purple', title: 'Refactorizar', sub: 'SOLID, DRY, clean',
-      icon: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>',
-      prompt: 'Refactoriza el codigo aplicando SOLID, DRY, elimina codigo duplicado y mejora legibilidad. Muestra diffs exactos.',
-    },
-    {
-      id: 'docs', color: 'green', title: 'Documentar', sub: 'README y JSDoc',
-      icon: '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
-      prompt: 'Genera documentacion tecnica: README detallado, JSDoc para funciones clave y diagrama de arquitectura en texto.',
-    },
-    {
-      id: 'modernize', color: 'amber', title: 'Modernizar', sub: 'Deps y patrones',
-      icon: '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/>',
-      prompt: 'Moderniza el proyecto: actualiza dependencias desactualizadas, migra codigo legacy y sugiere mejoras de TypeScript.',
-    },
-  ],
 };
-
-// Herramientas que van mas alla del codigo: busqueda web,
-// Wikipedia, video e imagenes. Se muestran en su propia
-// seccion (#quick-grid-tools) y disparan el mismo flujo de
-// chat que las demas — la IA decide como usarlas y el
-// progreso real se ve en vivo en el panel de actividad.
-const TOOL_TASKS = [
-  {
-    id: 'deepresearch', color: 'red', title: 'Investigación profunda', sub: 'Informe con fuentes citadas',
-    icon: '<circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.35-4.35\"/><path d=\"M11 8v6M8 11h6\"/>',
-    prompt: 'Investigación profunda: ',
-  },
-  {
-    id: 'websearch', color: 'blue', title: 'Buscar en internet', sub: 'Resultados en tiempo real',
-    icon: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>',
-    prompt: 'Busca en internet informacion actual y relevante sobre: ',
-  },
-  {
-    id: 'wikipedia', color: 'green', title: 'Consultar Wikipedia', sub: 'Datos enciclopedicos',
-    icon: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20 15.3 15.3 0 010-20z"/>',
-    prompt: 'Busca en Wikipedia informacion sobre: ',
-  },
-  {
-    id: 'video', color: 'purple', title: 'Generar video con IA', sub: 'Hasta 10 min · 10/dia',
-    icon: '<rect x="2" y="4" width="15" height="16" rx="2"/><path d="M17 9l5-3v12l-5-3"/>',
-    prompt: 'Genera un video con esta descripcion: ',
-  },
-  {
-    id: 'imageedit', color: 'amber', title: 'Editar/animar imagen', sub: 'Sube o pega una URL',
-    icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/>',
-    prompt: 'Edita esta imagen: ',
-  },
-];
 
 // Estas dos no son "prompts para la IA", son acciones directas
 // de la app, asi que quedan separadas del set de arriba.
@@ -169,13 +174,13 @@ function renderQuickCards() {
       </button>
     `).join('');
   };
-  mount('quick-grid-analysis', QUICK_TASKS.analysis);
-  mount('quick-grid-generate', QUICK_TASKS.generate);
-  mount('quick-grid-tools', TOOL_TASKS, 'doQuickPrefill');
+  mount('quick-grid-create', QUICK_TASKS.create, 'doQuickPrefill');
+  mount('quick-grid-investigate', QUICK_TASKS.investigate, 'doQuickPrefill');
+  mount('quick-grid-code', QUICK_TASKS.code);
 }
 
 function renderTaskScreen() {
-  const quickList = [...QUICK_TASKS.analysis, ...QUICK_TASKS.generate];
+  const quickList = [...QUICK_TASKS.create];
   const quickEl = document.getElementById('task-list-quick');
   if (quickEl) {
     quickEl.innerHTML = quickList.map((t) => `
@@ -194,8 +199,8 @@ function renderTaskScreen() {
 
   const toolsEl = document.getElementById('task-list-tools');
   if (toolsEl) {
-    toolsEl.innerHTML = TOOL_TASKS.map((t) => `
-      <div class="task-card" onclick='doQuickPrefill(${JSON.stringify(t.prompt)})'>
+    toolsEl.innerHTML = [...QUICK_TASKS.investigate, ...QUICK_TASKS.code].map((t) => `
+      <div class="task-card" onclick='${t.prompt.endsWith(': ') ? `doQuickPrefill(${JSON.stringify(t.prompt)})` : `doQuick(${JSON.stringify(t.prompt)});showScreen("chat")`}'>
         <div class="task-icon" style="background:var(--${t.color === 'blue' ? 'bb' : t.color === 'purple' ? 'pb' : t.color === 'green' ? 'gb' : t.color === 'amber' ? 'ab' : 'accent-bg'})">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="color:var(--${t.color})">${t.icon}</svg>
         </div>
@@ -2393,15 +2398,6 @@ function autoGrow() {
   inp.style.height = 'auto';
   inp.style.height = Math.min(inp.scrollHeight, 140) + 'px';
   document.getElementById('sndbtn').disabled = !inp.value.trim() || S.busy;
-}
-
-// Chip rapido: deja el comando en el input para que el usuario lo
-// complete o lo envie directo.
-function chipTap(text) {
-  if (S.busy) { showToast('El agente esta trabajando...'); return; }
-  buzz(10);
-  doQuickPrefill(text);
-  autoGrow();
 }
 
 function scrollChatToBottom(smooth) {

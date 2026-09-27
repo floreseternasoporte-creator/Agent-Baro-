@@ -14,7 +14,7 @@ const { getSession } = require('./sessionStore');
 const git = require('./gitAgent');
 const groq = require('./groqClient');
 const ollama = require('./ollamaClient');
-const { runCommand, extractAutomaticCommands } = require('./commandRunner');
+const { runCommand, extractAutomaticCommands, isSafeWorkspaceArgument } = require('./commandRunner');
 const { extractToolCommands } = require('./toolCommands');
 const tools = require('./toolsClient');
 const { runComputerTask } = require('./computerTask');
@@ -313,7 +313,28 @@ async function readProjectProfile(dir, files) {
 // pasando (qué página se visita, en qué clip de video va, etc), y
 // devuelve un bloque de texto con el resultado real para inyectarlo
 // de vuelta en la conversación.
-async function runToolCommand(command, send, session, signal) {
+// Extrae el primer bloque de codigo cercado (```lang ... ```) del texto
+// fuente (normalmente la respuesta de la IA). Si el nombre del archivo
+// sugiere un lenguaje (ej. .py), se prefiere un bloque de ese lenguaje;
+// si no, se toma el primer bloque cercado que haya.
+function extractFencedCode(text, fileName) {
+  const src = String(text || '');
+  const ext = (String(fileName || '').split('.').pop() || '').toLowerCase();
+  const langHint = { py: 'python', pyw: 'python', js: 'javascript', ts: 'typescript', sh: 'bash', rb: 'ruby', php: 'php' }[ext];
+  const fenceRe = /```(\w*)\s*\n([\s\S]*?)```/g;
+  let m;
+  let first = null;
+  while ((m = fenceRe.exec(src))) {
+    const lang = (m[1] || '').toLowerCase();
+    const code = m[2].replace(/\n$/, '');
+    if (!code.trim()) continue;
+    if (!first) first = code;
+    if (langHint && (lang === langHint || lang === ext)) return code;
+  }
+  return first;
+}
+
+async function runToolCommand(command, send, session, signal, sourceText = '') {
   const onStep = (step) => {
     switch (step.type) {
       case 'search_start':
@@ -476,6 +497,36 @@ async function runToolCommand(command, send, session, signal) {
       send('computer', { mode: 'docs', action: 'done', kind: command.kind, title: command.title, fileName: result.fileName, bytes: result.bytes, url: result.downloadUrl });
       const cap = kindLabel[0].toUpperCase() + kindLabel.slice(1);
       return `### ${cap} creado: "${command.title}"\n\n[Descargar ${result.fileName}](${result.downloadUrl}) (${Math.round(result.bytes / 1024)} KB)`;
+    }
+    if (command.tool === 'script') {
+      // Crear script: la IA escribe el codigo en un bloque cercado en
+      // su respuesta; aqui se guarda como archivo REAL en
+      // workspaces/<sid>/scripts/ y queda listo para ejecutarse con
+      // "Ejecuta: python3 scripts/<nombre>" en el mismo turno.
+      // NO necesita repositorio: es la via para crear y correr Python
+      // (o JS, etc.) con trabajo visible en tiempo real.
+      let name = String(command.name || '').trim();
+      if (!name) return '### Crear script\nFalta el nombre del archivo. Usa el formato: `Crear script: nombre.py :: descripcion`.';
+      if (!/\.[a-z0-9]{1,8}$/i.test(name)) name += '.py';
+      if (name.includes('/') || name.includes('\\') || !isSafeWorkspaceArgument(name)) {
+        return `### Crear script\nNombre no permitido: "${command.name}". Usa un nombre simple como \`utilidad.py\`.`;
+      }
+      const code = extractFencedCode(sourceText, name);
+      if (!code) {
+        return `### Crear script: ${name}\nNo encontre el codigo en tu respuesta. Escribe la linea \`Crear script: ${name}\` y justo despues el codigo completo en un bloque cercado (por ejemplo \`\`\`python ... \`\`\`).`;
+      }
+      if (code.length > 200_000) return `### Crear script: ${name}\nEl codigo es demasiado largo (${Math.round(code.length / 1024)} KB, maximo 200 KB).`;
+      const scriptsDir = path.join(session.dir, 'scripts');
+      fs.mkdirSync(scriptsDir, { recursive: true });
+      const fullPath = path.join(scriptsDir, name);
+      fs.writeFileSync(fullPath, code, 'utf8');
+      const bytes = fs.statSync(fullPath).size;
+      const rel = `scripts/${name}`;
+      send('log', { type: 'ok', title: `Script creado: ${name}`, detail: `${code.split('\n').length} lineas · ${Math.round(bytes / 1024)} KB` });
+      send('computer', { mode: 'files', action: 'write', path: rel, bytes });
+      session.addLog?.({ type: 'ok', title: `Script creado: ${name}`, detail: rel });
+      const downloadUrl = `/api/files/download?sessionId=${encodeURIComponent(session.id)}&file=${encodeURIComponent(rel)}`;
+      return `### Script creado: \`${name}\`\n${command.brief ? `_${command.brief}_\n` : ''}\n[Descargar ${name}](${downloadUrl}) — tambien quedo guardado en el workspace y listo para ejecutar.`;
     }
     if (command.tool === 'computer') {
       // Modo computadora estilo Astra: un Chromium REAL que el agente
@@ -685,11 +736,11 @@ router.post('/chat', async (req, res) => {
       const preRestIdx = [];
       userToolCommands.forEach((c, i) => (c.tool === 'computer' ? preComputerIdx : preRestIdx).push(i));
       for (const i of preComputerIdx) {
-        preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, abortController.signal);
+        preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, abortController.signal, message);
       }
       if (preRestIdx.length) {
         const rest = await Promise.all(
-          preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session, abortController.signal))
+          preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session, abortController.signal, message))
         );
         preRestIdx.forEach((origI, k) => { preToolTexts[origI] = rest[k]; });
       }
@@ -809,11 +860,11 @@ router.post('/chat', async (req, res) => {
       const restIdx = [];
       requestedTools.forEach((c, i) => (c.tool === 'computer' ? computerIdx : restIdx).push(i));
       for (const i of computerIdx) {
-        roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session, abortController.signal);
+        roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session, abortController.signal, result);
       }
       if (restIdx.length) {
         const rest = await Promise.all(
-          restIdx.map((i) => runToolCommand(requestedTools[i], send, session, abortController.signal))
+          restIdx.map((i) => runToolCommand(requestedTools[i], send, session, abortController.signal, result))
         );
         restIdx.forEach((origI, k) => { roundToolTexts[origI] = rest[k]; });
       }

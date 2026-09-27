@@ -155,6 +155,7 @@ html,body{
 }
 .empty-icon svg{width:34px;height:34px;color:#fff}
 .empty-title{font-family:var(--font-serif);font-size:26px;font-weight:500;letter-spacing:-.4px;color:var(--text)}
+.empty-sub{font-size:13.5px;line-height:1.55;color:var(--text2);max-width:340px}
 
 /* CTA button in empty state */
 .empty-gh-btn{
@@ -167,6 +168,13 @@ html,body{
   margin-top:4px;
 }
 .empty-gh-btn:active{transform:scale(.96);box-shadow:none}
+/* Variante secundaria: conectar repo es opcional, no el protagonista */
+.empty-gh-btn.secondary{
+  background:transparent;color:var(--text2);
+  border:1.5px solid var(--border);box-shadow:none;
+  padding:9px 18px;font-size:13px;font-weight:500;
+}
+.empty-gh-btn.secondary:active{background:var(--bg2)}
 
 .empty-section{width:100%;max-width:420px}
 .empty-section-label{
@@ -1235,23 +1243,8 @@ html,body{
 }
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* ══ QUICK CHIPS + SCROLL FAB (interactividad movil) ══ */
+/* ══ SCROLL FAB (volver abajo en el chat) ══ */
 #screen-chat{position:relative}
-#quick-chips{
-  display:flex;gap:8px;overflow-x:auto;flex-shrink:0;
-  padding:8px 12px 2px;background:var(--bg);
-  scrollbar-width:none;
-}
-#quick-chips::-webkit-scrollbar{display:none}
-.qchip{
-  flex-shrink:0;display:flex;align-items:center;gap:6px;
-  padding:8px 14px;border-radius:20px;
-  border:1.5px solid var(--border);background:var(--bg2);
-  color:var(--text2);font:inherit;font-size:12.5px;font-weight:500;
-  cursor:pointer;transition:all .12s;white-space:nowrap;
-  -webkit-tap-highlight-color:transparent;
-}
-.qchip:active{transform:scale(.94);background:var(--accent-bg);border-color:var(--accent-border);color:var(--accent)}
 #scroll-fab{
   position:absolute;right:14px;bottom:14px;z-index:45;
   width:44px;height:44px;border-radius:50%;

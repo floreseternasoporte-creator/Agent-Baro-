@@ -18,6 +18,9 @@
 //   Crear documento: Plan de marketing :: para una cafetería, 5 secciones
 //   Crear presentación: Mi startup :: 8 diapositivas para inversores
 //   Hoja de cálculo: Presupuesto 2026 :: ingresos y gastos mensuales
+//   Crear script: calculadora.py :: calculadora con historial (el codigo va
+//     en un bloque ```python en la respuesta; luego "Ejecuta: python3
+//     scripts/calculadora.py" lo corre de verdad)
 //   Usar computadora: busca en google el precio del iPhone 17 y dímelo
 // ═══════════════════════════════════════════════════════
 
@@ -117,6 +120,18 @@ function extractToolCommands(text) {
       const task = match[1];
       const key = `computer\u0000${task}`;
       if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'computer', task }); }
+      continue;
+    }
+
+    // Crear script: guarda un archivo de codigo REAL en el workspace
+    // de la sesion (scripts/<nombre>) a partir del bloque de codigo
+    // cercado que la IA incluye en su respuesta. No necesita repo:
+    // es la via para crear y luego ejecutar Python (o JS, etc.) con
+    // "Ejecuta:" en el mismo turno, todo visible en tiempo real.
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Crear script:\s*(.+?)\s*$/i))) {
+      const { title, brief } = splitDocArgs(match[1]);
+      const key = `script\u0000${title}\u0000${brief}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'script', name: title, brief }); }
       continue;
     }
   }

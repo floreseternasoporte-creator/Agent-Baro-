@@ -223,6 +223,7 @@ module.exports = {
   extractAutomaticCommands,
   isAllowed,
   validateExecution,
+  isSafeWorkspaceArgument,
   ALLOWED_BINARIES,
   NPX_ALLOWED_PACKAGES,
   TASK_PRESETS,
