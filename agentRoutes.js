@@ -19,19 +19,37 @@ const router = express.Router();
 
 // ─────────────────────────────────────────────────────────
 // Descarga de archivos generados por el agente (Document
-// Studio: .docx/.pptx/.xlsx en workspaces/<sid>/docs/).
-// Solo sirve archivos DENTRO del workspace de la sesión:
-// cualquier intento de salir (..) se rechaza.
+// Studio: .docx/.pptx/.xlsx en workspaces/<sid>/docs/ y
+// scripts Python en workspaces/<sid>/scripts/).
+//
+// Baro v6 (seguridad): ANTES servía CUALQUIER archivo dentro
+// del workspace — incluido `.git/config` (que guardaba el
+// token de GitHub en claro) y `memory.json`. Ahora solo se
+// descargan archivos bajo `docs/` o `scripts/`, y cualquier
+// segmento oculto (`.git`, `.env`, perfiles...) se bloquea
+// con 403 aunque esté dentro de esas carpetas.
 // ─────────────────────────────────────────────────────────
+const DOWNLOAD_ALLOWED_ROOTS = new Set(['docs', 'scripts']);
+
 router.get('/files/download', (req, res) => {
   const session = getSession(req.query.sessionId);
   if (!session) return res.status(404).json({ error: 'Sesión no encontrada o expirada' });
-  const rel = String(req.query.file || '').replace(/\\/g, '/');
+  const rel = String(req.query.file || '').replace(/\\/g, '/').replace(/^\/+/, '');
   if (!rel || rel.includes('\0')) return res.status(400).json({ error: 'Archivo inválido' });
+  const segments = rel.split('/').filter((s) => s && s !== '.');
+  if (segments.some((s) => s === '..')) {
+    return res.status(403).json({ error: 'Ruta no permitida' });
+  }
+  if (segments.some((s) => s.startsWith('.'))) {
+    return res.status(403).json({ error: 'Ruta no permitida: archivos ocultos bloqueados' });
+  }
+  if (!DOWNLOAD_ALLOWED_ROOTS.has(segments[0])) {
+    return res.status(403).json({ error: 'Solo se pueden descargar archivos de docs/ o scripts/' });
+  }
   const base = path.resolve(session.dir);
-  const full = path.resolve(base, rel);
+  const full = path.resolve(base, segments.join(path.sep));
   if (full !== base && !full.startsWith(base + path.sep)) {
-    return res.status(400).json({ error: 'Ruta no permitida' });
+    return res.status(403).json({ error: 'Ruta no permitida' });
   }
   if (!fs.existsSync(full) || !fs.statSync(full).isFile()) {
     return res.status(404).json({ error: 'Archivo no encontrado' });
@@ -113,18 +131,19 @@ router.post('/agent/push', async (req, res) => {
   }
 
   try {
-    // Aseguramos que el remoto tenga el token vigente antes del push,
-    // por si la sesion se reconecto o el token cambio.
+    // El token viaja SOLO en memoria a commitAndPush, que lo usa
+    // durante el push y deja el remoto limpio al terminar. Nunca
+    // queda el remoto con credencial persistido en .git/config.
     const parsed = git.parseRepoUrl(`https://github.com/${session.repoFullName}`);
-    const simpleGit = require('simple-git')(session.dir);
-    await simpleGit.remote(['set-url', 'origin', `https://x-access-token:${token}@github.com/${parsed.owner}/${parsed.repo}.git`]);
-
     const result = await git.commitAndPush({
       dir: session.dir,
-      message: message || `fix: update via DevAgent ${new Date().toISOString().slice(0, 10)}`,
+      message: message || `fix: update via Baro ${new Date().toISOString().slice(0, 10)}`,
       branch: branch || session.branch,
-      name: process.env.AGENT_GIT_NAME || 'DevAgent',
-      email: process.env.AGENT_GIT_EMAIL || 'devagent@users.noreply.github.com',
+      name: process.env.AGENT_GIT_NAME || 'Baro',
+      email: process.env.AGENT_GIT_EMAIL || 'baro@users.noreply.github.com',
+      token,
+      owner: parsed && parsed.owner,
+      repo: parsed && parsed.repo,
     });
 
     session.addLog(
@@ -159,6 +178,93 @@ router.get('/agent/log', (req, res) => {
   const session = getSession(req.query.sessionId);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   res.json({ log: session.actionLog });
+});
+
+// ═════════════════════════════════════════════════════════
+// Endpoints estilo Codex (Baro v6)
+//   GET  /api/agent/diff       → diff completo contra HEAD
+//   POST /api/agent/checkpoint → guarda un checkpoint (stash)
+//   POST /api/agent/undo       → restaura el último checkpoint
+//   POST /api/agent/init       → genera AGENTS.md (como /init)
+// Contrato fijo para el frontend: ver baro-v6/seguridad-RESUMEN.md
+// ═════════════════════════════════════════════════════════
+router.get('/agent/diff', async (req, res) => {
+  const session = getSession(req.query.sessionId);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  if (!fs.existsSync(path.join(session.dir, '.git'))) {
+    return res.json({ files: [], diff: '' });
+  }
+  try {
+    const { files, diff } = await git.gitStatusDiff(session.dir);
+    res.json({ files, diff });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/agent/checkpoint', async (req, res) => {
+  const { sessionId, label } = req.body || {};
+  const session = getSession(sessionId);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  if (!fs.existsSync(path.join(session.dir, '.git'))) {
+    return res.status(400).json({ error: 'No hay repositorio conectado en esta sesion' });
+  }
+  try {
+    const checkpoint = await git.createCheckpoint(session.dir, label);
+    if (!checkpoint) {
+      return res.json({ ok: false, error: 'Sin cambios para guardar en un checkpoint' });
+    }
+    if (typeof session.addCheckpoint === 'function') session.addCheckpoint(checkpoint);
+    else { session.checkpoints = session.checkpoints || []; session.checkpoints.push(checkpoint); }
+    session.addLog({ type: 'ok', title: `Checkpoint creado: ${checkpoint.label}`, detail: `ref ${checkpoint.ref}` });
+    res.json({ ok: true, checkpoint });
+  } catch (e) {
+    session.addLog({ type: 'err', title: 'Error creando checkpoint', detail: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/agent/undo', async (req, res) => {
+  const { sessionId, checkpointId } = req.body || {};
+  const session = getSession(sessionId);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  const checkpoints = session.checkpoints || [];
+  if (!checkpoints.length) return res.json({ ok: false, error: 'Sin checkpoints' });
+  const target = checkpointId
+    ? checkpoints.find((c) => c.id === checkpointId)
+    : checkpoints[checkpoints.length - 1];
+  if (!target) return res.json({ ok: false, error: 'Checkpoint no encontrado' });
+  try {
+    const result = await git.restoreCheckpoint(session.dir, target.ref);
+    session.addLog({ type: 'ok', title: `Checkpoint restaurado: ${target.label}`, detail: `ref ${target.ref}` });
+    res.json({ ok: true, restored: target.id, ref: target.ref, safetyStash: result.safetyStash });
+  } catch (e) {
+    session.addLog({ type: 'err', title: 'Error restaurando checkpoint', detail: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/agent/init', async (req, res) => {
+  const { sessionId } = req.body || {};
+  const session = getSession(sessionId);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  const target = path.join(session.dir, 'AGENTS.md');
+  if (fs.existsSync(target)) {
+    return res.json({ ok: false, exists: true, error: 'Ya existe un AGENTS.md en este repo; no se sobrescribe.' });
+  }
+  try {
+    // agentsMd.js lo mantiene el carril principal de v6; se importa
+    // aquí dentro para no tumbar el arranque si aún no estuviera.
+    const agentsMd = require('./agentsMd');
+    const content = await agentsMd.buildAgentsMdSkeleton(session.dir);
+    await fs.promises.mkdir(session.dir, { recursive: true });
+    await fs.promises.writeFile(target, content, 'utf8');
+    session.addLog({ type: 'ok', title: 'AGENTS.md generado', detail: 'Esqueleto estilo Codex en la raíz del repo' });
+    res.json({ ok: true, path: 'AGENTS.md', bytes: Buffer.byteLength(content, 'utf8') });
+  } catch (e) {
+    session.addLog({ type: 'err', title: 'Error generando AGENTS.md', detail: e.message });
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Memoria a largo plazo ─────────────────────────────────

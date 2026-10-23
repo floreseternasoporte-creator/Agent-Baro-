@@ -40,13 +40,9 @@ const S = {
   serverConfig: null,    // { ollamaReady, ollamaModel, aiProvider, githubPreconfigured }
   lastAutoAppliedPaths: [],
   lastAppliedDiffs: [],
-  voiceMode: false,      // modo conversación por voz (habla <-> escucha en bucle)
-  MODELS: [
-    'llama-3.3-70b-versatile',
-    'deepseek-r1-distill-llama-70b',
-    'mixtral-8x7b-32768',
-    'llama3-8b-8192'
-  ]
+  applyMode: 'auto',     // 'auto' = aplica diffs solo · 'ask' = Preguntar (el usuario aplica)
+  planSteps: [],         // pasos del plan del turno (evento SSE "plan")
+  lastVerify: null,      // ultimo resultado de tests (evento SSE "verify")
 };
 
 // Base de la API real. Mismo origen que sirve el frontend
@@ -160,6 +156,21 @@ const SESSION_TASKS = [
     icon: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>',
     action: () => { clearChat(); showScreen('chat'); },
   },
+  {
+    id: 'agentsmd', color: 'blue', title: 'Crear AGENTS.md', sub: 'Instrucciones del repo para el agente',
+    icon: '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/>',
+    action: () => doCreateAgentsMd(),
+  },
+  {
+    id: 'diff', color: 'purple', title: 'Ver diff', sub: 'Cambios del workspace sin subir',
+    icon: '<path d="M8 3H5a2 2 0 00-2 2v14a2 2 0 002 2h3"/><path d="M16 3h3a2 2 0 012 2v14a2 2 0 01-2 2h-3"/><path d="M12 2v20"/>',
+    action: () => openDiffModal(),
+  },
+  {
+    id: 'undo', color: 'amber', title: 'Deshacer cambios', sub: 'Volver al ultimo checkpoint',
+    icon: '<path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.7L3 8"/><path d="M3 3v5h5"/>',
+    action: () => doUndo(),
+  },
 ];
 
 function renderQuickCards() {
@@ -168,7 +179,7 @@ function renderQuickCards() {
     if (!el) return;
     el.innerHTML = list.map((t) => `
       <button class="qcard" onclick="${fn}(${JSON.stringify(t.prompt)})">
-        <div class="qcard-icon ${t.color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--${t.color})">${t.icon}</svg></div>
+        <div class="qcard-icon ${t.color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--${t.color})">${t.icon}</svg></div>
         <div class="qcard-title">${esc(t.title)}</div>
         <div class="qcard-sub">${esc(t.sub)}</div>
       </button>
@@ -186,7 +197,7 @@ function renderTaskScreen() {
     quickEl.innerHTML = quickList.map((t) => `
       <div class="task-card" onclick='doQuick(${JSON.stringify(t.prompt)});showScreen("chat")'>
         <div class="task-icon" style="background:var(--${t.color === 'accent' ? 'accent-bg' : t.color === 'blue' ? 'bb' : t.color === 'purple' ? 'pb' : t.color === 'green' ? 'gb' : t.color === 'amber' ? 'ab' : 'accent-bg'})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="color:var(--${t.color})">${t.icon}</svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="color:var(--${t.color})">${t.icon}</svg>
         </div>
         <div class="task-info">
           <div class="task-name">${esc(t.title)}</div>
@@ -202,7 +213,7 @@ function renderTaskScreen() {
     toolsEl.innerHTML = [...QUICK_TASKS.investigate, ...QUICK_TASKS.code].map((t) => `
       <div class="task-card" onclick='${t.prompt.endsWith(': ') ? `doQuickPrefill(${JSON.stringify(t.prompt)})` : `doQuick(${JSON.stringify(t.prompt)});showScreen("chat")`}'>
         <div class="task-icon" style="background:var(--${t.color === 'blue' ? 'bb' : t.color === 'purple' ? 'pb' : t.color === 'green' ? 'gb' : t.color === 'amber' ? 'ab' : 'accent-bg'})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="color:var(--${t.color})">${t.icon}</svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="color:var(--${t.color})">${t.icon}</svg>
         </div>
         <div class="task-info">
           <div class="task-name">${esc(t.title)}</div>
@@ -217,8 +228,8 @@ function renderTaskScreen() {
   if (sessionEl) {
     sessionEl.innerHTML = SESSION_TASKS.map((t, i) => `
       <div class="task-card" onclick="SESSION_TASKS[${i}].action()">
-        <div class="task-icon" style="background:var(--${t.color === 'green' ? 'gb' : 'rb'})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="color:var(--${t.color})">${t.icon}</svg>
+        <div class="task-icon" style="background:var(--${({ green: 'gb', red: 'rb', blue: 'bb', purple: 'pb', amber: 'ab' })[t.color] || 'bb'})">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="color:var(--${t.color})">${t.icon}</svg>
         </div>
         <div class="task-info">
           <div class="task-name">${esc(t.title)}</div>
@@ -255,15 +266,25 @@ function loadSettings() {
   S.multiAgentEnabled = localStorage.getItem('da_multi_agent') !== 'false';
   S.planModeEnabled = localStorage.getItem('da_plan_mode') === 'true';
   S.fileLimit = parseInt(localStorage.getItem('da_file_limit') || '10');
+  if (![50, 100, 200].includes(S.fileLimit)) S.fileLimit = 100;
+  S.applyMode = localStorage.getItem('da_apply_mode') === 'ask' ? 'ask' : 'auto';
   updateStatusBadges();
 }
 
 function syncSettingsUI() {
   const maToggle = document.getElementById('multiagent-toggle');
-  if (maToggle) { if (S.multiAgentEnabled) maToggle.classList.add('on'); else maToggle.classList.remove('on'); }
+  if (maToggle) { maToggle.classList.toggle('on', S.multiAgentEnabled); maToggle.setAttribute('aria-checked', String(S.multiAgentEnabled)); }
 
   const pmToggle = document.getElementById('planmode-toggle');
-  if (pmToggle) { if (S.planModeEnabled) pmToggle.classList.add('on'); else pmToggle.classList.remove('on'); }
+  if (pmToggle) { pmToggle.classList.toggle('on', S.planModeEnabled); pmToggle.setAttribute('aria-checked', String(S.planModeEnabled)); }
+
+  const segAuto = document.getElementById('seg-auto');
+  const segAsk = document.getElementById('seg-ask');
+  if (segAuto) segAuto.classList.toggle('on', S.applyMode !== 'ask');
+  if (segAsk) segAsk.classList.toggle('on', S.applyMode === 'ask');
+
+  const fl = document.getElementById('filelimit-select');
+  if (fl) fl.value = String(S.fileLimit);
 }
 
 // Refleja S.pendingEdits (archivos con diffs REALMENTE aplicados
@@ -281,17 +302,19 @@ function toggleSetting(name) {
   if (name === 'multiagent') {
     S.multiAgentEnabled = !S.multiAgentEnabled;
     const tog = document.getElementById('multiagent-toggle');
-    if (S.multiAgentEnabled) tog.classList.add('on'); else tog.classList.remove('on');
+    if (tog) { tog.classList.toggle('on', S.multiAgentEnabled); tog.setAttribute('aria-checked', String(S.multiAgentEnabled)); }
   } else if (name === 'planmode') {
     S.planModeEnabled = !S.planModeEnabled;
     const tog = document.getElementById('planmode-toggle');
-    if (S.planModeEnabled) tog.classList.add('on'); else tog.classList.remove('on');
+    if (tog) { tog.classList.toggle('on', S.planModeEnabled); tog.setAttribute('aria-checked', String(S.planModeEnabled)); }
   }
 }
 
 function saveSettings() {
   localStorage.setItem('da_multi_agent', S.multiAgentEnabled ? 'true' : 'false');
   localStorage.setItem('da_plan_mode', S.planModeEnabled ? 'true' : 'false');
+  localStorage.setItem('da_file_limit', String(S.fileLimit));
+  localStorage.setItem('da_apply_mode', S.applyMode);
 
   // Persistir en Firebase para que se carguen en cualquier dispositivo
   if (window.FB?.currentUser) {
@@ -382,7 +405,7 @@ function updateStatusBadges() {
   const model = rawModel.includes('llama-3.3-70b') ? 'Llama 3.3 70B'
     : rawModel.includes('deepseek-r1') ? 'DeepSeek R1'
     : rawModel.includes('llama-3.1-8b') ? 'Llama 3.1 8B'
-    : rawModel.includes('openai-fast') ? 'Pollinations (gratis)'
+    : rawModel.includes('openai-fast') || rawModel === 'openai' ? 'Pollinations (gratis)'
     : rawModel;
   const chain = (S.serverConfig?.providerChain || []).filter((p) => p !== provider);
   const chainTxt = chain.length ? ` · respaldo: ${chain.join(' → ')}` : '';
@@ -396,7 +419,10 @@ function updateStatusBadges() {
   el('gh-settings-badge') && (el('gh-settings-badge').style.display = ghOk ? 'none' : '');
   el('gh-settings-badge-ok') && (el('gh-settings-badge-ok').style.display = ghOk ? '' : 'none');
   el('gh-settings-sub') && (el('gh-settings-sub').textContent = ghOk ? S.repoData.full_name : 'Conecta un repositorio');
-  el('gh-dot') && (el('gh-dot').style.display = ghOk ? '' : 'none');
+  // La insignia del modelo muestra el PROVEEDOR real de /api/config
+  // (Groq, Pollinations u Ollama), no un "Local" fijo engañoso.
+  const modelBadge = el('ai-model-badge');
+  if (modelBadge) modelBadge.textContent = provider;
 }
 
 // ═══════════════════════════════════════════
@@ -642,13 +668,18 @@ async function connectRepo(repo) {
 }
 
 async function fetchFile(path) {
-  if (!S.repoData || !S.sessionId) return null;
+  S._lastFileError = '';
+  if (!S.repoData || !S.sessionId) { S._lastFileError = 'sin repositorio conectado'; return null; }
   try {
     const r = await fetch(`${API}/repo/file?sessionId=${encodeURIComponent(S.sessionId)}&path=${encodeURIComponent(path)}`);
-    if (!r.ok) return null;
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      S._lastFileError = d.error || `Error ${r.status}`;
+      return null;
+    }
     const data = await r.json();
     return data.content;
-  } catch { return null; }
+  } catch (e) { S._lastFileError = e.message; return null; }
 }
 
 // ═══════════════════════════════════════════
@@ -738,8 +769,10 @@ async function openFileViewer(path) {
   viewer.classList.add('open');
 
   const content = await fetchFile(path);
-  if (!content) {
-    document.getElementById('fv-code').innerHTML = '<div class="fv-loading">No se pudo cargar el archivo</div>';
+  if (content === null || content === undefined) {
+    const why = S._lastFileError ? ': ' + esc(S._lastFileError) : '';
+    document.getElementById('fv-code').innerHTML = `<div class="fv-loading">No se pudo cargar el archivo${why}</div>`;
+    if (S._lastFileError) showToast('Error cargando el archivo: ' + S._lastFileError);
     return;
   }
 
@@ -771,7 +804,7 @@ function editCurrentFile() {
   inp.focus();
   inp.style.height = 'auto';
   inp.style.height = inp.scrollHeight + 'px';
-  document.getElementById('sndbtn').disabled = false;
+  document.getElementById('sndbtn').disabled = !inp.value.trim();
 }
 
 function askAboutFile(path) {
@@ -909,12 +942,30 @@ function showActivity(show, text='') {
   const el = document.getElementById('activity');
   if (show) {
     el.classList.add('show');
+    el.classList.remove('done');
+    const lg = document.getElementById('act-log');
+    if (lg) lg.style.display = '';
     if (text) document.getElementById('act-head-txt').textContent = text;
     setBusy(true);
   } else {
     el.classList.remove('show');
     setBusy(false);
   }
+}
+
+// Al terminar el turno la evidencia QUEDA: el panel se colapsa
+// (el log se repliega) pero sigue visible y se puede reabrir
+// tocando su cabecera. Antes showActivity(false) lo borraba todo.
+function finishActivity(label) {
+  const el = document.getElementById('activity');
+  if (el) {
+    el.classList.add('show', 'done');
+    const lg = document.getElementById('act-log');
+    if (lg) lg.style.display = 'none';
+    const head = document.getElementById('act-head-txt');
+    if (head) head.textContent = label || 'Completado';
+  }
+  setBusy(false);
 }
 
 function toggleActivity() {
@@ -1099,16 +1150,26 @@ function cvDesktop(payload) {
       </div>`);
     steps.querySelectorAll(`#cv-confirm-${cid} button`).forEach((btn) => {
       btn.addEventListener('click', async () => {
-        btn.disabled = true;
         const approved = btn.dataset.ok === '1';
+        const box = document.getElementById(`cv-confirm-${cid}`);
+        btn.disabled = true;
         try {
-          await fetch(`${API}/computer/confirm`, {
+          const resp = await fetch(`${API}/computer/confirm`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sessionId: S.sessionId, confirmId: cid, approved }),
           });
-        } catch {}
-        const box = document.getElementById(`cv-confirm-${cid}`);
+          if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            throw new Error(d.error || `Error ${resp.status}`);
+          }
+        } catch (e) {
+          // Nada de marcar "Aprobada" si el servidor no lo registró:
+          // se avisa con el motivo real y el botón queda reintentable.
+          btn.disabled = false;
+          showToast('No se pudo registrar tu respuesta: ' + e.message);
+          return;
+        }
         if (box) box.innerHTML = `<span class="cv-desk-dim">${approved ? '✅ Aprobada' : '❌ Denegada'}</span>`;
       });
     });
@@ -1287,7 +1348,7 @@ function now() {
 }
 
 function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // Inverso exacto de esc() — recupera el texto original de un
@@ -1495,23 +1556,48 @@ function md(text) {
     return `<div class="cblock"><div class="cblock-head"><span class="clang">${lang||'code'}</span><div class="cblock-btns">${applyBtn}<button class="cblock-btn copy" onclick="cpBlock('${id}',this)">${copySvg()} Copiar</button></div></div><pre id="${id}">${rendered}</pre></div>`;
   });
 
+  // Tablas markdown: | col | col | con su fila separadora |---|---|
+  // Se extraen a HTML real (con scroll horizontal) antes de las
+  // reglas de párrafo, que si no las destrozarían.
+  const tableBlocks = [];
+  s = s.replace(/((?:^\|.+\|\s*$\n?)+)/gm, (block) => {
+    const rows = block.trim().split('\n').map((r) => r.trim());
+    if (rows.length < 2 || !/^\|[\s:|-]+\|$/.test(rows[1])) return block;
+    const inl = (t) => t.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+    const cells = (r) => r.replace(/^\||\|$/g, '').split('|').map((c) => inl(c.trim()));
+    const head = cells(rows[0]);
+    const bodyRows = rows.slice(2).map(cells);
+    const idx = tableBlocks.length;
+    tableBlocks.push(`<div class="md-table-wrap"><table><thead><tr>${head.map((c) => `<th>${c}</th>`).join('')}</tr></thead><tbody>${bodyRows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+    // El salto de línea final se conserva: si no, la línea siguiente
+    // queda pegada al marcador y deja de reconocerse (p. ej. "1. …").
+    return `\u0000TABLE_${idx}\u0000\n`;
+  });
+
   s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
   s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   s = s.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   s = s.replace(/^# (.+)$/gm, '<h1>$1</h1>');
   s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+  s = s.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
   s = s.replace(/^[-•] (.+)$/gm, '<li>$1</li>');
-  s = s.replace(/(<li>[\s\S]*?<\/li>\n?)+/g, m => `<ul class="mbody">${m}</ul>`);
-  s = s.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  s = s.replace(/(<li>[\s\S]*?<\/li>\n?)+/g, m => `<ul>${m.trim()}</ul>`);
+  s = s.replace(/^\d+\. (.+)$/gm, '<oli>$1</oli>');
+  s = s.replace(/(<oli>[\s\S]*?<\/oli>\n?)+/g, m => `<ol>${m.trim().replace(/<\/?oli>/g, (t) => t.startsWith('</') ? '</li>' : '<li>')}</ol>`);
   s = s.replace(/^---+$/gm, '<hr>');
   s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  s = s.replace(/^(?!<[hulo]|<li|<hr|<div|<pre|<ul|<block|\u0000MEDIA_BLOCK_)(.+)$/gm, '<p>$1</p>');
+  // URLs sueltas clicables (nunca dentro de un href ya generado).
+  s = s.replace(/(^|[^"=\]])\b(https?:\/\/[^\s<")]+[^\s<").,;:])/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+  // Citas [n] del Deep Research: clicables, saltan a la fuente del mensaje.
+  s = s.replace(/\[(\d+)\](?!\()/g, '<a class="cite" href="#" onclick="scrollToSource(this,$1);return false">[$1]</a>');
+  s = s.replace(/^(?!<[hulo]|<li|<hr|<div|<pre|<ul|<block|\u0000(?:MEDIA_BLOCK|TABLE)_)(.+)$/gm, '<p>$1</p>');
   s = s.replace(/<p><\/p>/g, '');
 
   // Sustituimos los marcadores por las tarjetas HTML reales, ahora
   // que el markdown alrededor ya esta resuelto.
   s = s.replace(/\u0000MEDIA_BLOCK_(\d+)\u0000/g, (_, i) => mediaBlocks[Number(i)] || '');
+  s = s.replace(/\u0000TABLE_(\d+)\u0000/g, (_, i) => tableBlocks[Number(i)] || '');
 
   return s;
 }
@@ -1588,6 +1674,19 @@ async function applyDiff(id, btn) {
   }
 }
 
+// Una cita [n] lleva a la fuente n-ésima del mismo mensaje (tarjeta
+// de búsqueda) y la resalta un instante. Si no hay tarjeta, no pasa nada.
+function scrollToSource(link, n) {
+  const msg = link.closest('.msg');
+  if (!msg) return;
+  const items = msg.querySelectorAll('.media-search-item');
+  const target = items[n - 1] || msg.querySelector('.media-card');
+  if (!target) { showToast('Fuente no visible en este mensaje'); return; }
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  target.classList.add('flash');
+  setTimeout(() => target.classList.remove('flash'), 1600);
+}
+
 function rejectDiff(btn) {
   const block = btn.closest('.cblock');
   if (block) { block.style.opacity = '0.3'; block.style.pointerEvents = 'none'; }
@@ -1659,7 +1758,7 @@ function addMsg(role, text) {
   }
 
   msgs.appendChild(div);
-  div.scrollIntoView({ behavior:'smooth', block:'end' });
+  if (isNearBottom()) scrollChatToBottom(false);
   return div;
 }
 
@@ -1693,7 +1792,7 @@ function mkStream() {
     <div class="mbubble"><div class="mbody"><div class="typing-indicator"><div class="dots"><span></span><span></span><span></span></div> Generando...</div></div></div>
   `;
   msgs.appendChild(div);
-  div.scrollIntoView({ behavior:'smooth', block:'end' });
+  if (isNearBottom()) scrollChatToBottom(false);
   return div;
 }
 
@@ -1708,7 +1807,7 @@ function patchStream(div, text, force) {
   if (!force && nowMs - _lastPatchMs < 120) return;
   _lastPatchMs = nowMs;
   body.innerHTML = md(text) + '<span class="scursor"></span>';
-  div.scrollIntoView({ behavior:'smooth', block:'end' });
+  if (isNearBottom()) scrollChatToBottom(false);
 }
 
 function finalStream(div, text) {
@@ -1720,10 +1819,10 @@ function finalStream(div, text) {
   actions.className = 'msg-actions';
   actions.innerHTML = `
     <button class="ma-btn" onclick="copyMsg(this)">${copySvg()} Copiar</button>
-    <button class="ma-btn" onclick="speakMsg(this)">🔊 Leer</button>
     <button class="ma-btn" onclick="regen(this)"><svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><path d="M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z"/></svg> Regenerar</button>
   `;
   div.appendChild(actions);
+  saveChatHistory();
 }
 
 // ═══════════════════════════════════════════
@@ -1745,7 +1844,11 @@ async function callAI(msg, onStream) {
     message: msg,
     planMode: S.planModeEnabled,
     fileLimit: S.fileLimit,
-    autoApply: true,
+    // El segmented Auto/Preguntar del composer manda de verdad:
+    // 'ask' deja los diffs con su botón Aplicar, sin auto-aplicar.
+    autoApply: S.applyMode !== 'ask',
+    // El toggle multi-agente de Config por fin viaja al backend.
+    multiAgent: S.multiAgentEnabled,
   });
 
   const agentToken = (() => { try { return localStorage.getItem('agent_token'); } catch { return null; } })();
@@ -1801,7 +1904,13 @@ async function callAI(msg, onStream) {
       let payload;
       try { payload = JSON.parse(dataLine.slice(6)); } catch { continue; }
 
-      if (eventName === 'log') {
+      if (eventName === 'plan') {
+        // Plan del turno (Codex-style): pasos con estado en vivo.
+        renderPlan(payload);
+      } else if (eventName === 'verify') {
+        // Resultado de la verificación con tests del turno.
+        renderVerify(payload);
+      } else if (eventName === 'log') {
         // Actividad real del servidor (leyendo archivos reales,
         // ejecutando, etc.) reflejada en el panel de actividad.
         log(payload.type, payload.title, payload.detail || '');
@@ -1823,6 +1932,7 @@ async function callAI(msg, onStream) {
         throw new Error(payload.error);
       } else if (eventName === 'done') {
         finalText = payload.text ?? finalText;
+        if (payload.verify) renderVerify(payload.verify);
         S.lastAutoAppliedPaths = Array.isArray(payload.autoAppliedPaths) ? payload.autoAppliedPaths : [];
         S.lastAppliedDiffs = Array.isArray(payload.appliedDiffs) ? payload.appliedDiffs : [];
         for (const path of S.lastAutoAppliedPaths) {
@@ -1835,6 +1945,9 @@ async function callAI(msg, onStream) {
 
   const estTokens = Math.round((msg.length + finalText.length) / 4) + 400;
   updateContextBar(estTokens);
+  // La estimación del turno, visible junto al log de actividad.
+  const tokEst = document.getElementById('act-token-est');
+  if (tokEst) tokEst.textContent = `~${estTokens.toLocaleString()} tokens`;
 
   return finalText;
 }
@@ -1869,119 +1982,6 @@ function autoAnalyze() {
 }
 
 // ═══════════════════════════════════════════
-// VOZ — dictado (STT) y lectura en voz alta (TTS)
-// Web Speech API del navegador: gratis, sin clave, sin
-// servidor. En iPhone funciona con Safari (dictado con el
-// idioma del sistema; la lectura usa voz en español si hay).
-// ═══════════════════════════════════════════
-let _recognition = null;
-let _dictating = false;
-
-function toggleDictation() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showToast('Tu navegador no soporta dictado por voz'); return; }
-  if (_dictating) { try { _recognition && _recognition.stop(); } catch (_) {} return; }
-  const inp = document.getElementById('inp');
-  _recognition = new SR();
-  _recognition.lang = 'es-ES';
-  _recognition.interimResults = true;
-  _recognition.continuous = false;
-  const base = inp.value ? inp.value.replace(/\s+$/, '') + ' ' : '';
-  let finalTxt = '';
-  _recognition.onresult = (e) => {
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const t = e.results[i][0].transcript;
-      if (e.results[i].isFinal) finalTxt += t; else interim += t;
-    }
-    inp.value = base + finalTxt + interim;
-    inp.style.height = 'auto';
-    inp.style.height = Math.min(inp.scrollHeight, 160) + 'px';
-    document.getElementById('sndbtn').disabled = !inp.value.trim();
-  };
-  const stopUi = () => {
-    _dictating = false; updateMicBtn();
-    // Modo voz: si se dictó algo con contenido, se envía solo.
-    if (S.voiceMode && finalTxt.trim() && !S.busy) {
-      setTimeout(() => { if (S.voiceMode && !S.busy) send(); }, 700);
-    }
-  };
-  _recognition.onend = stopUi;
-  _recognition.onerror = stopUi;
-  try {
-    _recognition.start();
-    _dictating = true;
-    updateMicBtn();
-    showToast('🎤 Escuchando… habla ahora');
-  } catch (_) { stopUi(); }
-}
-
-function updateMicBtn() {
-  const b = document.getElementById('micbtn');
-  if (b) b.classList.toggle('listening', _dictating);
-}
-
-// Lee en voz alta un mensaje de la IA. Segundo toque = detener.
-let _speakingBtn = null;
-function speakMsg(btn, onDone) {
-  try { window.speechSynthesis && speechSynthesis.cancel(); } catch (_) {}
-  if (_speakingBtn === btn) {
-    _speakingBtn = null;
-    btn.classList.remove('speaking');
-    if (typeof onDone === 'function') onDone(false);
-    return;
-  }
-  const msg = btn.closest('.msg');
-  const text = (msg && msg.querySelector('.mbody') ? msg.querySelector('.mbody').innerText : '').slice(0, 2000).trim();
-  if (!text || !window.speechSynthesis) { showToast('Sin voz disponible en este navegador'); if (typeof onDone === 'function') onDone(false); return; }
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'es-ES';
-  try {
-    const es = speechSynthesis.getVoices().find((v) => v.lang && v.lang.toLowerCase().startsWith('es'));
-    if (es) u.voice = es;
-  } catch (_) {}
-  u.onend = u.onerror = () => { _speakingBtn = null; btn.classList.remove('speaking'); if (typeof onDone === 'function') onDone(true); };
-  _speakingBtn = btn;
-  btn.classList.add('speaking');
-  speechSynthesis.speak(u);
-}
-
-// ─────────────────────────────────────────────────────────
-// MODO VOZ — conversación continua por voz estilo Astra:
-// el agente LEE su respuesta en voz alta y al terminar
-// ESCUCHA automáticamente; cuando dejas de hablar, tu mensaje
-// se envía solo. Toca el botón de nuevo para salir.
-// ─────────────────────────────────────────────────────────
-function setVoiceMode(on) {
-  S.voiceMode = !!on;
-  const b = document.getElementById('voicemodebtn');
-  if (b) b.classList.toggle('active', S.voiceMode);
-  if (!S.voiceMode) {
-    try { window.speechSynthesis && speechSynthesis.cancel(); } catch (_) {}
-    _speakingBtn = null;
-    if (_dictating) { try { _recognition && _recognition.stop(); } catch (_) {} }
-    showToast('Modo voz desactivado');
-  } else {
-    showToast('🎙️ Modo voz: habla y te respondo en voz alta');
-  }
-}
-
-// Lee automáticamente el div de mensaje recién generado y, al
-// terminar, arranca el dictado para continuar la conversación.
-function autoSpeakDiv(div) {
-  if (!S.voiceMode || !div) return;
-  const btn = div.querySelector('button[onclick^="speakMsg"]');
-  if (!btn) return;
-  // Pequeña pausa para que el render final asiente.
-  setTimeout(() => {
-    if (!S.voiceMode || S.busy) return;
-    speakMsg(btn, (finished) => {
-      if (finished && S.voiceMode && !S.busy && !_dictating) toggleDictation();
-    });
-  }, 500);
-}
-
-// ═══════════════════════════════════════════
 // STOP / SEND
 // ═══════════════════════════════════════════
 function stopGeneration() {
@@ -2009,6 +2009,7 @@ async function send() {
   addMsg('me', msg);
   clearActivityLog();
   resetComputerView();
+  resetPlanPanel();
   showActivity(true, 'Analizando tarea...');
   // Se resetea antes de cada turno para que el render en vivo (patchStream)
   // de esta respuesta nueva no herede por error los resultados del turno
@@ -2029,12 +2030,9 @@ async function send() {
     result = await callAI(msg, (text) => { patchStream(streamEl, text); });
     finalStream(streamEl, result);
     updateLastLog('ok', 'Completado');
-    showActivity(false);
+    finishActivity('Completado — actividad del turno');
     cvSetLive(false);
-    cvHideDelayed();
     detectEditsAndShowPushBanner(result);
-    // Modo voz: lee la respuesta en voz alta y luego escucha.
-    autoSpeakDiv(streamEl);
   } catch(e) {
     if (e.name === 'AbortError') {
       finalStream(streamEl, result || '_Generacion detenida._');
@@ -2042,14 +2040,13 @@ async function send() {
       finalStream(streamEl, `**Error:** ${e.message}`);
       updateLastLog('err', 'Error', e.message);
     }
-    showActivity(false);
+    finishActivity('Terminado — actividad del turno');
     cvSetLive(false);
-    cvHideDelayed();
   }
 
   S.busy = false;
   S.abortController = null;
-  document.getElementById('sndbtn').disabled = false;
+  document.getElementById('sndbtn').disabled = !inp.value.trim();
 }
 
 function doQuick(text) {
@@ -2083,8 +2080,216 @@ function clearChat() {
   S.pendingEdits = [];
   updateTasksBadge();
   clearActivityLog();
+  resetPlanPanel();
+  try { localStorage.removeItem(chatStoreKey()); } catch {}
   document.getElementById('context-bar')?.classList.remove('show');
   showToast('Conversacion nueva');
+}
+
+// ═══════════════════════════════════════════
+// CODEX v6 — plan visible, tests, deshacer, diff, AGENTS.md
+// ═══════════════════════════════════════════
+function setApplyMode(mode) {
+  S.applyMode = mode === 'ask' ? 'ask' : 'auto';
+  try { localStorage.setItem('da_apply_mode', S.applyMode); } catch {}
+  syncSettingsUI();
+  showToast(S.applyMode === 'ask'
+    ? 'Modo Preguntar: revisas y aplicas cada diff tú'
+    : 'Modo Auto: el agente aplica los diffs y los verifica');
+}
+
+function setFileLimit(v) {
+  const n = parseInt(v, 10);
+  if (![50, 100, 200].includes(n)) return;
+  S.fileLimit = n;
+  try { localStorage.setItem('da_file_limit', String(n)); } catch {}
+  showToast(`El agente leerá hasta ${n} archivos por turno`);
+}
+
+// ── Plan del turno (evento SSE "plan") ──
+function planStepIcon(status) {
+  if (status === 'done') return `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>`;
+  if (status === 'error') return `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>`;
+  if (status === 'active' || status === 'in_progress' || status === 'running') return `<span class="plan-spin"></span>`;
+  return `<span class="plan-dot"></span>`;
+}
+
+function renderPlan(payload) {
+  const steps = Array.isArray(payload?.steps) ? payload.steps : [];
+  S.planSteps = steps;
+  const panel = document.getElementById('plan-panel');
+  const list = document.getElementById('plan-steps');
+  if (!panel || !list) return;
+  if (!steps.length) { panel.classList.remove('show'); return; }
+  panel.classList.add('show');
+  list.innerHTML = steps.map((st) => {
+    const status = String(st.status || 'pending');
+    const cls = status === 'in_progress' || status === 'running' ? 'active' : status;
+    return `<li class="plan-step ${esc(cls)}"><span class="plan-ic">${planStepIcon(status)}</span><span class="plan-label">${esc(st.label || st.id || 'Paso')}</span></li>`;
+  }).join('');
+}
+
+function resetPlanPanel() {
+  S.planSteps = [];
+  S.lastVerify = null;
+  const panel = document.getElementById('plan-panel');
+  if (panel) panel.classList.remove('show');
+  const list = document.getElementById('plan-steps');
+  if (list) list.innerHTML = '';
+  const chip = document.getElementById('verify-chip');
+  if (chip) { chip.style.display = 'none'; chip.textContent = ''; }
+}
+
+// ── Chip de verificación con tests (evento SSE "verify") ──
+function renderVerify(v) {
+  if (!v) return;
+  S.lastVerify = v;
+  const chip = document.getElementById('verify-chip');
+  const panel = document.getElementById('plan-panel');
+  if (!chip) return;
+  if (panel) panel.classList.add('show');
+  chip.style.display = '';
+  chip.className = 'verify-chip ' + (v.ok ? 'ok' : 'err');
+  const bits = [`Tests ${v.ok ? 'superados' : 'con fallos'}`];
+  if (v.runner) bits.push(String(v.runner));
+  if (v.summary) bits.push(String(v.summary));
+  chip.innerHTML = `${v.ok ? checkSvg() : xSvg()} ${esc(bits.join(' · '))}`;
+}
+
+// ── Deshacer: vuelve al último checkpoint del workspace ──
+async function doUndo() {
+  if (!S.sessionId) { showToast('Sesión no lista todavía'); return; }
+  if (S.busy) { showToast('El agente está trabajando...'); return; }
+  const btn = document.getElementById('undo-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await fetch(`${API}/agent/undo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: S.sessionId }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || data.ok === false) throw new Error(data.error || data.reason || `Error ${resp.status}`);
+    S.pendingEdits = [];
+    updateTasksBadge();
+    hidePushBanner();
+    buzz([20, 50, 20]);
+    showToast(data.message || 'Cambios deshechos al último checkpoint ✓');
+  } catch (e) {
+    showToast('No se pudo deshacer: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── Ver diff: modal cristal con archivos y diff completo ──
+async function openDiffModal() {
+  if (!S.sessionId) { showToast('Sesión no lista todavía'); return; }
+  const modal = document.getElementById('diff-modal');
+  const body = document.getElementById('diff-body');
+  const filesEl = document.getElementById('diff-files');
+  if (!modal || !body) return;
+  body.textContent = 'Cargando…';
+  if (filesEl) filesEl.innerHTML = '';
+  modal.classList.add('open');
+  try {
+    const resp = await fetch(`${API}/agent/diff?sessionId=${encodeURIComponent(S.sessionId)}`);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || `Error ${resp.status}`);
+    const files = Array.isArray(data.files) ? data.files : [];
+    if (filesEl) {
+      filesEl.innerHTML = files.length
+        ? `<div class="diff-files-title">${files.length} archivo(s) con cambios</div>` + files.map((f) => `<div class="diff-file-row"><span class="diff-file-dot"></span><span>${esc(typeof f === 'string' ? f : (f.path || ''))}</span></div>`).join('')
+        : '<div class="diff-files-title">Sin cambios en el workspace</div>';
+    }
+    body.textContent = data.diff || 'Sin cambios.';
+  } catch (e) {
+    body.textContent = 'No se pudo cargar el diff: ' + e.message;
+  }
+}
+function closeDiffModal() { document.getElementById('diff-modal')?.classList.remove('open'); }
+
+// ── Crear AGENTS.md del repo conectado ──
+async function doCreateAgentsMd() {
+  if (!S.sessionId) { showToast('Sesión no lista todavía'); return; }
+  if (!S.repoData) { showToast('Conecta un repositorio primero'); return; }
+  try {
+    const resp = await fetch(`${API}/agent/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: S.sessionId }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (data.exists) {
+      showToast('Este repo ya tiene AGENTS.md');
+    } else if (!resp.ok || data.ok === false) {
+      throw new Error(data.error || `Error ${resp.status}`);
+    } else {
+      if (!S.pendingEdits.some((e) => e.path === 'AGENTS.md')) S.pendingEdits.push({ path: 'AGENTS.md' });
+      updateTasksBadge();
+      showToast('AGENTS.md creado en el repo ✓');
+    }
+  } catch (e) {
+    showToast('No se pudo crear AGENTS.md: ' + e.message);
+  }
+}
+
+// ── Repo reconectado al volver: preguntar antes de analizar ──
+function showReconnectBanner(name) {
+  const banner = document.getElementById('reconnect-banner');
+  if (!banner) return;
+  const nameEl = document.getElementById('rcb-name');
+  if (nameEl) nameEl.textContent = `${name} reconectado`;
+  banner.style.display = '';
+}
+function hideReconnectBanner() {
+  const banner = document.getElementById('reconnect-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════
+// CONVERSACIÓN PERSISTENTE (localStorage)
+// Se guarda texto/rol/hora por cliente — sin HTML ni controles:
+// al restaurar, los mensajes viejos no traen botones duplicados.
+// ═══════════════════════════════════════════
+let _restoringChat = false;
+let _chatRestored = false;
+function chatStoreKey() { return 'baro_chat_v1:' + (S.clientId || 'anon'); }
+
+function saveChatHistory() {
+  if (_restoringChat) return;
+  try {
+    const items = [...document.querySelectorAll('#msgs .msg')].map((div) => {
+      const bodyEl = div.querySelector('.mbody');
+      if (!bodyEl) return null;
+      return {
+        role: div.classList.contains('me') ? 'me' : 'ai',
+        text: (bodyEl.innerText || bodyEl.textContent || '').trim(),
+        time: div.querySelector('.mtime')?.textContent || '',
+      };
+    }).filter((it) => it && it.text).slice(-60);
+    localStorage.setItem(chatStoreKey(), JSON.stringify(items));
+  } catch {}
+}
+
+function restoreChatHistory() {
+  if (_chatRestored) return;
+  _chatRestored = true;
+  let items = [];
+  try { items = JSON.parse(localStorage.getItem(chatStoreKey()) || '[]'); } catch {}
+  if (!Array.isArray(items) || !items.length) return;
+  _restoringChat = true;
+  for (const it of items) {
+    if (!it || !it.text) continue;
+    const div = addMsg(it.role === 'me' ? 'me' : 'ai', it.text);
+    const bodyEl = div.querySelector('.mbody');
+    if (bodyEl) bodyEl.innerHTML = `<p style="white-space:pre-wrap">${esc(it.text)}</p>`;
+    const timeEl = div.querySelector('.mtime');
+    if (timeEl && it.time) timeEl.textContent = it.time;
+    div.querySelector('.msg-actions')?.remove();
+  }
+  _restoringChat = false;
+  scrollChatToBottom(false);
 }
 
 // ═══════════════════════════════════════════
@@ -2349,7 +2554,7 @@ async function selectOAuthRepo(fullName, branch, isPrivate) {
 // KEYBOARD
 // ═══════════════════════════════════════════
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); closePushModal(); closeFileViewer(); cancelDeviceFlow(); }
+  if (e.key === 'Escape') { closeModal(); closePushModal(); closeFileViewer(); cancelDeviceFlow(); closeDiffModal(); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); clearChat(); }
 });
 
@@ -2361,6 +2566,9 @@ document.getElementById('push-modal')?.addEventListener('click', e => {
 });
 document.getElementById('feedback-modal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('feedback-modal')) closeFeedbackModal();
+});
+document.getElementById('diff-modal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('diff-modal')) closeDiffModal();
 });
 
 document.getElementById('inp').addEventListener('input', autoGrow);
@@ -2374,6 +2582,7 @@ document.getElementById('inp').addEventListener('input', autoGrow);
 // ═══════════════════════════════════════════
 loadSettings();
 renderQuickCards();
+restoreChatHistory();
 // NO llamamos initSession() aqui: esperamos a Firebase Auth.
 
 // ═══════════════════════════════════════════
@@ -2400,6 +2609,14 @@ function autoGrow() {
   document.getElementById('sndbtn').disabled = !inp.value.trim() || S.busy;
 }
 
+// ¿El usuario está leyendo cerca del final? Solo entonces el
+// streaming puede acompañar hacia abajo (<320px, como el FAB).
+function isNearBottom() {
+  const sc = document.getElementById('chat-scroll');
+  if (!sc) return true;
+  return sc.scrollHeight - sc.scrollTop - sc.clientHeight < 320;
+}
+
 function scrollChatToBottom(smooth) {
   const sc = document.getElementById('chat-scroll');
   if (!sc) return;
@@ -2424,6 +2641,7 @@ window.onFirebaseAuthReady = async function(user) {
   loadSettings();
   syncSettingsUI();
   await initSession();
+  restoreChatHistory();
 };
 
 async function initSession() {
@@ -2461,6 +2679,8 @@ async function initSession() {
     try {
       await connectRepo(fullName);
       showToast(name + ' conectado ✓');
+      // Nada de disparar un análisis autónomo solo: se pregunta.
+      if (!document.querySelector('#msgs .msg')) showReconnectBanner(name);
     } catch (e) {
       showToast('No se pudo reconectar el repo anterior');
       // No bloqueamos: el usuario puede conectar manualmente

@@ -1,6 +1,6 @@
 # Baro
 
-Agente autónomo de código e investigación de nivel élite: clona repos de verdad, lee y escribe archivos reales, ejecuta comandos reales (`npm`, `python`, `pytest`, etc.), verifica los cambios automáticamente y hace commit + push real a GitHub — todo desde una interfaz móvil. Piensa y trabaja con arquitectura estilo Astra: auto-revisión de cada cambio antes de aplicarlo, verificación automática con tests reales, memoria duradera de sesión que sobrevive a los resúmenes, herramientas en paralelo y hasta 12 rondas automáticas por turno.
+Agente autónomo de código e investigación de nivel élite: clona repos de verdad, lee y escribe archivos reales, ejecuta comandos reales (`npm`, `python`, `pytest`, etc.), verifica los cambios automáticamente y hace commit + push real a GitHub — todo desde una interfaz móvil con diseño Apple/iMessage cristalino. El chat es solo texto: sin funciones de audio. Piensa y trabaja con arquitectura estilo Astra: auto-revisión de cada cambio antes de aplicarlo, verificación automática con tests reales, memoria duradera de sesión que sobrevive a los resúmenes, herramientas en paralelo y hasta 12 rondas automáticas por turno.
 
 Stack **100% gratuito**: Groq (Llama 3.3 70B, gratis con key) → Pollinations (gratis, sin clave, siempre disponible) → Ollama local. Sin OpenRouter, sin pagos, sin tarjetas. Ver [Proveedores](#proveedores-100-gratuitos).
 
@@ -13,14 +13,31 @@ Además de código, el agente tiene herramientas generales tipo Perplexity:
 
 Ver la sección [Herramientas nuevas](#herramientas-nuevas-busqueda-wikipedia-video-e-imagenes) para configuración y límites.
 
+## Novedades v6 «Codex»
+
+Baro adopta el flujo de trabajo de los agentes de código modernos (estilo Codex):
+
+- **`AGENTS.md` del repo conectado**: al conectar un repositorio, Baro lee su `AGENTS.md` (y el de los subdirectorios) y lo respeta como instrucciones del proyecto. Desde Tareas → «Crear AGENTS.md» (o `POST /api/agent/init`) genera uno inicial analizando el repo.
+- **Plan visible**: cada turno emite su plan paso a paso (evento SSE `plan`) y la app lo muestra como checklist viva sobre el composer: pendiente → en curso → hecho.
+- **Verificación visible**: tras aplicar cambios se ejecutan los tests del proyecto (evento `verify`) y el resultado queda como chip permanente en el turno: ✅ superados o ❌ con fallos, con el runner usado.
+- **Checkpoint y Deshacer**: antes de tocar el workspace se crea un checkpoint; el botón «Deshacer» (`POST /api/agent/undo`) vuelve a él. «Ver diff» (`GET /api/agent/diff`) muestra archivos cambiados y el diff completo en un modal.
+- **Revisión de código**: modo de revisión dedicado que analiza el diff/código sin editar y reporta hallazgos accionables.
+- **Modo Auto / Preguntar**: control segmentado en el composer. En «Preguntar» ningún diff se aplica solo: cada bloque queda con su botón Aplicar/Descartar.
+- **La evidencia no desaparece**: al terminar un turno, el log de actividad y la vista de computadora quedan colapsados pero consultables, no se borran.
+- **Conversación persistente**: el chat se guarda en el navegador y se restaura al volver. Si un repo se reconecta solo, la app pregunta antes de analizarlo (ya no dispara análisis autónomos sin avisar).
+- **Diseño Apple / iMessage cristalino**: superficies de cristal (`backdrop-filter: blur(20px) saturate(180%)`), azul sistema `#007AFF`, burbujas estilo iMessage (azul con degradado para ti, gris cristalino para Baro), tipografía del sistema, modo oscuro iOS según `prefers-color-scheme` e iconos SVG propios uniformes (24px, trazo 1.8). El logo ya no depende de ninguna imagen externa.
+- **Sin función de audio**: se eliminaron el dictado por voz, la lectura en voz alta (TTS) y el modo conversación por voz. El chat es solo texto; el frontend ya no usa la capacidad `voiceMode`.
+
 ## Arquitectura
 
 Todo el proyecto es plano — sin subcarpetas de codigo, para poder subirlo directo a un repo de GitHub sin reorganizar nada:
 
 ```
-index.html         → Frontend: markup (movil-first, estilo Claude)
+index.html         → Frontend: markup (movil-first, diseño Apple/iMessage cristalino)
 script.js           → Frontend: toda la logica de UI + llamadas a /api/*
-style.css           → Frontend: estilos
+style.css           → Frontend: estilos (cristal iOS, azul #007AFF, modo oscuro)
+AGENTS.md           → Instrucciones de este repo para agentes (Baro lo lee al conectar)
+.env.example        → Plantilla de variables de entorno (todas opcionales)
 
 server.js           → Backend: entry point, sirve el frontend + monta la API (esto arranca "npm start")
 sessionStore.js      → Backend: sesiones/workspaces en memoria + disco
@@ -47,7 +64,7 @@ El frontend nunca habla directo con Groq o GitHub — todo pasa por `/api/*`, qu
 
 ```bash
 npm install
-cp .env.example .env   # opcional: pon ahi tu GROQ_API_KEY/GITHUB_TOKEN si no quieres pegarlos en la app
+cp .env.example .env   # opcional: pon ahi tus claves (GROQ_API_KEY, TAVILY_API_KEY...)
 npm start
 ```
 
@@ -69,7 +86,7 @@ El agente puede ejecutar proyectos JavaScript y Python. En Replit se incluye Pyt
 5. Railway asigna la variable `PORT` automaticamente; el servidor ya la lee (`process.env.PORT`), no hay que tocarla.
 6. Deploy. El healthcheck vive en `/api/health` y Railway lo usa para saber cuando el servicio esta listo.
 
-Si prefieres no poner las claves como variables de entorno del servidor, cualquier usuario puede pegarlas en **Configuracion** dentro de la app; quedan solo en su navegador (`localStorage`), nunca en el servidor.
+Las claves viven **solo** como variables de entorno del servidor: la app no tiene ningún campo para pegar claves en Configuración. GitHub se conecta desde la propia app con OAuth (Device Flow, sin contraseñas), y en Configuración solo se ajusta el comportamiento del agente (multi-agente, modo plan, archivos por turno y modo Auto/Preguntar).
 
 ## Proveedores 100% gratuitos
 
@@ -88,7 +105,7 @@ La cadena se resuelve en cada request (no al arrancar), así que agregar una cla
 Investigamos la arquitectura publicada de GPT-6 Astra y la reimplementamos a nivel de harness sobre el stack gratuito:
 
 - **Auto-review**: cada diff pasa por un segundo pase del modelo como revisor senior ANTES de aplicarse. Un rechazo no rompe el turno: el motivo vuelve al loop y el agente corrige.
-- **Verificación automática**: tras aplicar cambios, si el repo tiene script de test, se ejecuta `npm test` solo y el resultado vuelve al loop para auto-corrección en el mismo turno.
+- **Verificación automática**: tras aplicar cambios, se ejecutan los tests del proyecto (Node, Python, etc. según el repo) y el resultado vuelve al loop para auto-corrección en el mismo turno; la app lo muestra como chip permanente del turno (evento `verify`).
 - **Memoria de dos capas**: historial de trabajo + notas duraderas de sesión (`Nota: ...`) donde el agente guarda decisiones, intentos fallidos y evidencia verificada — sobreviven a la compactación del contexto.
 - **Herramientas en paralelo**: búsquedas, Wikipedia e imágenes independientes se ejecutan a la vez.
 - **Auto-reparación**: los diffs que fallan se regeneran contra el contenido real del archivo, nunca se reenvían igual.

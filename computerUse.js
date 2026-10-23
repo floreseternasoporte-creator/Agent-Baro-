@@ -29,6 +29,78 @@ const CHROME_BIN = process.env.AGENT_CHROME_BIN || '/opt/meta-chromium/chrome';
 const VIEWPORT = { width: 1280, height: 800 };
 const MAX_ELEMENTS = 60;
 
+// ═══════════════════════════════════════════════════════
+// Guardia SSRF (Baro v6): el Chromium del agente navega a lo
+// que decide el modelo. Sin esto podía pegarle a localhost
+// (el propio servidor/Ollama), a la IP de metadata cloud
+// 169.254.169.254 o a la LAN. isBlockedUrl() se aplica en
+// navigate() ANTES de cargar nada: destinos locales, privados
+// o de enlace local quedan prohibidos con error claro.
+// ═══════════════════════════════════════════════════════
+function parseIpv4(host) {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!m) return null;
+  const parts = m.slice(1).map(Number);
+  if (parts.some((p) => p > 255)) return null;
+  return parts;
+}
+
+function isBlockedUrl(rawUrl) {
+  const raw = String(rawUrl || '').trim();
+  if (!raw) return true;
+  // Páginas internas del navegador: no son red, se permiten.
+  if (/^about:/i.test(raw)) return false;
+  let parsed;
+  try {
+    parsed = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    return true; // URL imposible de parsear = bloqueada
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return true;
+  let host = String(parsed.hostname || '').toLowerCase().replace(/\.$/, '');
+  if (!host) return true;
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1); // IPv6
+
+  // Nombres locales
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (host === 'localdomain' || host.endsWith('.localdomain')) return true;
+  if (host.endsWith('.local')) return true;
+  if (host === 'metadata.google.internal') return true;
+
+  // IPv6 peligrosas: loopback, unspecified, link-local, ULA
+  if (host.includes(':')) {
+    if (host === '::1' || host === '::') return true;
+    if (/^fe[89ab]/.test(host)) return true; // fe80::/10 link-local
+    if (/^f[cd]/.test(host)) return true;     // fc00::/7 unique-local
+    if (host.startsWith('::ffff:')) {
+      const mapped = parseIpv4(host.slice(7));
+      if (mapped) return isBlockedUrl(`http://${host.slice(7)}/`);
+    }
+    return false; // IPv6 pública
+  }
+
+  // IP codificada como entero (http://2130706433/ = 127.0.0.1)
+  if (/^\d+$/.test(host)) return true;
+  // Hex/octal raros: tratar como bloqueados si parecen IP
+  if (/^0x[0-9a-f]+$/i.test(host)) return true;
+
+  const ip = parseIpv4(host);
+  if (ip) {
+    const [a, b] = ip;
+    if (a === 0) return true;                          // 0.0.0.0/8
+    if (a === 10) return true;                         // 10.0.0.0/8
+    if (a === 127) return true;                        // loopback
+    if (a === 169 && b === 254) return true;           // link-local + metadata 169.254.169.254
+    if (a === 172 && b >= 16 && b <= 31) return true;  // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;           // 192.168.0.0/16
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64.0.0/10
+    if (a >= 224) return true;                         // multicast/reservado
+    return false; // IPv4 pública
+  }
+
+  return false; // nombre de dominio normal
+}
+
 // ─────────────────────────────────────────────────────────
 // Mini-proxy local de salida.
 // El servidor sale a internet por un proxy con autenticación
@@ -301,6 +373,10 @@ class AgentBrowser {
     let target = String(url || '').trim();
     // URLs internas del navegador (about:, data:) no llevan esquema https.
     if (!/^(https?:|about:|data:)/i.test(target)) target = 'https://' + target;
+    // SSRF: nada de localhost, LAN ni metadata cloud desde el agente.
+    if (isBlockedUrl(target)) {
+      throw new Error(`Navegación bloqueada por seguridad (SSRF): no se puede visitar un destino local o privado (${target}). Usa una URL pública.`);
+    }
     await this.cdp.send('Page.navigate', { url: target }, timeoutMs);
     // Esperar a que cargue (con tope).
     try {
@@ -530,5 +606,6 @@ module.exports = {
   closeAgentBrowser,
   requestConfirmation,
   resolveConfirmation,
+  isBlockedUrl,
   VIEWPORT,
 };

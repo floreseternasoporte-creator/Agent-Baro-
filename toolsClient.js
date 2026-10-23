@@ -13,7 +13,63 @@
 // clave se hardcodea ni se expone al navegador.
 // ═══════════════════════════════════════════════════════
 
-const crypto = require('crypto');
+const DEFAULT_FETCH_TIMEOUT_MS = 20_000;
+
+function linkedSignal(signal, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let onAbort = null;
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else {
+      onAbort = () => controller.abort();
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  }
+  return {
+    signal: controller.signal,
+    cleanup() {
+      clearTimeout(timer);
+      if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+    },
+  };
+}
+
+async function fetchWithTimeout(url, options = {}, signal, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+  const linked = linkedSignal(signal, timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: linked.signal });
+  } finally {
+    linked.cleanup();
+  }
+}
+
+function abortableDelay(ms, signal) {
+  if (!signal) return new Promise((resolve) => setTimeout(resolve, ms));
+  if (signal.aborted) {
+    const err = new Error('Operación cancelada');
+    err.name = 'AbortError';
+    return Promise.reject(err);
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    function onAbort() {
+      clearTimeout(timer);
+      const err = new Error('Operación cancelada');
+      err.name = 'AbortError';
+      reject(err);
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function sanitizeWikipediaLang(lang) {
+  const value = String(lang || '').trim();
+  return /^[a-z]{2,3}(-[a-z]{2})?$/i.test(value) ? value.toLowerCase() : 'es';
+}
 
 // ─────────────────────────────────────────────────────────
 // BÚSQUEDA WEB EN TIEMPO REAL — Tavily
@@ -26,7 +82,7 @@ const crypto = require('crypto');
 // ─────────────────────────────────────────────────────────
 const TAVILY_URL = 'https://api.tavily.com/search';
 
-async function webSearch({ query, topic = 'general', maxResults = 5, onStep }) {
+async function webSearch({ query, topic = 'general', maxResults = 5, onStep, signal }) {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) {
     const err = new Error('Falta TAVILY_API_KEY. Consigue una gratis en tavily.com y agrégala en las variables de entorno del servidor.');
@@ -36,7 +92,7 @@ async function webSearch({ query, topic = 'general', maxResults = 5, onStep }) {
 
   onStep?.({ type: 'search_start', query, provider: 'Tavily' });
 
-  const resp = await fetch(TAVILY_URL, {
+  const resp = await fetchWithTimeout(TAVILY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -48,7 +104,7 @@ async function webSearch({ query, topic = 'general', maxResults = 5, onStep }) {
       include_answer: true,
       include_images: false,
     }),
-  });
+  }, signal);
 
   if (!resp.ok) {
     let message = `Error ${resp.status} de Tavily`;
@@ -90,11 +146,12 @@ async function webSearch({ query, topic = 'general', maxResults = 5, onStep }) {
 // búsqueda para encontrar el artículo correcto primero.
 // Doc: https://api.wikimedia.org/wiki/API_reference/Core_REST_API
 // ─────────────────────────────────────────────────────────
-async function wikipediaLookup({ query, lang = 'es', onStep }) {
+async function wikipediaLookup({ query, lang = 'es', onStep, signal }) {
+  const safeLang = sanitizeWikipediaLang(lang);
   onStep?.({ type: 'wiki_start', query });
 
-  const searchUrl = `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=1&origin=*`;
-  const searchResp = await fetch(searchUrl, { headers: { 'User-Agent': 'Baro/2.0' } });
+  const searchUrl = `https://${safeLang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=1&origin=*`;
+  const searchResp = await fetchWithTimeout(searchUrl, { headers: { 'User-Agent': 'Baro/2.0' } }, signal);
   if (!searchResp.ok) throw new Error(`Error ${searchResp.status} buscando en Wikipedia`);
   const searchData = await searchResp.json();
   const hit = searchData.query?.search?.[0];
@@ -107,8 +164,8 @@ async function wikipediaLookup({ query, lang = 'es', onStep }) {
   onStep?.({ type: 'wiki_visit', title: hit.title });
 
   const title = encodeURIComponent(hit.title.replace(/ /g, '_'));
-  const summaryUrl = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${title}`;
-  const summaryResp = await fetch(summaryUrl, { headers: { 'User-Agent': 'Baro/2.0' } });
+  const summaryUrl = `https://${safeLang}.wikipedia.org/api/rest_v1/page/summary/${title}`;
+  const summaryResp = await fetchWithTimeout(summaryUrl, { headers: { 'User-Agent': 'Baro/2.0' } }, signal);
   if (!summaryResp.ok) throw new Error(`Error ${summaryResp.status} obteniendo resumen de Wikipedia`);
   const summary = await summaryResp.json();
 
@@ -177,20 +234,20 @@ function releaseVideoQuota() {
   if (used > 0) dailyVideoUsage.set(key, used - 1);
 }
 
-async function submitSeedanceClip({ apiKey, prompt, durationSec, referenceImageUrl }) {
+async function submitSeedanceClip({ apiKey, prompt, durationSec, referenceImageUrl, signal }) {
   const content = [{ type: 'text', text: `${prompt} --dur ${durationSec} --resolution 720p` }];
   if (referenceImageUrl) {
     content.push({ type: 'image_url', image_url: { url: referenceImageUrl } });
   }
 
-  const resp = await fetch(`${BYTEPLUS_BASE}/contents/generations/tasks`, {
+  const resp = await fetchWithTimeout(`${BYTEPLUS_BASE}/contents/generations/tasks`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ model: SEEDANCE_MODEL, content }),
-  });
+  }, signal);
 
   if (!resp.ok) {
     let message = `Error ${resp.status} de Seedance/BytePlus`;
@@ -204,14 +261,14 @@ async function submitSeedanceClip({ apiKey, prompt, durationSec, referenceImageU
   return data.id; // task id para hacer polling
 }
 
-async function pollSeedanceTask({ apiKey, taskId, onStep, clipIndex }) {
+async function pollSeedanceTask({ apiKey, taskId, onStep, clipIndex, signal }) {
   const started = Date.now();
   const timeoutMs = 6 * 60 * 1000; // 6 min de margen por clip
 
   while (Date.now() - started < timeoutMs) {
-    const resp = await fetch(`${BYTEPLUS_BASE}/contents/generations/tasks/${taskId}`, {
+    const resp = await fetchWithTimeout(`${BYTEPLUS_BASE}/contents/generations/tasks/${taskId}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    }, signal);
     if (!resp.ok) throw new Error(`Error ${resp.status} consultando estado del video`);
     const data = await resp.json();
 
@@ -224,7 +281,7 @@ async function pollSeedanceTask({ apiKey, taskId, onStep, clipIndex }) {
     }
 
     onStep?.({ type: 'video_clip_progress', clipIndex, status: data.status || 'processing' });
-    await new Promise((r) => setTimeout(r, 4000));
+    await abortableDelay(4000, signal);
   }
 
   throw new Error('Tiempo de espera agotado generando el clip de video.');
@@ -236,7 +293,7 @@ async function pollSeedanceTask({ apiKey, taskId, onStep, clipIndex }) {
  * Respeta el límite de MAX_VIDEOS_PER_DAY por instancia del
  * servidor. onStep(evento) reporta cada paso en tiempo real.
  */
-async function generateVideo({ prompt, durationSec = 15, referenceImageUrl = null, onStep }) {
+async function generateVideo({ prompt, durationSec = 15, referenceImageUrl = null, onStep, signal }) {
   const apiKey = process.env.BYTEPLUS_API_KEY;
   if (!apiKey) {
     const err = new Error('Falta BYTEPLUS_API_KEY. Consigue una key de Volcengine/BytePlus ModelArk (servicio de pago, no hay tier gratis real para video con IA) y agrégala en las variables de entorno del servidor.');
@@ -265,9 +322,10 @@ async function generateVideo({ prompt, durationSec = 15, referenceImageUrl = nul
         prompt: clipIndex === 1 ? prompt : `${prompt} (continuación de la escena anterior, misma consistencia de personajes y estilo)`,
         durationSec: clipDuration,
         referenceImageUrl: clipIndex === 1 ? referenceImageUrl : lastClipUrl,
+        signal,
       });
 
-      const clipUrl = await pollSeedanceTask({ apiKey, taskId, onStep, clipIndex });
+      const clipUrl = await pollSeedanceTask({ apiKey, taskId, onStep, clipIndex, signal });
       clips.push({ index: clipIndex, url: clipUrl, seconds: clipDuration });
       lastClipUrl = clipUrl;
       secondsLeft -= clipDuration;
@@ -291,7 +349,7 @@ async function generateVideo({ prompt, durationSec = 15, referenceImageUrl = nul
 // ─────────────────────────────────────────────────────────
 const IMAGE_EDIT_MODEL = process.env.IMAGE_EDIT_MODEL || 'kontext';
 
-async function editImage({ imageUrl, instruction, onStep }) {
+async function editImage({ imageUrl, instruction, onStep, signal }) {
   if (!imageUrl || !String(imageUrl).trim()) {
     throw new Error('Falta la URL de la imagen a editar.');
   }
@@ -313,7 +371,7 @@ async function editImage({ imageUrl, instruction, onStep }) {
   // Verificación ligera: un HEAD confirma que Pollinations acepta
   // la petición (200) antes de devolver la URL al usuario.
   try {
-    const head = await fetch(outputImage, { method: 'HEAD', signal: AbortSignal.timeout(15000) });
+    const head = await fetchWithTimeout(outputImage, { method: 'HEAD' }, signal);
     if (!head.ok) throw new Error(`Pollinations devolvió HTTP ${head.status}`);
   } catch (e) {
     const err = new Error(`No se pudo editar la imagen: ${e.message}`);
@@ -328,12 +386,17 @@ async function editImage({ imageUrl, instruction, onStep }) {
 
 /** Procesa un lote de imágenes con la misma instrucción, en secuencia,
  *  reportando progreso por cada una. */
-async function editImageBatch({ images, instruction, onStep }) {
+async function editImageBatch({ images, instruction, onStep, signal }) {
   const results = [];
   for (let i = 0; i < images.length; i += 1) {
+    if (signal?.aborted) {
+      const err = new Error('Operación cancelada');
+      err.name = 'AbortError';
+      throw err;
+    }
     onStep?.({ type: 'batch_item_start', index: i, total: images.length });
     try {
-      const result = await editImage({ imageUrl: images[i], instruction, onStep });
+      const result = await editImage({ imageUrl: images[i], instruction, onStep, signal });
       results.push({ index: i, ok: true, ...result });
     } catch (e) {
       results.push({ index: i, ok: false, error: e.message });
@@ -374,7 +437,12 @@ function buildImageUrl(prompt, { width = 1024, height = 1024, seed = null } = {}
  * resolverse la URL (el servidor de Pollinations la genera
  * al recibir el GET); aqui solo construimos la URL real.
  */
-async function generateImage({ prompt, width, height, onStep }) {
+async function generateImage({ prompt, width, height, onStep, signal }) {
+  if (signal?.aborted) {
+    const err = new Error('Operación cancelada');
+    err.name = 'AbortError';
+    throw err;
+  }
   if (!prompt || !String(prompt).trim()) {
     throw new Error('Falta el prompt para generar la imagen.');
   }
@@ -397,7 +465,7 @@ async function generateImage({ prompt, width, height, onStep }) {
 //   -> research_synthesize { sources } -> research_done { sources }.
 // Devuelve { report, sources: [{ title, url, snippet }] }.
 // ─────────────────────────────────────────────────────────
-async function deepResearch({ topic, generateText, onStep, maxAngles = 5 }) {
+async function deepResearch({ topic, generateText, onStep, maxAngles = 5, signal }) {
   const clean = String(topic || '').trim();
   if (!clean) throw new Error('Falta el tema a investigar.');
   if (typeof generateText !== 'function') throw new Error('deepResearch necesita generateText (IA).');
@@ -427,6 +495,7 @@ async function deepResearch({ topic, generateText, onStep, maxAngles = 5 }) {
         query,
         topic: /noticia/i.test(query) ? 'news' : 'general',
         maxResults: 6,
+        signal,
         onStep: (s) => {
           if (s.type === 'search_visit') {
             onStep?.({ type: 'research_visit', url: s.url, title: s.title, snippet: s.snippet });
@@ -463,7 +532,8 @@ async function deepResearch({ topic, generateText, onStep, maxAngles = 5 }) {
     '- ## Datos clave (cifras, fechas y hechos concretos con citas)\n' +
     '- ## Conclusión (qué significa esto en la práctica)\n\n' +
     'Tono claro y denso, cero relleno. Si las fuentes se contradicen en algo, dilo explícitamente.\n\n' +
-    `FUENTES:\n${material || '(sin fuentes: indica claramente que no se encontró información verificable)'}\n`
+    `FUENTES:\n${material || '(sin fuentes: indica claramente que no se encontró información verificable)'}\n`,
+    signal
   );
   if (!report || !report.trim()) throw new Error('La IA no devolvió el informe de investigación.');
 
@@ -669,6 +739,7 @@ module.exports = {
   editImage,
   editImageBatch,
   getVideoUsageToday,
+  sanitizeWikipediaLang,
   MAX_VIDEOS_PER_DAY,
   MAX_TOTAL_SECONDS,
   MAX_CLIP_SECONDS,

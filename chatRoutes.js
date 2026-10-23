@@ -18,6 +18,7 @@ const { runCommand, extractAutomaticCommands, isSafeWorkspaceArgument } = requir
 const { extractToolCommands } = require('./toolCommands');
 const tools = require('./toolsClient');
 const { runComputerTask } = require('./computerTask');
+const { loadAgentsInstructions } = require('./agentsMd');
 
 const router = express.Router();
 // Rondas automáticas por turno: el modelo puede pedir herramientas,
@@ -26,9 +27,23 @@ const router = express.Router();
 // horizonte largo (investigar → editar → revisar → probar →
 // corregir) sin cortar el flujo a la mitad. Los topes por ronda
 // (5 comandos, diffs deduplicados) evitan loops infinitos.
-const MAX_AUTOMATIC_ROUNDS = 8;
+const MAX_AUTOMATIC_ROUNDS = 12;
 const MAX_COMMANDS_PER_ROUND = 5;
 const MAX_COMMAND_CONTEXT_BYTES = 30_000;
+const PLAN_MODE_READ_ONLY_TOOLS = new Set(['search', 'wikipedia', 'deep-research', 'code-review']);
+
+// Mutex simple en memoria: encadena los turnos de una misma
+// sesión para que dos POST /chat simultáneos no se pisen el
+// historial, las notas ni los archivos del workspace.
+const chatTurnChains = new Map();
+
+function safeUrlHostname(rawUrl) {
+  try {
+    return new URL(rawUrl).hostname || 'fuente web';
+  } catch {
+    return 'fuente web';
+  }
+}
 
 // ── Cadena de proveedores con FAILOVER AUTOMATICO ──────────
 // Stack 100% GRATUITO (2026-09-27, v3 brutal sin OpenRouter):
@@ -55,26 +70,52 @@ function providerChain() {
  * siguiente de forma transparente. Si falla a mitad del stream, se
  * propaga el error (no hay failover limpio a mitad de respuesta).
  */
+const sleepAbortable = (ms, signal) => new Promise((resolve, reject) => {
+  const t = setTimeout(resolve, ms);
+  if (signal) signal.addEventListener('abort', () => { clearTimeout(t); reject(Object.assign(new Error('aborted'), { name: 'AbortError' })); }, { once: true });
+});
+
 async function streamWithFailover({ model, messages, signal, onDelta, onProvider }) {
   let lastError = null;
   for (const { name, client } of providerChain()) {
-    let started = false;
-    try {
-      const result = await client.streamChat({
-        model,
-        messages,
-        signal,
-        onDelta: (delta, fullText) => {
-          if (!started) { started = true; onProvider?.(name); }
-          onDelta(delta, fullText);
-        },
-      });
-      return result;
-    } catch (e) {
-      if (e.name === 'AbortError') throw e;
-      lastError = e;
-      if (started) throw e;
-      console.error(`[devagent] proveedor ${name} fallo, probando siguiente:`, e.message);
+    // Los proveedores gratuitos devuelven vacío o 429 de forma
+    // intermitente: reintentos con pausa antes de bajar de
+    // proveedor rescatan la mayoría de esos turnos. Pollinations
+    // (pool anónimo con nodos desiguales) recibe un intento extra
+    // y pausas más largas.
+    const maxAttempts = name.startsWith('Pollinations') ? 3 : 2;
+    const retryDelays = name.startsWith('Pollinations') ? [2000, 6000] : [1500, 1500];
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      let started = false;
+      try {
+        const result = await client.streamChat({
+          model,
+          messages,
+          signal,
+          onDelta: (delta, fullText) => {
+            if (!delta) return;
+            if (!started) { started = true; onProvider?.(name); }
+            onDelta(delta, fullText);
+          },
+        });
+        // Un stream que termina sin error pero VACÍO no es un éxito:
+        // se prueba el siguiente proveedor en vez de entregar un
+        // turno en blanco al usuario.
+        if (!(result && String(result).trim())) {
+          lastError = new Error(`${name} devolvió una respuesta vacía`);
+          console.error(`[baro] proveedor ${name} devolvió vacío (intento ${attempt + 1}), ${attempt < maxAttempts - 1 ? 'reintentando' : 'probando siguiente'}`);
+          if (attempt < maxAttempts - 1) { await sleepAbortable(retryDelays[attempt] || 1500, signal); continue; }
+          break;
+        }
+        return result;
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        lastError = e;
+        if (started) throw e;
+        console.error(`[baro] proveedor ${name} fallo (intento ${attempt + 1}), probando siguiente:`, e.message);
+        if (attempt < maxAttempts - 1 && (e.status === 429 || e.status >= 500 || !e.status)) { await sleepAbortable(retryDelays[attempt] || 1500, signal); continue; }
+        break;
+      }
     }
   }
   const err = new Error(lastError ? `Ningún proveedor respondió. Último error: ${lastError.message}` : 'Ningún proveedor de IA disponible');
@@ -90,28 +131,31 @@ async function streamWithFailover({ model, messages, signal, onDelta, onProvider
 async function generateText(prompt, signal) {
   let lastError = null;
   for (const { name, client } of providerChain()) {
-    try {
-      const text = await client.streamChat({
-        messages: [{ role: 'user', content: prompt }],
-        signal,
-      });
-      if (text && text.trim()) return text;
-      lastError = new Error(`${name} devolvió vacío`);
-    } catch (e) {
-      if (e.name === 'AbortError') throw e;
-      lastError = e;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const text = await client.streamChat({
+          messages: [{ role: 'user', content: prompt }],
+          signal,
+        });
+        if (text && text.trim()) return text;
+        lastError = new Error(`${name} devolvió vacío`);
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        lastError = e;
+      }
+      if (attempt === 0) { try { await sleepAbortable(1200, signal); } catch { throw lastError; } }
     }
   }
   throw new Error(`Ningún proveedor pudo generar texto: ${lastError?.message || 'desconocido'}`);
 }
 
 /**
- * Auto-review estilo Astra: antes de aplicar un diff, un segundo
- * pase del modelo actúa como revisor senior. Si lo rechaza, el diff
- * NO se aplica y el motivo vuelve al loop para que el agente lo
- * corrija. Si el revisor falla, no se bloquea: se aplica y se
- * verifica después con pruebas reales.
- * Devuelve { approved: boolean, reason: string }.
+ * Auto-review estilo Codex: antes de aplicar un diff, un segundo
+ * pase del modelo actúa como revisor senior. Es FAIL-CLOSED: si
+ * lo rechaza, si su respuesta no trae un veredicto parseable o
+ * si el propio revisor falla, el diff NO se auto-aplica; queda
+ * como diff normal para aplicación manual.
+ * Devuelve { approved: boolean, reason: string, unclear?: boolean }.
  */
 async function reviewDiffWithAI(diffBlock, generateTextFn) {
   const verdict = await generateTextFn(
@@ -123,33 +167,128 @@ async function reviewDiffWithAI(diffBlock, generateTextFn) {
     'Rechaza (NO) si ves errores de sintaxis, paths que no existen, cambios destructivos sin justificación, o secretos/credenciales hardcodeados.\n\n' +
     '```diff\n' + diffBlock.slice(0, 6000) + '\n```'
   );
-  const m = /VEREDICTO:\s*(SI|NO)/i.exec(verdict || '');
-  const approved = m ? m[1].toUpperCase() === 'SI' : true;
+  const m = /VEREDICTO:\s*(S[IÍ]|NO)/i.exec(verdict || '');
   const reasonM = /MOTIVO:\s*(.+)/i.exec(verdict || '');
-  return { approved, reason: (reasonM ? reasonM[1] : 'sin motivo').trim().slice(0, 300) };
+  const reason = (reasonM ? reasonM[1] : 'sin motivo').trim().slice(0, 300);
+  if (!m) {
+    return {
+      approved: false,
+      unclear: true,
+      reason: 'Auto-review sin veredicto claro: no aplicado automáticamente',
+    };
+  }
+  return { approved: m[1].toUpperCase().startsWith('S'), reason };
+}
+
+function directoryHasPythonTests(dir, depth = 0) {
+  if (depth > 4) return false;
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && /^(test_[^/]+|[^/]+_test)\.py$/i.test(entry.name)) return true;
+    if (entry.isDirectory() && !/^(node_modules|\.git|\.venv|venv|__pycache__)$/i.test(entry.name)) {
+      if (/^tests?$/i.test(entry.name)) {
+        try {
+          if (fs.readdirSync(path.join(dir, entry.name)).some((name) => /\.py$/i.test(name))) return true;
+        } catch {}
+      }
+      if (directoryHasPythonTests(path.join(dir, entry.name), depth + 1)) return true;
+    }
+  }
+  return false;
+}
+
+function detectAutoTestRunner(session) {
+  const dir = session.dir;
+  try {
+    const pkgPath = path.join(dir, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (pkg.scripts?.test) {
+        return { binary: 'npm', args: ['test', '--silent'], label: 'npm test' };
+      }
+    }
+  } catch {
+    // Un package.json ilegible no debe tumbar la verificación de
+    // otros ecosistemas presentes en el mismo workspace.
+  }
+
+  const pyprojectPath = path.join(dir, 'pyproject.toml');
+  const pyproject = fs.existsSync(pyprojectPath)
+    ? fs.readFileSync(pyprojectPath, 'utf8')
+    : '';
+  const hasPytestConfig = fs.existsSync(path.join(dir, 'pytest.ini'))
+    || fs.existsSync(path.join(dir, 'tox.ini'))
+    || /\[tool\.pytest/.test(pyproject)
+    || (fs.existsSync(path.join(dir, 'setup.cfg'))
+      && /\[tool:pytest\]/.test(fs.readFileSync(path.join(dir, 'setup.cfg'), 'utf8')));
+  const hasPythonProject = !!pyproject
+    || fs.existsSync(path.join(dir, 'requirements.txt'))
+    || fs.existsSync(path.join(dir, 'setup.py'));
+  if (hasPytestConfig || (hasPythonProject && directoryHasPythonTests(dir))) {
+    return { binary: 'python3', args: ['-m', 'pytest', '-q'], label: 'python3 -m pytest -q' };
+  }
+
+  if (fs.existsSync(path.join(dir, 'go.mod'))) {
+    return { binary: 'go', args: ['test', './...'], label: 'go test ./...' };
+  }
+  if (fs.existsSync(path.join(dir, 'Cargo.toml'))) {
+    return { binary: 'cargo', args: ['test'], label: 'cargo test' };
+  }
+  return null;
 }
 
 /**
- * Verificación automática estilo Astra: si el repo tiene script de
- * test en package.json, se ejecuta una vez por turno después de
- * aplicar cambios y el resultado vuelve al loop del agente para
- * que corrija fallos sin que el usuario mueva un dedo.
- * Devuelve el bloque de texto para el modelo, o null si no aplica.
+ * Verificación automática estilo Codex: detecta el runner real
+ * del proyecto (npm, pytest, Go o Cargo), lo ejecuta una vez por
+ * turno después de aplicar cambios y devuelve el resultado al
+ * loop para que el agente corrija fallos sin intervención.
+ * Emite el evento SSE `verify` además del log visible.
+ * Devuelve el bloque de texto para el modelo, o null si no hay
+ * runner detectable (dejando constancia honesta en el log).
  */
 async function runAutoTests(session, send) {
-  try {
-    const pkgPath = path.join(session.dir, 'package.json');
-    if (!fs.existsSync(pkgPath)) return null;
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    if (!pkg.scripts || !pkg.scripts.test) return null;
-    send('log', { type: 'run', title: 'Verificación automática: ejecutando npm test…' });
-    const res = await runCommand('npm', ['test', '--silent'], session.dir, 120000);
-    const out = truncateCommandOutput(res.stdout || res.stderr || res.error || '(sin salida)');
-    send('log', { type: res.ok ? 'ok' : 'err', title: res.ok ? 'Verificación: tests pasaron' : 'Verificación: tests fallaron', detail: out.slice(0, 300) });
-    session.addLog({ type: res.ok ? 'ok' : 'err', title: 'Auto-test npm', detail: out.slice(0, 300) });
-    return `### Verificación automática (npm test): ${res.ok ? '✅ PASARON' : '❌ FALLARON'}\n\`\`\`\n${out.slice(0, 3000)}\n\`\`\`${res.ok ? '' : '\nCorrige los fallos con otro diff exacto y vuelve a verificar.'}`;
-  } catch (e) {
+  const runner = detectAutoTestRunner(session);
+  if (!runner) {
+    send('log', {
+      type: 'info',
+      title: 'Sin verificación automática disponible',
+      detail: 'No se detectó script test de npm, configuración/tests de pytest, go.mod ni Cargo.toml.',
+    });
+    session.addLog({
+      type: 'info',
+      title: 'Auto-test no disponible',
+      detail: 'Sin runner detectable (npm/pytest/go/cargo)',
+    });
     return null;
+  }
+
+  try {
+    send('log', { type: 'run', title: `Verificación automática: ejecutando ${runner.label}…` });
+    const res = await runCommand(runner.binary, runner.args, session.dir, 120000);
+    const out = truncateCommandOutput(res.stdout || res.stderr || res.error || '(sin salida)');
+    const summary = out.slice(0, 300);
+    send('log', {
+      type: res.ok ? 'ok' : 'err',
+      title: res.ok ? 'Verificación: tests pasaron' : 'Verificación: tests fallaron',
+      detail: summary,
+    });
+    send('verify', { ok: !!res.ok, runner: runner.label, summary });
+    session.addLog({
+      type: res.ok ? 'ok' : 'err',
+      title: `Auto-test ${runner.label}`,
+      detail: summary,
+    });
+    return `### Verificación automática (${runner.label}): ${res.ok ? '✅ PASARON' : '❌ FALLARON'}\n\`\`\`\n${out.slice(0, 3000)}\n\`\`\`${res.ok ? '' : '\nCorrige los fallos con otro diff exacto y vuelve a verificar.'}`;
+  } catch (e) {
+    const summary = String(e.message || e).slice(0, 300);
+    send('log', { type: 'err', title: 'Verificación automática falló al ejecutarse', detail: summary });
+    send('verify', { ok: false, runner: runner.label, summary });
+    return `### Verificación automática (${runner.label}): ❌ NO SE PUDO EJECUTAR\n${summary}`;
   }
 }
 
@@ -334,6 +473,97 @@ function extractFencedCode(text, fileName) {
   return first;
 }
 
+function statusPathFromLine(line) {
+  const raw = String(line || '').slice(3).trim();
+  if (!raw) return '';
+  const renamed = raw.split(' -> ');
+  return (renamed[renamed.length - 1] || '').replace(/^"|"$/g, '');
+}
+
+/**
+ * Revisión de código READ-ONLY estilo Codex /review.
+ * Lee el estado y el diff contra HEAD, pide al modelo SOLO una
+ * revisión estructurada y elimina cualquier bloque ```diff de
+ * la respuesta: esta herramienta jamás aplica cambios.
+ */
+async function reviewCodeReadOnly({ session, focus, generateTextFn }) {
+  if (!session?.dir || !fs.existsSync(path.join(session.dir, '.git'))) {
+    return 'No hay un repositorio Git conectado en esta sesión, así que no hay cambios contra HEAD para revisar.';
+  }
+
+  const statusRes = await runCommand('git', ['status', '--short'], session.dir, 30000);
+  if (!statusRes.ok) {
+    return `No se pudo leer el estado Git del workspace: ${statusRes.error || statusRes.stderr || 'error desconocido'}`;
+  }
+  const statusLines = String(statusRes.stdout || '').split(/\r?\n/).filter(Boolean);
+  if (!statusLines.length) {
+    return 'No hay cambios sin commitear contra HEAD: el árbol de trabajo está limpio, no hay nada que revisar.';
+  }
+
+  const material = [];
+  let budget = 24_000;
+  for (const line of statusLines.slice(0, 30)) {
+    const relPath = statusPathFromLine(line);
+    if (!relPath) continue;
+    const isUntracked = line.startsWith('??');
+    let chunk = '';
+    if (isUntracked) {
+      try {
+        const content = await git.readFile(session.dir, relPath);
+        chunk = `### ${relPath} (archivo nuevo sin seguimiento)\n\`\`\`\n${content.slice(0, 6000)}\n\`\`\``;
+      } catch {
+        chunk = `### ${relPath} (archivo nuevo sin seguimiento; no se pudo leer su contenido)`;
+      }
+    } else {
+      const diff = await git.diffAgainstHead(session.dir, relPath);
+      chunk = diff
+        ? `### ${relPath}\n\`\`\`diff\n${diff.slice(0, 8000)}\n\`\`\``
+        : `### ${relPath}\n(sin diff textual contra HEAD)`;
+    }
+    if (budget <= 0) break;
+    material.push(chunk.slice(0, budget));
+    budget -= chunk.length;
+  }
+
+  const prompt = [
+    'Actúa como revisor de código senior de Codex en modo SOLO LECTURA (/review).',
+    'Revisa los cambios contra HEAD y busca bugs reales, regresiones, riesgos de seguridad, pérdida de datos y huecos de tests. No inventes problemas genéricos.',
+    focus ? `Foco pedido por el usuario: ${focus}` : '',
+    '',
+    'Formato OBLIGATORIO:',
+    '## Veredicto',
+    '<una línea: "El parche parece correcto" o "El parche tiene problemas">',
+    '',
+    '## Hallazgos',
+    '- [P0|P1|P2] ruta/archivo:línea — problema concreto y por qué importa',
+    'P0 = rompe en producción o seguridad/datos; P1 = bug probable o regresión; P2 = riesgo menor o hueco de tests.',
+    'Si no hay hallazgos reales, escribe exactamente: "Sin hallazgos."',
+    '',
+    '## Resumen',
+    '<2-4 líneas>',
+    '',
+    'PROHIBIDO: proponer diffs, bloques de código ```diff, parches aplicables o cambios. Solo revisión.',
+    '',
+    `Estado Git:\n${statusLines.join('\n')}`,
+    '',
+    material.join('\n\n'),
+  ].filter(Boolean).join('\n');
+
+  const rawReview = await generateTextFn(prompt);
+  if (!rawReview || !String(rawReview).trim()) {
+    return 'El modelo no devolvió una revisión. No se aplicó ningún cambio.';
+  }
+  const cleanReview = String(rawReview)
+    .replace(/```diff[\s\S]*?```/gi, '[bloque diff omitido: la revisión es de solo lectura]')
+    .trim();
+  return [
+    `**Alcance:** ${statusLines.length} archivo(s) con cambios contra HEAD.`,
+    focus ? `**Foco:** ${focus}` : '',
+    '',
+    cleanReview,
+  ].filter(Boolean).join('\n');
+}
+
 async function runToolCommand(command, send, session, signal, sourceText = '') {
   const onStep = (step) => {
     switch (step.type) {
@@ -342,7 +572,7 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
         send('computer', { mode: 'browser', action: 'search', engine: 'web', query: step.query });
         break;
       case 'search_visit':
-        send('log', { type: 'info', title: `Visitando: ${new URL(step.url).hostname}`, detail: step.title });
+        send('log', { type: 'info', title: `Visitando: ${safeUrlHostname(step.url)}`, detail: step.title });
         send('computer', { mode: 'browser', action: 'visit', url: step.url, title: step.title, snippet: step.snippet });
         break;
       case 'search_done':
@@ -408,7 +638,7 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
         send('computer', { mode: 'browser', action: 'search', engine: 'web', query: step.query });
         break;
       case 'research_visit':
-        send('log', { type: 'info', title: `Leyendo fuente: ${new URL(step.url).hostname}`, detail: step.title });
+        send('log', { type: 'info', title: `Leyendo fuente: ${safeUrlHostname(step.url)}`, detail: step.title });
         send('computer', { mode: 'browser', action: 'visit', url: step.url, title: step.title, snippet: step.snippet });
         break;
       case 'research_synthesize':
@@ -429,23 +659,35 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
       send('log', { type: 'info', title: saved ? 'Nota guardada en la memoria de la sesión' : 'Nota duplicada, ignorada', detail: String(command.text).slice(0, 100) });
       return null;
     }
+    if (command.tool === 'code-review') {
+      send('log', { type: 'run', title: 'Revisando código (solo lectura)…', detail: command.focus || 'cambios contra HEAD' });
+      send('computer', { mode: 'terminal', action: 'run', command: 'code-review --read-only' });
+      const review = await reviewCodeReadOnly({
+        session,
+        focus: command.focus,
+        generateTextFn: (prompt) => generateText(prompt, signal),
+      });
+      send('log', { type: 'ok', title: 'Revisión de código completada (sin aplicar cambios)' });
+      send('computer', { mode: 'terminal', action: 'done', text: 'Revisión completada: no se aplicó ningún cambio', ok: true });
+      return `### Revisión de código (solo lectura)\n\n${review}`;
+    }
     if (command.tool === 'search') {
-      const result = await tools.webSearch({ query: command.query, onStep });
+      const result = await tools.webSearch({ query: command.query, onStep, signal });
       const lines = result.results.map((r, i) => `${i + 1}. **${r.title}** — ${r.url}\n   ${r.snippet}`).join('\n\n');
       return `### Resultado de búsqueda web: "${command.query}"\n${result.answer ? `Respuesta directa: ${result.answer}\n\n` : ''}${lines || 'Sin resultados.'}`;
     }
     if (command.tool === 'wikipedia') {
-      const result = await tools.wikipediaLookup({ query: command.query, onStep });
+      const result = await tools.wikipediaLookup({ query: command.query, onStep, signal });
       if (!result.found) return `### Wikipedia: "${command.query}"\nNo se encontró ningún artículo relevante.`;
       return `### Wikipedia: ${result.title}\n${result.extract}\n\nFuente: ${result.url}`;
     }
     if (command.tool === 'video') {
-      const result = await tools.generateVideo({ prompt: command.prompt, durationSec: command.durationSec, onStep });
+      const result = await tools.generateVideo({ prompt: command.prompt, durationSec: command.durationSec, onStep, signal });
       const clipList = result.clips.map((c) => `- Clip ${c.index} (${c.seconds}s): ${c.url}`).join('\n');
       return `### Video generado: "${command.prompt}"\nDuración total: ${result.totalSeconds}s en ${result.clips.length} clip(s)\n${clipList}\nVideos restantes hoy: ${result.remainingToday}`;
     }
     if (command.tool === 'image') {
-      const result = await tools.editImage({ imageUrl: command.imageUrl, instruction: command.instruction, onStep });
+      const result = await tools.editImage({ imageUrl: command.imageUrl, instruction: command.instruction, onStep, signal });
       return `### Imagen editada\nInstrucción: ${command.instruction}\n${result.imageUrl ? `Resultado: ${result.imageUrl}` : 'No se pudo generar la imagen editada.'}${result.note ? `\nNota: ${result.note}` : ''}`;
     }
     if (command.tool === 'image-gen') {
@@ -457,6 +699,7 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
       send('computer', { mode: 'image', action: 'start', prompt: command.prompt });
       const result = await tools.generateImage({
         prompt: command.prompt,
+        signal,
         onStep: (step) => {
           if (step.type === 'image_done') {
             send('log', { type: 'ok', title: 'Imagen generada' });
@@ -547,8 +790,9 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
       // con citas. El bloque se muestra tal cual al usuario.
       const result = await tools.deepResearch({
         topic: command.topic,
-        generateText: (prompt) => generateText(prompt, abortController.signal),
+        generateText: (prompt) => generateText(prompt, signal),
         onStep,
+        signal,
       });
       const sourceList = result.sources
         .map((s, i) => `${i + 1}. **${s.title}** — ${s.url}`)
@@ -574,8 +818,23 @@ function summarizeDiffResults(results) {
   }).join('\n');
 }
 
-router.post('/chat', async (req, res) => {
-  const { sessionId, clientId, message, model, planMode, fileLimit, autoApply = true } = req.body || {};
+async function handleChatTurn(req, res) {
+  const {
+    sessionId,
+    clientId,
+    message,
+    model,
+    planMode,
+    multiAgent,
+    fileLimit,
+    autoApply = true,
+  } = req.body || {};
+  const isPlanMode = !!planMode;
+  const isMultiAgent = multiAgent === true || multiAgent === 1 || multiAgent === 'true';
+  const requestedFileLimit = Number(fileLimit);
+  const effectiveFileLimit = Number.isFinite(requestedFileLimit)
+    ? Math.min(300, Math.max(10, Math.trunc(requestedFileLimit)))
+    : 10;
   const session = getSession(sessionId);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada. Recarga la app.' });
   // Vincula la memoria persistente del cliente en cada turno: así el agente
@@ -587,14 +846,81 @@ router.post('/chat', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders?.();
 
+  let responseClosed = false;
+  let heartbeat = null;
+  const stopHeartbeat = () => {
+    if (heartbeat) clearInterval(heartbeat);
+    heartbeat = null;
+  };
   const send = (event, data) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    if (responseClosed || res.writableEnded) return;
+    try {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    } catch {
+      responseClosed = true;
+      stopHeartbeat();
+    }
   };
 
   const abortController = new AbortController();
-  req.on('close', () => abortController.abort());
+  req.on('close', () => {
+    responseClosed = true;
+    stopHeartbeat();
+    abortController.abort();
+  });
+  res.on('close', () => {
+    responseClosed = true;
+    stopHeartbeat();
+  });
+
+  if (typeof message !== 'string' || !message.trim()) {
+    send('log', { type: 'err', title: 'Mensaje inválido', detail: 'Falta el texto del mensaje' });
+    send('error', { error: 'Falta el mensaje: envía un texto no vacío en el campo "message".' });
+    res.end();
+    return;
+  }
+
+  // Heartbeat SSE: mantiene vivos los proxies/conexiones durante
+  // herramientas largas (investigación, video, computadora).
+  heartbeat = setInterval(() => {
+    if (responseClosed || res.writableEnded) {
+      stopHeartbeat();
+      return;
+    }
+    try { res.write(': hb\n\n'); } catch { stopHeartbeat(); }
+  }, 15_000);
+  heartbeat.unref?.();
+
+  const planSteps = [
+    { id: 'analizar', label: 'Analizar la petición', status: 'active' },
+    { id: 'actuar', label: 'Ejecutar y editar', status: 'pending' },
+    { id: 'verificar', label: 'Verificar con tests', status: 'pending' },
+  ];
+  const sendPlan = (activeId, complete = false) => {
+    try {
+      const activeIndex = planSteps.findIndex((step) => step.id === activeId);
+      planSteps.forEach((step, index) => {
+        step.status = complete || (activeIndex >= 0 && index < activeIndex)
+          ? 'done'
+          : index === activeIndex
+          ? 'active'
+          : 'pending';
+      });
+      send('plan', { steps: planSteps.map((step) => ({ ...step })) });
+    } catch {
+      // El plan es informativo: nunca debe romper el turno.
+    }
+  };
 
   try {
+    sendPlan('analizar');
+    if (isPlanMode) {
+      send('log', {
+        type: 'info',
+        title: 'Modo plan activo: no se aplicarán diffs ni se ejecutarán comandos',
+        detail: 'Solo lectura, búsqueda y revisión; el backend bloquea cualquier escritura.',
+      });
+    }
     let enrichedMessage = message;
     let fileCount = 0;
 
@@ -615,7 +941,7 @@ router.post('/chat', async (req, res) => {
       }
 
       // 2. Completar con archivos relevantes por heuristica
-      const heuristicLimit = Math.max(0, (fileLimit || 10) - mentionedPaths.length);
+      const heuristicLimit = Math.max(0, effectiveFileLimit - mentionedPaths.length);
       const heuristic = findRelevantFiles(
         allFiles.filter((f) => !mentionedPaths.includes(f)),
         message,
@@ -669,18 +995,41 @@ router.post('/chat', async (req, res) => {
       }
     }
 
+    // AGENTS.md estilo Codex: instrucciones del propio proyecto,
+    // recargadas en cada turno desde la raíz del workspace.
+    let agentsInstructions = { text: '', files: [] };
+    try {
+      agentsInstructions = await loadAgentsInstructions(session.dir);
+      if (agentsInstructions.text) {
+        send('log', {
+          type: 'info',
+          title: 'AGENTS.md cargado',
+          detail: agentsInstructions.files.join(', '),
+        });
+      }
+    } catch (e) {
+      send('log', { type: 'info', title: 'No se pudo cargar AGENTS.md', detail: e.message });
+    }
+
     // El builder del system prompt es compartido (groqClient lo define,
     // pollinationsClient lo reutiliza): un solo lugar para la fecha/hora
     // real, la memoria a largo plazo y las herramientas.
-    const systemPrompt = groq.buildSystemPrompt({
+    let systemPrompt = groq.buildSystemPrompt({
       repo: session.repoFullName,
       branch: session.branch,
       fileCount,
       instructions: session.instructions,
-      planMode: !!planMode,
+      planMode: isPlanMode,
       agentCapable: !!session.repoFullName,
       memory: session.memory,
     });
+    const sessionNotesBlock = session.notesBlock?.() || '';
+    if (sessionNotesBlock) {
+      systemPrompt += `\n\n${sessionNotesBlock}`;
+    }
+    if (agentsInstructions.text) {
+      systemPrompt += `\n\n## INSTRUCCIONES DEL PROYECTO (AGENTS.md)\nArchivos cargados: ${agentsInstructions.files.join(', ')}\n\n${agentsInstructions.text}`;
+    }
 
     // Contexto largo estilo Astra: si el historial creció demasiado,
     // se resume la parte vieja en un bloque compacto en vez de
@@ -724,6 +1073,7 @@ router.post('/chat', async (req, res) => {
     const userToolCommands = extractToolCommands(message);
     const seenToolCommands = new Set(userToolCommands.map((c) => JSON.stringify(c)));
     if (userToolCommands.length) {
+      sendPlan('actuar');
       // Multitarea estilo Astra: las herramientas independientes
       // corren en paralelo en vez de una por una.
       // EXCEPCIÓN: "Usar computadora" abre un navegador real con
@@ -734,13 +1084,36 @@ router.post('/chat', async (req, res) => {
       const preToolTexts = new Array(userToolCommands.length);
       const preComputerIdx = [];
       const preRestIdx = [];
-      userToolCommands.forEach((c, i) => (c.tool === 'computer' ? preComputerIdx : preRestIdx).push(i));
+      const preBlockedIdx = [];
+      userToolCommands.forEach((c, i) => {
+        if (isPlanMode && !PLAN_MODE_READ_ONLY_TOOLS.has(c.tool)) preBlockedIdx.push(i);
+        else if (c.tool === 'computer') preComputerIdx.push(i);
+        else preRestIdx.push(i);
+      });
+      for (const i of preBlockedIdx) {
+        const toolName = userToolCommands[i].tool;
+        send('log', {
+          type: 'info',
+          title: `Modo plan: herramienta no ejecutada (${toolName})`,
+          detail: 'Solo se permiten herramientas de lectura y búsqueda',
+        });
+        preToolTexts[i] = `### Herramienta no ejecutada por modo plan\nLa herramienta "${toolName}" genera o modifica contenido. En modo plan Baro solo usa lectura, búsqueda y revisión de código; no se ejecutó ninguna acción.`;
+      }
+      // El texto fuente para las herramientas de los comandos del
+      // usuario incluye la RESPUESTA del modelo: "Crear script" busca
+      // ahí el bloque de código cercado que la IA acaba de escribir.
+      // (Antes se pasaba solo el mensaje del usuario y el script
+      // nunca encontraba el código aunque la IA lo hubiera dado.)
+      const preToolSource = `${visibleResult || ''}\n${message}`;
       for (const i of preComputerIdx) {
-        preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, abortController.signal, message);
+        preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, abortController.signal, preToolSource);
       }
       if (preRestIdx.length) {
+        if (isMultiAgent && preRestIdx.length > 1) {
+          send('log', { type: 'info', title: `Modo multi-agente: ${preRestIdx.length} acciones en paralelo` });
+        }
         const rest = await Promise.all(
-          preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session, abortController.signal, message))
+          preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session, abortController.signal, preToolSource))
         );
         preRestIdx.forEach((origI, k) => { preToolTexts[origI] = rest[k]; });
       }
@@ -795,7 +1168,31 @@ router.post('/chat', async (req, res) => {
       const commandResults = [];
       const diffResults = [];
       const toolResults = [];
-      if (autoApply && session.repoFullName) {
+      if (commands.length || diffResults.length || requestedTools.length || git.extractDiffBlocks(result).length) {
+        sendPlan('actuar');
+      }
+      if (isPlanMode && session.repoFullName) {
+        const plannedDiffBlocks = git.extractDiffBlocks(result)
+          .map((block) => block.trim())
+          .filter((block) => block && !seenDiffs.has(block));
+        for (const diffKey of plannedDiffBlocks) {
+          seenDiffs.add(diffKey);
+          send('log', {
+            type: 'info',
+            title: 'Modo plan: diff no aplicado automáticamente',
+            detail: 'El backend bloquea la escritura hasta salir del modo plan',
+          });
+          diffResults.push(`### Diff NO aplicado por modo plan\nEl diff queda solo como propuesta para revisión manual; el backend no escribió ningún archivo.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
+          appliedDiffs.push({
+            diff: diffKey,
+            applied: false,
+            paths: [],
+            reason: 'Modo plan activo: aplicación bloqueada por el backend',
+            alreadyApplied: false,
+          });
+        }
+      }
+      if (autoApply && !isPlanMode && session.repoFullName) {
         const diffBlocks = git.extractDiffBlocks(result);
         for (const diffBlock of diffBlocks) {
           const diffKey = diffBlock.trim();
@@ -805,13 +1202,28 @@ router.post('/chat', async (req, res) => {
           // revisor ANTES de tocar el disco. Un rechazo no rompe el
           // turno: el motivo vuelve al loop y el agente lo corrige.
           send('log', { type: 'run', title: 'Revisando cambio antes de aplicarlo…' });
-          let review = { approved: true, reason: '' };
+          let review = { approved: false, unclear: true, reason: 'Auto-review sin veredicto claro: no aplicado automáticamente' };
           try {
             review = await reviewDiffWithAI(diffBlock, (p) => generateText(p, abortController.signal));
           } catch (e) {
-            review = { approved: true, reason: `revisor no disponible (${e.message})` };
+            review = {
+              approved: false,
+              unclear: true,
+              reason: `Auto-review sin veredicto claro: no aplicado automáticamente (revisor no disponible: ${e.message})`,
+            };
           }
           if (!review.approved) {
+            if (review.unclear) {
+              send('log', {
+                type: 'info',
+                title: 'Auto-review sin veredicto claro: no aplicado automáticamente',
+                detail: review.reason,
+              });
+              session.addLog({ type: 'info', title: 'Diff no auto-aplicado por auto-review incierto', detail: review.reason });
+              diffResults.push(`### Diff NO auto-aplicado por revisión incierta\n${review.reason}. El diff queda disponible como propuesta normal para aplicación manual; no afirmes que fue aplicado.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
+              appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: review.reason, alreadyApplied: false });
+              continue;
+            }
             const reason = `Rechazado por revisión automática: ${review.reason}`;
             send('log', { type: 'err', title: 'Cambio rechazado por el revisor', detail: review.reason });
             session.addLog({ type: 'err', title: 'Diff rechazado por auto-review', detail: review.reason });
@@ -848,6 +1260,7 @@ router.post('/chat', async (req, res) => {
       const anyApplied = diffResults.some((r) => r && typeof r === 'object' && r.applied);
       if (anyApplied && !autoTestDone) {
         autoTestDone = true;
+        sendPlan('verificar');
         const testBlock = await runAutoTests(session, send);
         if (testBlock) verifyResults.push(testBlock);
       }
@@ -858,11 +1271,28 @@ router.post('/chat', async (req, res) => {
       const roundToolTexts = new Array(requestedTools.length);
       const computerIdx = [];
       const restIdx = [];
-      requestedTools.forEach((c, i) => (c.tool === 'computer' ? computerIdx : restIdx).push(i));
+      const blockedToolIdx = [];
+      requestedTools.forEach((c, i) => {
+        if (isPlanMode && !PLAN_MODE_READ_ONLY_TOOLS.has(c.tool)) blockedToolIdx.push(i);
+        else if (c.tool === 'computer') computerIdx.push(i);
+        else restIdx.push(i);
+      });
+      for (const i of blockedToolIdx) {
+        const toolName = requestedTools[i].tool;
+        send('log', {
+          type: 'info',
+          title: `Modo plan: herramienta no ejecutada (${toolName})`,
+          detail: 'Solo se permiten herramientas de lectura y búsqueda',
+        });
+        roundToolTexts[i] = `### Herramienta no ejecutada por modo plan\nLa herramienta "${toolName}" genera o modifica contenido y quedó bloqueada por el backend.`;
+      }
       for (const i of computerIdx) {
         roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session, abortController.signal, result);
       }
       if (restIdx.length) {
+        if (isMultiAgent && restIdx.length > 1) {
+          send('log', { type: 'info', title: `Modo multi-agente: ${restIdx.length} acciones en paralelo` });
+        }
         const rest = await Promise.all(
           restIdx.map((i) => runToolCommand(requestedTools[i], send, session, abortController.signal, result))
         );
@@ -872,15 +1302,27 @@ router.post('/chat', async (req, res) => {
         if (toolText) toolResults.push(toolText);
       }
 
-      for (const command of commands) {
+      let executableCommands = commands;
+      if (isPlanMode && commands.length) {
+        send('log', {
+          type: 'info',
+          title: `Modo plan: ${commands.length} comando(s) no ejecutado(s)`,
+          detail: 'El backend bloquea Ejecuta: en modo plan',
+        });
+        commandResults.push([
+          '## Comandos NO ejecutados por modo plan',
+          ...commands.map((command) => `- ${command.display}: bloqueado por el backend (modo plan)`),
+        ].join('\n'));
+        executableCommands = [];
+      }
+
+      const executeAutomaticCommand = async (command) => {
         const title = `Ejecutando automáticamente: ${command.display}`;
         send('log', { type: 'run', title });
         send('computer', { mode: 'terminal', action: 'run', command: command.display });
         session.addLog({ type: 'run', title });
 
         const commandResult = await runCommand(command.binary, command.args, session.dir);
-        commandResults.push(commandResultForModel(command, commandResult));
-
         const output = truncateCommandOutput(commandResult.stdout || commandResult.stderr || commandResult.error);
         const logEntry = {
           type: commandResult.ok ? 'ok' : 'err',
@@ -890,8 +1332,22 @@ router.post('/chat', async (req, res) => {
         send('log', logEntry);
         send('computer', { mode: 'terminal', action: 'output', text: output || (commandResult.ok ? '(sin salida)' : 'error'), ok: commandResult.ok });
         session.addLog(logEntry);
+        return commandResultForModel(command, commandResult);
+      };
+
+      if (isMultiAgent && executableCommands.length > 1) {
+        send('log', { type: 'info', title: `Modo multi-agente: ${executableCommands.length} acciones en paralelo` });
+        commandResults.push(...await Promise.all(executableCommands.map(executeAutomaticCommand)));
+      } else {
+        for (const command of executableCommands) {
+          commandResults.push(await executeAutomaticCommand(command));
+        }
       }
 
+      // Cada bloque de verificación se entrega al modelo UNA sola
+      // vez: antes vivía fuera del bucle y se re-anexaba en todas
+      // las rondas posteriores, duplicando los tests en contexto.
+      const verifyResultsToSend = verifyResults.splice(0, verifyResults.length);
       conversation.push({ role: 'assistant', content: result });
       conversation.push({
         role: 'user',
@@ -899,7 +1355,7 @@ router.post('/chat', async (req, res) => {
           commandResults.length ? `## Resultados de comandos ejecutados automáticamente\n${commandResults.join('\n\n')}` : '',
           diffResults.length ? `## Cambios procesados automáticamente\n${summarizeDiffResults(diffResults)}` : '',
           toolResults.length ? `## Resultados de herramientas ejecutadas automáticamente (ya mostrados al usuario tal cual: PROHIBIDO repetir el bloque "###", las URLs o las imágenes — solo agrega, si aporta, un comentario breve interpretando ese resultado)\n${toolResults.join('\n\n')}` : '',
-          verifyResults.length ? `${verifyResults.join('\n\n')}` : '',
+          verifyResultsToSend.length ? `${verifyResultsToSend.join('\n\n')}` : '',
           session.notesBlock(),
           '',
           'Continúa trabajando con estos resultados. No le pidas al usuario que copie, aplique o ejecute nada: el sistema ya realizó la acción. Si se usó una herramienta (búsqueda, Wikipedia, video o imagen), su resultado YA se mostró al usuario en una tarjeta visual — no repitas las URLs ni el bloque "###"; solo agrega, si aporta, un comentario breve interpretando o resumiendo ese resultado. Verifica los cambios de código con pruebas o comprobaciones apropiadas. Si algo falla, corrígelo con otro diff exacto y vuelve a verificar. Si ya está todo correcto, responde con un resumen claro.',
@@ -935,8 +1391,10 @@ router.post('/chat', async (req, res) => {
     session.history.push({ role: 'assistant', content: result });
 
     const diffBlocks = git.extractDiffBlocks(result);
+    sendPlan(null, true);
     send('log', { type: 'ok', title: 'Completado', detail: diffBlocks.length ? `${diffBlocks.length} diff(s) propuesto(s)` : undefined });
     send('done', { text: result, diffCount: diffBlocks.length, autoAppliedPaths, appliedDiffs });
+    stopHeartbeat();
     res.end();
   } catch (e) {
     if (e.name === 'AbortError') {
@@ -946,7 +1404,27 @@ router.post('/chat', async (req, res) => {
       send('log', { type: 'err', title: 'Error', detail: e.message });
       send('error', { error: e.message });
     }
+    stopHeartbeat();
     res.end();
+  }
+}
+
+router.post('/chat', async (req, res) => {
+  const lockKey = String(req.body?.sessionId || '__sin_sesion__');
+  const previous = chatTurnChains.get(lockKey) || Promise.resolve();
+  let releaseCurrent;
+  const currentGate = new Promise((resolve) => { releaseCurrent = resolve; });
+  const queuedTurn = previous.catch(() => {}).then(() => currentGate);
+  chatTurnChains.set(lockKey, queuedTurn);
+
+  await previous.catch(() => {});
+  try {
+    await handleChatTurn(req, res);
+  } finally {
+    releaseCurrent();
+    if (chatTurnChains.get(lockKey) === queuedTurn) {
+      chatTurnChains.delete(lockKey);
+    }
   }
 });
 

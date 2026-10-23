@@ -12,7 +12,14 @@
 const { buildSystemPrompt } = require('./groqClient');
 
 const POLLINATIONS_URL = 'https://text.pollinations.ai/openai';
-const DEFAULT_MODEL = process.env.POLLINATIONS_MODEL || 'openai-fast';
+// v6: el modelo por defecto ya NO es 'openai-fast' (gpt-oss-20b).
+// Verificado en vivo el 2026-10-23: con prompts de agente (system
+// largo + comandos tipo "Crear script:"), gpt-oss corta el stream
+// tras el razonamiento y nunca entrega contenido (y en no-stream
+// devuelve 400 "unexpected tokens... to=Crear" de su parser
+// harmony). El modelo 'openai' en streaming entrega el contenido
+// completo con el mismo payload. Override: POLLINATIONS_MODEL.
+const DEFAULT_MODEL = process.env.POLLINATIONS_MODEL || 'openai';
 
 /**
  * Chat con streaming SSE real. Misma firma que groqClient/
@@ -28,6 +35,11 @@ async function streamChat({ model, messages, signal, onDelta }) {
       model: model || DEFAULT_MODEL,
       messages,
       stream: true,
+      temperature: 0.13,
+      // Seed distinta por intento: el pool gratuito de Pollinations
+      // enruta por payload y cachea errores; variar la seed evita
+      // repetir el mismo nodo/cache en los reintentos del failover.
+      seed: Math.floor(Math.random() * 1_000_000_000),
     }),
   });
 
@@ -53,15 +65,24 @@ async function streamChat({ model, messages, signal, onDelta }) {
       if (!line.startsWith('data: ')) continue;
       const data = line.slice(6).trim();
       if (data === '[DONE]') continue;
+      let parsed;
       try {
-        const parsed = JSON.parse(data);
-        const delta = parsed.choices?.[0]?.delta?.content || '';
-        if (delta) {
-          result += delta;
-          if (onDelta) onDelta(delta, result);
-        }
+        parsed = JSON.parse(data);
       } catch {
-        // linea SSE incompleta o keepalive, se ignora
+        continue; // linea SSE incompleta o keepalive, se ignora
+      }
+      // Si el upstream manda el error DENTRO del stream, se lanza
+      // como error real en vez de terminar con una respuesta vacía
+      // silenciosa (el fallo histórico de este proveedor).
+      if (parsed.error) {
+        const err = new Error(`Error de Pollinations (gratis): ${parsed.error.message || 'desconocido'}`);
+        err.status = parsed.error.status || 502;
+        throw err;
+      }
+      const delta = parsed.choices?.[0]?.delta?.content || '';
+      if (delta) {
+        result += delta;
+        if (onDelta) onDelta(delta, result);
       }
     }
   }

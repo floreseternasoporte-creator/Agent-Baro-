@@ -56,10 +56,27 @@ app.use(express.json({ limit: '2mb' }));
 // consuman tus claves de IA. El frontend lo envia solo si existe en
 // localStorage bajo la clave 'agent_token'.
 const AGENT_API_TOKEN = process.env.AGENT_API_TOKEN || null;
+const nodeCrypto = require('crypto');
+
+// Comparación en tiempo constante (Baro v6): un `===` filtra por
+// timing cuánto del token acertó el atacante. Con longitudes
+// distintas se hace una comparación ficticia de igual coste y se
+// devuelve false sin revelar el tamaño real del secreto.
+function agentTokenMatches(provided) {
+  if (!AGENT_API_TOKEN || provided === undefined || provided === null) return false;
+  const expected = Buffer.from(String(AGENT_API_TOKEN), 'utf8');
+  const given = Buffer.from(String(provided), 'utf8');
+  if (given.length !== expected.length) {
+    try { nodeCrypto.timingSafeEqual(expected, expected); } catch {}
+    return false;
+  }
+  return nodeCrypto.timingSafeEqual(given, expected);
+}
+
 app.use('/api', (req, res, next) => {
   if (!AGENT_API_TOKEN) return next();
   if (req.path === '/health') return next();
-  if (req.headers['x-agent-token'] === AGENT_API_TOKEN) return next();
+  if (agentTokenMatches(req.headers['x-agent-token'])) return next();
   return res.status(401).json({ error: 'No autorizado: falta o es invalido x-agent-token.' });
 });
 
@@ -121,14 +138,21 @@ app.get('/api/config', async (_req, res) => {
       video: !!process.env.BYTEPLUS_API_KEY,
       imageEdit: true, // Pollinations: gratis, sin clave, siempre
       imageGen: true, // Pollinations/FLUX: gratis, sin clave, siempre
-      voice: true, // Web Speech API del navegador: dictado + lectura, sin clave
-      voiceMode: true, // conversación continua por voz (habla <-> escucha), sin clave
+      voice: false, // v6: la función de audio se eliminó por completo (solo texto)
+      voiceMode: false,
       memory: true, // memoria a largo plazo por sesion, en disco
       documents: true, // Document Studio: .docx/.pptx/.xlsx reales, sin clave
       parallelTools: true, // multitarea: herramientas independientes en paralelo
       longContext: true, // compactación automática del historial largo
       computerUse: true, // modo computadora: Chromium real que el agente ve y controla
-      vision: await visionClient.visionAvailable().catch(() => null), // modelo de visión local (ojos del agente) o null
+      // visionAvailable() consulta Ollama sin timeout propio: si Ollama
+      // se queda mudo, /api/config colgaba entero. Se acota a 3 s con
+      // una carrera contra un temporizador (equivalente práctico a
+      // AbortSignal.timeout(3000) sin tocar visionClient).
+      vision: await Promise.race([
+        visionClient.visionAvailable().catch(() => null),
+        new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]),
     },
   });
 });
@@ -168,7 +192,7 @@ app.use((err, _req, res, _next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`DevAgent escuchando en el puerto ${PORT}`);
+  console.log(`Baro escuchando en el puerto ${PORT}`);
 });
 
 // Limpieza de sesiones/workspaces viejos cada hora, para no

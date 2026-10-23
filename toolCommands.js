@@ -22,6 +22,8 @@
 //     en un bloque ```python en la respuesta; luego "Ejecuta: python3
 //     scripts/calculadora.py" lo corre de verdad)
 //   Usar computadora: busca en google el precio del iPhone 17 y dímelo
+//   Revisar código: seguridad y regresiones (revisión READ-ONLY estilo
+//     Codex /review; el foco tras los dos puntos es opcional)
 // ═══════════════════════════════════════════════════════
 
 // "Título :: detalle" -> { title, brief }. El :: es opcional.
@@ -54,6 +56,13 @@ function extractToolCommands(text) {
       const topic = match[1];
       const key = `deepresearch\u0000${topic}`;
       if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'deep-research', topic }); }
+      continue;
+    }
+
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Revisar c[oó]digo:\s*(.*?)\s*$/i))) {
+      const focus = match[1] || '';
+      const key = `codereview\u0000${focus}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'code-review', focus }); }
       continue;
     }
 

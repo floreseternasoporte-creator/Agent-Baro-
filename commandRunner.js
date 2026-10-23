@@ -53,10 +53,48 @@ const ALLOWED_BINARIES = {
   pytest: null,
   yarn: ['install', 'run', 'test'],
   git: ['status', 'log', 'diff', 'branch', 'show'],
+  go: ['test', 'build', 'vet'],
+  cargo: ['test', 'build', 'check'],
 };
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 200_000;
+
+// ═══════════════════════════════════════════════════════
+// Entorno SEGURO para los comandos (Baro v6, estilo Codex).
+// ANTES: runCommand pasaba `{ ...process.env }` tal cual →
+// cualquier repo clonado (su `npm test`, sus scripts de pip,
+// etc.) heredaba GROQ_API_KEY, GITHUB_TOKEN, TAVILY_API_KEY
+// y BYTEPLUS_API_KEY del servidor y podía leerlos/exfiltrarlos
+// con un simple `printenv`. Codex resuelve esto con su
+// shell_environment_policy: filtrar el entorno por nombre.
+//
+// Regla: se permiten las variables mínimas que npm/python/git
+// necesitan (PATH, HOME, locale, TZ...) y cualquier otra cuyo
+// NOMBRE no huela a secreto. Todo nombre que contenga KEY,
+// SECRET, TOKEN, PASSWORD, AUTH o CREDENTIAL queda fuera,
+// sin importar su valor. CI/NO_COLOR se fuerzan siempre.
+// ═══════════════════════════════════════════════════════
+const SAFE_ENV_ALLOWLIST = new Set([
+  'PATH', 'HOME', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TERM',
+  'TMPDIR', 'TEMP', 'TMP', 'NODE_ENV', 'USER', 'LOGNAME', 'SHELL',
+  'PWD', 'OLDPWD', 'HOSTNAME', 'COLORTERM',
+]);
+const SECRET_ENV_NAME_RE = /(KEY|SECRET|TOKEN|PASSWORD|PASSWD|PWD_|AUTH|CREDENTIAL|PRIVATE|BEARER|SESSION|COOKIE|APIKEY|API_KEY)/i;
+
+function buildSafeEnv(baseEnv = process.env) {
+  const env = {};
+  for (const [name, value] of Object.entries(baseEnv || {})) {
+    if (value === undefined) continue;
+    if (SECRET_ENV_NAME_RE.test(name)) continue; // denylist por nombre: nunca secretos
+    // Allowlist explícita y cualquier otra variable inocua (su nombre
+    // ya pasó el filtro de secretos) pasan: npm/python las necesitan.
+    env[name] = value;
+  }
+  env.CI = 'true';
+  env.NO_COLOR = '1';
+  return env;
+}
 
 /**
  * Convierte una línea "Ejecuta: ..." en argv sin usar un shell.
@@ -186,7 +224,9 @@ function runCommand(binary, args, cwd, timeoutMs = DEFAULT_TIMEOUT_MS) {
         maxBuffer: MAX_OUTPUT_BYTES,
         shell: false,
         windowsHide: true,
-        env: { ...process.env, CI: 'true', NO_COLOR: '1' },
+        // NUNCA process.env crudo: el código del repo clonado no debe
+        // heredar las claves del servidor (ver buildSafeEnv arriba).
+        env: buildSafeEnv(),
       },
       (error, stdout, stderr) => {
         resolve({
@@ -224,6 +264,9 @@ module.exports = {
   isAllowed,
   validateExecution,
   isSafeWorkspaceArgument,
+  buildSafeEnv,
+  SAFE_ENV_ALLOWLIST,
+  SECRET_ENV_NAME_RE,
   ALLOWED_BINARIES,
   NPX_ALLOWED_PACKAGES,
   TASK_PRESETS,

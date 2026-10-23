@@ -36,7 +36,7 @@ router.post('/repo/connect', async (req, res) => {
     const repoInfoResp = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`, {
       headers: {
         // GitHub exige un User-Agent en toda request a su API o responde 403.
-        'User-Agent': 'DevAgent',
+        'User-Agent': 'Baro',
         Accept: 'application/vnd.github+json',
         ...(effectiveToken ? { Authorization: `token ${effectiveToken}` } : {}),
       },

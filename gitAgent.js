@@ -30,27 +30,84 @@ function authedRemote(owner, repo, token) {
   return `https://github.com/${owner}/${repo}.git`;
 }
 
+/** Remoto LIMPIO (sin token): el único que debe quedar en .git/config. */
+function cleanRemote(owner, repo) {
+  return `https://github.com/${owner}/${repo}.git`;
+}
+
+/**
+ * Deja el remoto `origin` sin token. El token solo vive en memoria
+ * durante fetch/push concretos; NUNCA queda persistido en
+ * .git/config (antes quedaba en claro en cada workspace y la ruta
+ * de descarga de archivos podía servir ese .git/config).
+ */
+async function setCleanRemote(git, owner, repo) {
+  try {
+    await git.remote(['set-url', 'origin', cleanRemote(owner, repo)]);
+  } catch {
+    try { await git.addRemote('origin', cleanRemote(owner, repo)); } catch {}
+  }
+}
+
 /**
  * Clona (o re-sincroniza) un repo real en session.dir.
  * Si la carpeta ya existe con ese repo, hace fetch+reset en vez
  * de re-clonar todo, para que reconectar sea rapido.
+ *
+ * Baro v6 (seguridad):
+ *  - El remoto con token se usa SOLO en memoria durante el
+ *    fetch/clone y al terminar queda el remoto LIMPIO en disco.
+ *  - Reconectar ya NO destruye trabajo: si hay cambios sin
+ *    pushear, primero se guardan en un checkpoint automático
+ *    (`git stash push -u`) y solo entonces se resetea. Si el
+ *    checkpoint falla, NO se resetea: se lanza un error claro.
+ *
+ * Devuelve { git, fresh, reconnected, checkpoint, stashRef } —
+ * checkpoint=true si se guardó trabajo previo al reconectar.
  */
 async function cloneRepo({ dir, owner, repo, branch, token }) {
   const remote = authedRemote(owner, repo, token);
 
   if (fss.existsSync(path.join(dir, '.git'))) {
     const git = simpleGit(dir);
-    await git.remote(['set-url', 'origin', remote]);
-    await git.fetch('origin', branch);
-    await git.checkout(branch);
-    await git.reset(['--hard', `origin/${branch}`]);
-    return git;
+    let checkpoint = false;
+    let stashRef = null;
+    try {
+      await git.remote(['set-url', 'origin', remote]);
+      await git.fetch('origin', branch);
+      await git.checkout(branch);
+
+      // ¿Hay trabajo local sin pushear? No destruirlo jamás.
+      const status = await git.status();
+      const dirty = status.files && status.files.length > 0;
+      if (dirty) {
+        const label = `baro-checkpoint-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+        try {
+          await git.stash(['push', '-u', '-m', label]);
+        } catch (stashError) {
+          throw new Error(
+            `No se pudo guardar el trabajo sin pushear antes de reconectar (${stashError.message}). ` +
+            'Reconexión abortada para no perder cambios.'
+          );
+        }
+        stashRef = 'stash@{0}';
+        checkpoint = true;
+      }
+
+      await git.reset(['--hard', `origin/${branch}`]);
+      return { git, fresh: false, reconnected: true, checkpoint, stashRef };
+    } finally {
+      // Pase lo que pase, el remoto en disco queda SIN token.
+      await setCleanRemote(git, owner, repo);
+    }
   }
 
   await fs.mkdir(dir, { recursive: true });
-  const git = simpleGit();
-  await git.clone(remote, dir, ['--branch', branch, '--single-branch', '--depth', '50']);
-  return simpleGit(dir);
+  const cloner = simpleGit();
+  await cloner.clone(remote, dir, ['--branch', branch, '--single-branch', '--depth', '50']);
+  const git = simpleGit(dir);
+  await setCleanRemote(git, owner, repo);
+  return { git, fresh: true, reconnected: false, checkpoint: false, stashRef: null };
 }
 
 /** Lista archivos de texto del repo clonado, ignorando binarios/carpetas pesadas. */
@@ -60,7 +117,13 @@ async function listFiles(dir) {
   async function walk(current, rel) {
     const entries = await fs.readdir(current, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.name.startsWith('.') && entry.name !== '.env.example') continue;
+      // Baro v6: el agente SÍ ve los dotfiles del proyecto (.github/,
+      // .gitignore, .eslintrc, .editorconfig...) — antes no veía nada
+      // de la configuración real del repo. Excepciones duras:
+      //  - `.git` (directorio o archivo): nunca (IGNORED_DIR_RE + check).
+      //  - `.env*`: nunca se expone un .env real; solo `.env.example`.
+      if (entry.name === '.git') continue;
+      if (/^\.env($|\.)/.test(entry.name) && entry.name !== '.env.example') continue;
       if (IGNORED_DIR_RE.test(entry.name)) continue;
       const abs = path.join(current, entry.name);
       const relPath = rel ? `${rel}/${entry.name}` : entry.name;
@@ -196,7 +259,15 @@ async function applyUnifiedDiff(dir, diffText) {
       continue;
     }
 
-    const abs = safeResolve(dir, targetPath);
+    let abs;
+    try {
+      abs = safeResolve(dir, targetPath);
+    } catch {
+      // Un path fuera del workspace rechaza SOLO este parche;
+      // nunca debe tumbar el turno completo del chat.
+      results.push({ path: targetPath, applied: false, reason: 'Ruta fuera del workspace no permitida' });
+      continue;
+    }
     let original = '';
     let isNewFile = false;
     try {
@@ -274,10 +345,10 @@ function extractDiffBlocks(text) {
   return blocks;
 }
 
-async function commitAndPush({ dir, message, branch, name, email }) {
+async function commitAndPush({ dir, message, branch, name, email, token, owner, repo }) {
   const git = simpleGit(dir);
-  await git.addConfig('user.name', name || 'DevAgent');
-  await git.addConfig('user.email', email || 'devagent@users.noreply.github.com');
+  await git.addConfig('user.name', name || 'Baro');
+  await git.addConfig('user.email', email || 'baro@users.noreply.github.com');
 
   const status = await git.status();
   const changed = [...status.modified, ...status.not_added, ...status.created, ...status.deleted];
@@ -286,10 +357,93 @@ async function commitAndPush({ dir, message, branch, name, email }) {
   }
 
   await git.add(changed);
-  await git.commit(message || 'update via DevAgent');
-  await git.push('origin', branch);
+  await git.commit(message || 'update via Baro');
+
+  // Token SOLO en memoria durante este push: se pone el remoto con
+  // credencial, se empuja y en el `finally` vuelve el remoto limpio.
+  // Nunca se loguea la URL con token.
+  const useAuthed = !!(token && owner && repo);
+  if (useAuthed) {
+    await git.remote(['set-url', 'origin', authedRemote(owner, repo, token)]);
+  }
+  try {
+    await git.push('origin', branch);
+  } finally {
+    if (useAuthed) await setCleanRemote(git, owner, repo);
+  }
 
   return { pushed: true, files: changed };
+}
+
+/** Diff completo contra HEAD + lista de archivos cambiados (estilo Codex `/diff`). */
+async function gitStatusDiff(dir) {
+  const git = simpleGit(dir);
+  const status = await git.status();
+  const files = [...new Set([
+    ...status.modified, ...status.not_added, ...status.created,
+    ...status.deleted, ...status.renamed.map((r) => (typeof r === 'string' ? r : r.to || r.from)),
+    ...status.staged,
+  ].filter(Boolean))];
+  let diff = '';
+  try {
+    diff = await git.diff(['HEAD']);
+  } catch {
+    diff = '';
+  }
+  // Los archivos nuevos (untracked) no salen en `git diff HEAD`:
+  // se listan aparte en `files` para que el frontend los muestre.
+  return { files, diff };
+}
+
+/**
+ * Crea un checkpoint del trabajo actual (estilo Codex): si hay
+ * cambios, los guarda con `git stash push -u`. Devuelve
+ * { id, label, ref, ts } o null si no había nada que guardar.
+ * El ref es el hash del commit del stash (estable aunque entren
+ * otros stash después); también se acepta restaurarlo por él.
+ */
+async function createCheckpoint(dir, label) {
+  const git = simpleGit(dir);
+  const status = await git.status();
+  if (!status.files || !status.files.length) return null;
+  const cleanLabel = String(label || `baro-checkpoint-${Date.now()}`).slice(0, 120);
+  await git.stash(['push', '-u', '-m', cleanLabel]);
+  // Tras el push, el checkpoint es stash@{0}: resolvemos su hash.
+  let ref = 'stash@{0}';
+  try {
+    const hash = await git.revparse(['stash@{0}']);
+    if (hash && hash.trim()) ref = hash.trim();
+  } catch {}
+  return { id: `cp-${Date.now().toString(36)}`, label: cleanLabel, ref, ts: Date.now() };
+}
+
+/**
+ * Restaura un checkpoint creado con createCheckpoint.
+ *  - Antes de tocar nada, si hay cambios actuales se guardan en un
+ *    stash de seguridad `baro-pre-undo-*` (nada se pierde).
+ *  - Si el ref es un hash de stash: `git stash apply <hash>`.
+ *  - Si el ref es `stash@{n}`: apply directo.
+ * Devuelve { ok, restored, safetyStash }.
+ */
+async function restoreCheckpoint(dir, ref) {
+  const git = simpleGit(dir);
+  const target = String(ref || '').trim();
+  if (!target) throw new Error('Checkpoint sin ref');
+
+  const status = await git.status();
+  let safetyStash = false;
+  if (status.files && status.files.length) {
+    await git.stash(['push', '-u', '-m', `baro-pre-undo-${Date.now()}`]);
+    safetyStash = true;
+  }
+
+  if (/^stash@\{\d+\}$/.test(target)) {
+    await git.stash(['apply', target]);
+  } else {
+    // Hash de un commit de stash: apply por hash mantiene la entrada.
+    await git.raw(['stash', 'apply', target]);
+  }
+  return { ok: true, restored: target, safetyStash };
 }
 
 async function diffAgainstHead(dir, relPath) {
@@ -303,12 +457,19 @@ async function diffAgainstHead(dir, relPath) {
 
 module.exports = {
   parseRepoUrl,
+  authedRemote,
+  cleanRemote,
+  setCleanRemote,
   cloneRepo,
   listFiles,
   readFile,
   writeFile,
+  safeResolve,
   applyUnifiedDiff,
   extractDiffBlocks,
   commitAndPush,
   diffAgainstHead,
+  gitStatusDiff,
+  createCheckpoint,
+  restoreCheckpoint,
 };

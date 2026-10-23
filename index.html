@@ -2,15 +2,14 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#F7F5F0">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%230A84FF'/%3E%3Cstop offset='1' stop-color='%230066D6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='48' height='48' rx='11' fill='url(%23g)'/%3E%3Ctext x='24' y='33' font-family='Arial,sans-serif' font-size='24' font-weight='700' fill='white' text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
 <title>Baro</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,500;0,600;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -19,7 +18,7 @@
   <!-- TOP APP BAR -->
   <header id="topbar">
     <div class="tb-logo">
-      <img src="https://i.ibb.co/0pysKTcw/IMG-4453.png" alt="Logo" style="height:32px;width:auto;object-fit:contain;display:block;" onerror="this.outerHTML='<span class=\'tb-logo-fb\'>B</span>'">
+      <svg class="logo-svg" viewBox="0 0 48 48" width="32" height="32" aria-hidden="true" focusable="false"><defs><linearGradient id="lg-top" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A84FF"/><stop offset="1" stop-color="#0066D6"/></linearGradient></defs><path fill="url(#lg-top)" d="M10 2h28a8 8 0 0 1 8 8v22a8 8 0 0 1-8 8H22l-9.4 6.3c-.9.6-2.1-.1-2.1-1.2V40H10a8 8 0 0 1-8-8V10a8 8 0 0 1 8-8z" transform="translate(0 1)"/><text x="24" y="29" text-anchor="middle" font-family="-apple-system,system-ui,sans-serif" font-size="19" font-weight="700" fill="#fff">B</text></svg>
     </div>
     <div class="tb-title">
       <div class="tb-title-main">Baro</div>
@@ -46,9 +45,7 @@
       <!-- Empty state -->
       <div id="empty">
         <div class="empty-hero">
-          <div class="empty-icon" style="background:none;box-shadow:none">
-            <img src="https://i.ibb.co/0pysKTcw/IMG-4453.png" alt="Logo" style="height:130px;width:auto;object-fit:contain;" onerror="this.outerHTML='<span class=\'tb-logo-fb big\'>B</span>'">
-          </div>
+          <div class="empty-icon"><svg class="logo-svg" viewBox="0 0 48 48" width="96" height="96" aria-hidden="true" focusable="false"><defs><linearGradient id="lg-hero" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A84FF"/><stop offset="1" stop-color="#0066D6"/></linearGradient></defs><path fill="url(#lg-hero)" d="M10 2h28a8 8 0 0 1 8 8v22a8 8 0 0 1-8 8H22l-9.4 6.3c-.9.6-2.1-.1-2.1-1.2V40H10a8 8 0 0 1-8-8V10a8 8 0 0 1 8-8z" transform="translate(0 1)"/><text x="24" y="29" text-anchor="middle" font-family="-apple-system,system-ui,sans-serif" font-size="19" font-weight="700" fill="#fff">B</text></svg></div>
           <div class="empty-title">¿Qué creamos hoy?</div>
           <div class="empty-sub">Documentos, scripts Python que se ejecutan de verdad, imágenes, video, investigación con fuentes… sin necesidad de conectar nada.</div>
           <div id="empty-connect-cta" style="display:none">
@@ -104,6 +101,17 @@
       <div class="cv-body" id="cv-body"></div>
     </div>
 
+    <!-- Plan del agente (estilo Codex): pasos del turno en vivo.
+         Lo alimenta el evento SSE "plan"; el chip lo alimenta "verify". -->
+    <div id="plan-panel">
+      <div class="plan-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1.2 1.2L6.5 5"/><path d="m3 12 1.2 1.2L6.5 11"/><path d="m3 18 1.2 1.2L6.5 17"/></svg>
+        <span>Plan del agente</span>
+        <span id="verify-chip" class="verify-chip" style="display:none"></span>
+      </div>
+      <ul id="plan-steps"></ul>
+    </div>
+
     <!-- Activity log -->
     <div id="activity">
       <div class="act-head" onclick="toggleActivity()">
@@ -111,7 +119,19 @@
         <span id="act-head-txt">Trabajando...</span>
         <span id="act-token-est" style="margin-left:auto;font-size:9.5px;color:var(--text3)"></span>
       </div>
-      <div id="act-log"></div>
+      <div id="act-log" aria-live="polite"></div>
+    </div>
+
+    <!-- Repo reconectado al volver: se pregunta antes de analizar -->
+    <div id="reconnect-banner" style="display:none">
+      <div class="rcb-txt">
+        <strong id="rcb-name">Repo reconectado</strong>
+        <span>¿Quieres que lo analice ahora?</span>
+      </div>
+      <div class="rcb-btns">
+        <button class="pb-btn skip" onclick="hideReconnectBanner()">Ahora no</button>
+        <button class="pb-btn go" onclick="hideReconnectBanner();autoAnalyze()">Analizar</button>
+      </div>
     </div>
 
     <!-- Push banner -->
@@ -130,6 +150,22 @@
 
     <!-- Input area -->
     <div id="input-wrap">
+      <div id="apply-mode-row">
+        <div class="seg" role="group" aria-label="Modo de aplicación de cambios">
+          <button type="button" class="seg-btn on" id="seg-auto" onclick="setApplyMode('auto')">Auto</button>
+          <button type="button" class="seg-btn" id="seg-ask" onclick="setApplyMode('ask')">Preguntar</button>
+        </div>
+        <div class="apply-actions">
+          <button type="button" class="mini-act" id="undo-btn" onclick="doUndo()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.7 9.7 0 0 0-6.7 2.7L3 8"/><path d="M3 3v5h5"/></svg>
+            Deshacer
+          </button>
+          <button type="button" class="mini-act" id="diff-btn" onclick="openDiffModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 2v20"/></svg>
+            Ver diff
+          </button>
+        </div>
+      </div>
       <div class="ibox">
         <div class="itxt-wrap">
           <textarea id="inp" rows="1" placeholder="Describe una tarea de codigo..." onkeydown="onKey(event)"></textarea>
@@ -146,12 +182,6 @@
         </div>
         <button id="stopbtn" onclick="stopGeneration()">
           <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="2"/></svg>
-        </button>
-        <button id="micbtn" onclick="toggleDictation()" title="Dictar por voz">
-          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a2.5 2.5 0 0 1 2.5 2.5v4a2.5 2.5 0 0 1-5 0v-4A2.5 2.5 0 0 1 8 1zm-4.5 6a.75.75 0 0 1 1.5 0 3 3 0 0 0 6 0 .75.75 0 0 1 1.5 0 4.5 4.5 0 0 1-4 4.472V14a.75.75 0 0 1-1.5 0v-2.528A4.5 4.5 0 0 1 3.5 7z"/></svg>
-        </button>
-        <button id="voicemodebtn" onclick="setVoiceMode(!S.voiceMode)" title="Modo conversación por voz">
-          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 4.5a.75.75 0 01.75-.75h2.39l1.49-1.79a.75.75 0 011.16.96L6.06 4.25h2.19a.75.75 0 010 1.5H2.25a.75.75 0 01-.75-.75v-.5zm0 6a.75.75 0 01.75-.75h2.39l1.49 1.79a.75.75 0 011.16-.96L6.06 11.75h2.19a.75.75 0 010 1.5H2.25a.75.75 0 01-.75-.75v-2zM11 2.5a.75.75 0 01.75.75v9.5a.75.75 0 01-1.5 0v-9.5a.75.75 0 01.75-.75zm2.5 2.75a.75.75 0 01.75.75v4a.75.75 0 01-1.5 0v-4a.75.75 0 01.75-.75z"/></svg>
         </button>
         <button id="sndbtn" onclick="send()" disabled>
           <svg viewBox="0 0 16 16" fill="currentColor"><path d="M.989 8 .064 2.68a1.342 1.342 0 011.85-1.462l13.402 5.744a1.13 1.13 0 010 2.076L1.913 14.782a1.342 1.342 0 01-1.85-1.463L.99 8z"/></svg>
@@ -241,7 +271,7 @@
               <div class="settings-row-label" id="ai-model-label">Modelo de IA</div>
               <div class="settings-row-sub" id="ai-model-sub">Comprobando proveedor y modelo...</div>
             </div>
-            <span class="badge-ok">Local</span>
+            <span class="badge-ok" id="ai-model-badge">IA</span>
           </div>
         </div>
       </div>
@@ -254,14 +284,31 @@
               <div class="settings-row-label">Modo multi-agente</div>
               <div class="settings-row-sub">Analiza archivos en paralelo</div>
             </div>
-            <div class="toggle on" id="multiagent-toggle" onclick="toggleSetting('multiagent')"></div>
+            <div class="toggle on" id="multiagent-toggle" role="switch" aria-checked="true" tabindex="0" aria-label="Modo multi-agente" onclick="toggleSetting('multiagent')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSetting('multiagent')}"></div>
           </div>
           <div class="settings-row">
             <div class="settings-row-content">
               <div class="settings-row-label">Plan antes de ejecutar</div>
               <div class="settings-row-sub">Solo planifica sin editar cuando lo actives</div>
             </div>
-            <div class="toggle" id="planmode-toggle" onclick="toggleSetting('planmode')"></div>
+            <div class="toggle" id="planmode-toggle" role="switch" aria-checked="false" tabindex="0" aria-label="Plan antes de ejecutar" onclick="toggleSetting('planmode')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSetting('planmode')}"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Contexto</div>
+        <div class="settings-group">
+          <div class="settings-row" style="cursor:default">
+            <div class="settings-row-content">
+              <div class="settings-row-label">Archivos por turno</div>
+              <div class="settings-row-sub">Cuántos archivos del repo lee el agente en cada turno</div>
+            </div>
+            <select class="filelimit-select" id="filelimit-select" onchange="setFileLimit(this.value)" aria-label="Archivos por turno">
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+            </select>
           </div>
         </div>
       </div>
@@ -453,14 +500,31 @@
   <div id="fp-list"></div>
 </div>
 
-<div id="toast"></div>
+<!-- DIFF MODAL -->
+<div class="mo" id="diff-modal">
+  <div class="mbox">
+    <div class="m-handle"></div>
+    <div class="mhead">
+      <span class="mtitle">Cambios sin subir</span>
+      <button class="mx" onclick="closeDiffModal()" aria-label="Cerrar diff"><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg></button>
+    </div>
+    <div class="mbdy">
+      <div id="diff-files"></div>
+      <div class="cblock diff-modal-block"><pre id="diff-body">Cargando…</pre></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-g" onclick="closeDiffModal()">Cerrar</button>
+      <button class="btn btn-p" onclick="closeDiffModal();doUndo()">Deshacer cambios</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
 
 <!-- AUTH OVERLAY -->
 <div id="auth-overlay">
   <div class="auth-box">
-    <div class="auth-logo">
-      <img src="https://i.ibb.co/0pysKTcw/IMG-4453.png" alt="Logo" style="height:64px;width:auto;object-fit:contain;">
-    </div>
+    <div class="auth-logo"><svg class="logo-svg" viewBox="0 0 48 48" width="64" height="64" aria-hidden="true" focusable="false"><defs><linearGradient id="lg-auth" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A84FF"/><stop offset="1" stop-color="#0066D6"/></linearGradient></defs><path fill="url(#lg-auth)" d="M10 2h28a8 8 0 0 1 8 8v22a8 8 0 0 1-8 8H22l-9.4 6.3c-.9.6-2.1-.1-2.1-1.2V40H10a8 8 0 0 1-8-8V10a8 8 0 0 1 8-8z" transform="translate(0 1)"/><text x="24" y="29" text-anchor="middle" font-family="-apple-system,system-ui,sans-serif" font-size="19" font-weight="700" fill="#fff">B</text></svg></div>
     <div class="auth-tabs">
       <button class="auth-tab active" id="auth-tab-login" onclick="switchAuthMode('login')">Iniciar sesión</button>
       <button class="auth-tab" id="auth-tab-register" onclick="switchAuthMode('register')">Registrarse</button>

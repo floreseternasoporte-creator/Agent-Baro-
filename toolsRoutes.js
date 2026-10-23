@@ -9,8 +9,24 @@
 
 const express = require('express');
 const tools = require('./toolsClient');
+const { getSession } = require('./sessionStore');
 
 const router = express.Router();
+
+// Baro v6 (seguridad): estos endpoints queman cuota de pago
+// (Tavily, BytePlus) y antes respondían a CUALQUIERA sin sesión.
+// Ahora exigen un sessionId válido (body o query) de una sesión
+// viva; sin sesión → 401. El frontend actual no los llama
+// directamente (todo pasa por /api/chat), así que no rompe la UI.
+router.use('/tools', (req, res, next) => {
+  const sessionId = (req.body && req.body.sessionId) || req.query.sessionId;
+  const session = sessionId ? getSession(String(sessionId)) : null;
+  if (!session) {
+    return res.status(401).json({ error: 'Se requiere una sesión válida (sessionId) para usar las herramientas.' });
+  }
+  req.agentSession = session;
+  return next();
+});
 
 function sseHandler(fn) {
   return async (req, res) => {

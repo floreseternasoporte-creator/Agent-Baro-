@@ -66,14 +66,14 @@ router.get('/auth/github/repos', async (req, res) => {
       fetch('https://api.github.com/user/repos?sort=pushed&per_page=100&affiliation=owner,collaborator', {
         headers: {
           Authorization: `Bearer ${token}`,
-          'User-Agent': 'DevAgent',
+          'User-Agent': 'Baro',
           Accept: 'application/vnd.github+json',
         },
       }),
       fetch('https://api.github.com/user', {
         headers: {
           Authorization: `Bearer ${token}`,
-          'User-Agent': 'DevAgent',
+          'User-Agent': 'Baro',
           Accept: 'application/vnd.github+json',
         },
       }),

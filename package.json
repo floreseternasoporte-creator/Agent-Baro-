@@ -1,7 +1,7 @@
 {
-  "name": "devagent",
-  "version": "2.0.0",
-  "description": "DevAgent — agente autonomo de codigo. Backend Express + frontend movil, listo para Railway.",
+  "name": "agent-baro",
+  "version": "6.0.0",
+  "description": "Baro — agente autónomo estilo Codex: backend Express + frontend Apple/iMessage, stack 100% gratuito.",
   "private": true,
   "type": "commonjs",
   "engines": {

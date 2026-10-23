@@ -42,6 +42,7 @@ class Session {
     // cada ronda posterior. No es la memoria a largo plazo del
     // cliente ("Recuerda:"); es el cuaderno de trabajo de ESTA tarea.
     this.notes = [];
+    this.checkpoints = [];      // checkpoints git estilo Codex (stash): [{id, label, ref, ts}] — tope 10
     this.clientId = null;       // ID persistente del cliente (localStorage) para memoria real
     this.memory = this.loadMemory(); // legacy por sesión; se reemplaza con setClientId()
   }
@@ -145,10 +146,29 @@ function createSession() {
   return session;
 }
 
+// Registra un checkpoint git en la sesión (tope 10, el más viejo sale).
+Session.prototype.addCheckpoint = function addCheckpoint(checkpoint) {
+  this.checkpoints.push(checkpoint);
+  if (this.checkpoints.length > 10) this.checkpoints.shift();
+  return checkpoint;
+};
+
 function getSession(id) {
   const session = sessions.get(id);
-  if (session) session.touch();
-  return session || null;
+  if (!session) return null;
+  // Expiración TAMBIÉN al leer (Baro v6): antes una sesión podía vivir
+  // hasta ~1 h extra porque solo la borraba el barrido horario de
+  // server.js. Si superó el TTL, se borra y se devuelve null, igual
+  // que si nunca hubiera existido. (La limpieza del workspace en
+  // disco de estas sesiones la sigue haciendo el barrido cuando la
+  // sesión expira por inactividad detectada allí; aquí prima no
+  // servir sesiones muertas.)
+  if (Date.now() - session.lastUsedAt > SESSION_TTL_MS) {
+    sessions.delete(id);
+    return null;
+  }
+  session.touch();
+  return session;
 }
 
 function deleteSession(id) {
@@ -172,6 +192,7 @@ function sweepExpired(onExpire) {
 
 module.exports = {
   WORKSPACES_ROOT,
+  SESSION_TTL_MS,
   createSession,
   getSession,
   deleteSession,
