@@ -146,7 +146,8 @@ Estas herramientas funcionan de dos maneras:
 
 ## Seguridad
 
-- Los comandos que el agente puede ejecutar estan en una lista blanca explicita (`commandRunner.js`): `npm`, `npx`, `node`, `python`/`python3`, `pip`, `pytest`, `yarn`, y subcomandos de solo lectura de `git`. Cualquier otro binario se rechaza.
+- Los comandos que el agente puede ejecutar estan en una lista blanca explicita (`commandRunner.js`): `npm`, `npx`, `node`, `python`/`python3`, `pip`, `pytest`, `yarn`, `go`, `cargo`, y subcomandos de solo lectura de `git`. Cualquier otro binario se rechaza.
+- `Ejecuta:` tambien es un comando directo del usuario (no solo del modelo): escribir `Crear script: x.py :: ...` y en la linea siguiente `Ejecuta: python3 scripts/x.py` crea y corre el script en el mismo turno, en orden y con la salida real — sin depender de que el modelo repita el comando.
 - Cada sesion tiene su propia carpeta de workspace; dos personas usando la misma instancia nunca comparten archivos.
 - Las sesiones inactivas por mas de 6 horas se limpian solas (memoria y disco).
 - El backend nunca ejecuta comandos con `shell: true` ni concatena strings a un shell — todo va como arrays de argumentos a `execFile`, evitando inyeccion de comandos.

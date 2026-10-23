@@ -143,6 +143,18 @@ function extractToolCommands(text) {
       if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'script', name: title, brief }); }
       continue;
     }
+
+    // Ejecuta: del USUARIO tambien es determinista (antes solo lo era
+    // cuando lo pedia el modelo en sus rondas; si el usuario lo
+    // escribia, dependia de que la IA lo repitiera y modelos debiles
+    // decian "ejecutado" sin ejecutar nada). Pasa por la MISMA lista
+    // blanca de commandRunner que los comandos del modelo.
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Ejecuta:\s*(.+?)\s*$/i))) {
+      const commandLine = match[1];
+      const key = `run\u0000${commandLine}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'run', commandLine }); }
+      continue;
+    }
   }
   return commands;
 }

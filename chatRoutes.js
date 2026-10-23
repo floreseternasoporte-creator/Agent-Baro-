@@ -771,6 +771,28 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
       const downloadUrl = `/api/files/download?sessionId=${encodeURIComponent(session.id)}&file=${encodeURIComponent(rel)}`;
       return `### Script creado: \`${name}\`\n${command.brief ? `_${command.brief}_\n` : ''}\n[Descargar ${name}](${downloadUrl}) — tambien quedo guardado en el workspace y listo para ejecutar.`;
     }
+    if (command.tool === 'run') {
+      // Ejecuta: determinista (del usuario o del modelo): corre por la
+      // lista blanca de commandRunner en el workspace de la sesión y
+      // devuelve la salida REAL. Sin repo también vale: el workspace
+      // general guarda los scripts en scripts/.
+      const parsed = extractAutomaticCommands(`Ejecuta: ${command.commandLine}`);
+      if (!parsed.length) {
+        return `### Ejecuta\nNo se pudo interpretar el comando: "${command.commandLine}". Formato: \`Ejecuta: python3 scripts/archivo.py\`.`;
+      }
+      const blocks = [];
+      for (const cmd of parsed) {
+        send('log', { type: 'run', title: `Ejecutando: ${cmd.display}` });
+        send('computer', { mode: 'terminal', action: 'run', command: cmd.display });
+        const r = await runCommand(cmd.binary, cmd.args, session.dir);
+        const out = truncateCommandOutput(r.stdout || r.stderr || r.error || '');
+        send('log', { type: r.ok ? 'ok' : 'err', title: r.ok ? `Completado: ${cmd.display}` : `Falló: ${cmd.display}`, detail: out });
+        send('computer', { mode: 'terminal', action: 'output', text: out || (r.ok ? '(sin salida)' : 'error'), ok: r.ok });
+        session.addLog?.({ type: r.ok ? 'ok' : 'err', title: `Ejecuta: ${cmd.display}`, detail: out });
+        blocks.push(commandResultForModel(cmd, r));
+      }
+      return blocks.join('\n\n');
+    }
     if (command.tool === 'computer') {
       // Modo computadora estilo Astra: un Chromium REAL que el agente
       // VE (capturas en vivo) y controla de forma autónoma (clic,
@@ -1109,13 +1131,24 @@ async function handleChatTurn(req, res) {
         preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, abortController.signal, preToolSource);
       }
       if (preRestIdx.length) {
-        if (isMultiAgent && preRestIdx.length > 1) {
+        // Orden importa cuando el mensaje trae "Crear script" y luego
+        // "Ejecuta:" (el script debe existir antes de correrlo): en
+        // ese caso los comandos del usuario van EN SECUENCIA, no en
+        // paralelo.
+        const needsOrder = preRestIdx.some((i) => ['script', 'run'].includes(userToolCommands[i].tool));
+        if (!needsOrder && isMultiAgent && preRestIdx.length > 1) {
           send('log', { type: 'info', title: `Modo multi-agente: ${preRestIdx.length} acciones en paralelo` });
         }
-        const rest = await Promise.all(
-          preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session, abortController.signal, preToolSource))
-        );
-        preRestIdx.forEach((origI, k) => { preToolTexts[origI] = rest[k]; });
+        if (needsOrder) {
+          for (const i of preRestIdx) {
+            preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, abortController.signal, preToolSource);
+          }
+        } else {
+          const rest = await Promise.all(
+            preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session, abortController.signal, preToolSource))
+          );
+          preRestIdx.forEach((origI, k) => { preToolTexts[origI] = rest[k]; });
+        }
       }
       const preToolResults = preToolTexts.filter(Boolean);
       if (preToolResults.length) {

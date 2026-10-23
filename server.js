@@ -115,10 +115,22 @@ app.get('/api/config', async (_req, res) => {
   if (process.env.GROQ_API_KEY) chain.push('Groq');
   chain.push('Pollinations (gratis)');
   chain.push('Ollama local');
-  const providerName = chain[0];
+  let providerName = chain[0];
   // El cliente "principal" es el primero de la cadena que tenga key.
   const client = process.env.GROQ_API_KEY ? groq : pollinations;
-  const ai = await client.checkHealth();
+  let ai = await client.checkHealth();
+  // Si el principal no responde pero Ollama local sí, la app SÍ está
+  // lista (el chat cae a Ollama por failover): repórtalo tal cual en
+  // vez de anunciar "sin IA" con el agente funcionando.
+  if (!ai.ready) {
+    try {
+      const o = await ollama.checkHealth();
+      if (o.ready) {
+        ai = { ready: true, model: o.model };
+        providerName = 'Ollama local';
+      }
+    } catch { /* sin Ollama: se queda el estado del principal */ }
+  }
   res.json({
     ollamaReady: ai.ready, // legacy: en realidad es el health del cliente principal
     ollamaModel: ai.model, // legacy: en realidad es el modelo del cliente principal
