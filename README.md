@@ -33,9 +33,10 @@ Baro adopta el flujo de trabajo de los agentes de código modernos (estilo Codex
 Todo el proyecto es plano — sin subcarpetas de codigo, para poder subirlo directo a un repo de GitHub sin reorganizar nada:
 
 ```
-index.html         → Frontend: markup (movil-first, diseño Apple/iMessage cristalino)
-script.js           → Frontend: toda la logica de UI + llamadas a /api/*
-style.css           → Frontend: estilos (cristal iOS, azul #007AFF, modo oscuro)
+index.html         → Frontend: markup responsive (tabs móviles y sidebar en escritorio)
+script.js           → Frontend: chat, tareas, archivos y llamadas a /api/*
+app-shell.js        → Frontend: acción de nueva conversación, JSDoc con @ts-check
+style.css           → Frontend: workspace cristalino, azul #007AFF y modo oscuro
 AGENTS.md           → Instrucciones de este repo para agentes (Baro lo lee al conectar)
 .env.example        → Plantilla de variables de entorno (todas opcionales)
 
@@ -54,7 +55,7 @@ toolCommands.js        → Backend: detecta "Buscar:", "Investigación profunda:
 workspaces/          → Clones reales de repos (uno por sesion, no se versiona — ver .gitignore)
 ```
 
-El servidor filtra explicitamente que solo `index.html`, `script.js`, `style.css` y assets de imagen/fuente se sirvan como archivos publicos — el resto de los `.js` (el codigo del backend) nunca se expone via GET aunque vivan en la misma carpeta.
+El servidor filtra explícitamente qué archivos pueden servirse: `index.html`, `script.js`, `app-shell.js`, `style.css`, `firebase-auth.js` y assets de imagen/fuente. El resto de los `.js` (el código del backend) no se expone vía GET aunque viva en la misma carpeta.
 
 Al conectar un repositorio, el agente crea un perfil estructural leyendo manifiestos, documentación, puntos de entrada y archivos de pruebas. Los diffs seguros se aplican y se verifican automáticamente dentro del workspace; el push a GitHub sigue siendo una acción explícita del usuario.
 
@@ -69,6 +70,20 @@ npm start
 ```
 
 Abre `http://localhost:3000`.
+
+## Uso rápido
+
+En escritorio, usa la barra lateral para cambiar entre Chat, Archivos, Tareas y Configuración; en móvil, esas secciones siguen en la navegación inferior. Pulsa **Nueva conversación** para volver al inicio. Un ejemplo de petición para un repositorio conectado:
+
+```text
+Analiza la estructura del proyecto, detecta un caso extremo que no esté probado y propón una corrección pequeña. Ejecuta las pruebas relacionadas y explícame los archivos que cambiaste.
+```
+
+Las pruebas del shell usan las utilidades incluidas con Node.js y no requieren dependencias adicionales:
+
+```bash
+npm test
+```
 
 El agente puede ejecutar proyectos JavaScript y Python. En Replit se incluye Python 3.11 para permitir `python`, `python3`, `pytest` y validaciones como `python -m compileall`. Los comandos siguen ejecutándose sin `shell: true`, dentro del workspace aislado y con límites de tiempo y salida.
 

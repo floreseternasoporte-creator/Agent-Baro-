@@ -1,7 +1,7 @@
 {
   "name": "agent-baro",
   "version": "6.0.0",
-  "description": "Baro — agente autónomo estilo Codex: backend Express + frontend Apple/iMessage, stack 100% gratuito.",
+  "description": "Baro — agente autónomo de código e investigación con workspace responsive y stack 100% gratuito.",
   "private": true,
   "type": "commonjs",
   "engines": {
@@ -10,7 +10,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node --test"
   },
   "dependencies": {
     "cors": "^2.8.5",

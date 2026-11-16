@@ -25,8 +25,8 @@ lista blanca, verifica con tests y hace push a GitHub.
 - `sessionStore.js` / `memoryStore.js` — sesiones, workspaces y memoria.
 - `computerUse.js` / `computerTask.js` / `visionClient.js` — modo computadora
   (Chromium real con visión local).
-- `index.html` / `script.js` / `style.css` — frontend. Diseño Apple/iMessage
-  cristalino (ver `style.css`: cristal con blur, azul #007AFF, modo oscuro iOS).
+- `index.html` / `script.js` / `app-shell.js` / `style.css` — frontend vanilla
+  responsive: tabs móviles, sidebar de escritorio y estilo Apple/iMessage.
 - `workspaces/` — clones por sesión. Nunca se versiona.
 
 ## Comandos
@@ -34,16 +34,18 @@ lista blanca, verifica con tests y hace push a GitHub.
 ```bash
 npm install     # dependencias
 npm start       # arranca el servidor (PORT o 3000)
+npm test        # suite nativa de Node, sin dependencias adicionales
 node --check <archivo>.js   # validación de sintaxis obligatoria tras editar
 ```
 
-No hay suite de tests propia: verifica cada cambio con `node --check` en
-todos los `.js` tocados y, si el cambio es de comportamiento, levanta el
-servidor y prueba el flujo real (sesión → chat → diff → tests).
+Ejecuta `npm test` y `node --check` para los `.js` tocados; para cambios de
+comportamiento, levanta el servidor y prueba el flujo real (sesión → chat →
+diff → tests).
 
 ## Convenciones
 
-- **CommonJS** (`require` / `module.exports`), Node ≥ 18, sin TypeScript.
+- **CommonJS** (`require` / `module.exports`), Node ≥ 18, sin TypeScript ni
+  build. En el shell, usar contratos JSDoc con `// @ts-check`.
 - **Sin dependencias nuevas sin permiso expreso.** Todo lo que hace falta
   ya está en `package.json` o en la stdlib de Node.
 - **Stack 100% gratuito:** Groq → Pollinations → Ollama. Nada de proveedores
