@@ -1,84 +1,169 @@
 /**
- * memoryStore.js — Memoria PERSISTENTE del usuario.
+ * memoryStore.js — Memoria persistente.
  *
- * Antes la "memoria a largo plazo" vivía en workspaces/<sessionId>/memory.json,
- * pero el sessionId es un UUID temporal y los workspaces expiran a las 6 horas:
- * la memoria NO sobrevivía entre sesiones de verdad.
- *
- * Ahora la memoria vive en data/memories/<clientId>.json, indexada por un ID
- * persistente del cliente (generado una vez en el navegador y guardado en
- * localStorage). Sobrevive sesiones nuevas, reinicios del servidor y limpieza
- * de workspaces. Esto es memoria de verdad, no marketing.
+ * Las memorias antiguas indexadas por clientId permanecen en data/memories/.
+ * La memoria asociada a Firebase usa un subdirectorio distinto y un nombre
+ * derivado del UID autenticado, de modo que no se reasignan archivos legacy.
  */
 
-const fs = require('fs');
-const path = require('path');
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const MEMORIES_ROOT = path.join(__dirname, 'data', 'memories');
+const AUTHENTICATED_MEMORIES_ROOT = path.join(MEMORIES_ROOT, 'firebase-users');
 const MAX_MEMORY_ITEMS = 200;
+const MAX_FIREBASE_UID_LENGTH = 128;
 
+/**
+ * @param {unknown} raw
+ * @returns {string | null}
+ */
 function sanitizeClientId(raw) {
   const clean = String(raw || '').trim().slice(0, 64);
-  // Solo alfanuméricos, guion y guion bajo: imposible path traversal.
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(clean)) return null;
   return clean;
 }
 
+/** @param {string} clientId */
 function memoryFile(clientId) {
   return path.join(MEMORIES_ROOT, `${clientId}.json`);
 }
 
-function loadMemory(clientId) {
-  const id = sanitizeClientId(clientId);
-  if (!id) return [];
+/** @param {string} uid */
+function authenticatedMemoryFile(uid) {
+  return path.join(
+    AUTHENTICATED_MEMORIES_ROOT,
+    `${crypto.createHash('sha256').update(uid, 'utf8').digest('hex')}.json`,
+  );
+}
+
+/**
+ * @param {string} file
+ * @returns {string[]}
+ */
+function readMemoryFile(file) {
   try {
-    const raw = fs.readFileSync(memoryFile(id), 'utf8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((m) => typeof m === 'string') : [];
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
   } catch {
     return [];
   }
 }
 
-function saveMemory(clientId, items) {
-  const id = sanitizeClientId(clientId);
-  if (!id) return false;
+/**
+ * @param {string} file
+ * @param {string[]} items
+ * @returns {boolean}
+ */
+function writeMemoryFile(file, items) {
   try {
-    fs.mkdirSync(MEMORIES_ROOT, { recursive: true });
-    const tmp = memoryFile(id) + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(items, null, 2));
-    fs.renameSync(tmp, memoryFile(id)); // escritura atómica
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const temporaryFile = `${file}.tmp`;
+    fs.writeFileSync(temporaryFile, JSON.stringify(items, null, 2));
+    fs.renameSync(temporaryFile, file);
     return true;
-  } catch (e) {
-    console.error('[devagent] no se pudo guardar memoria persistente:', e.message);
+  } catch (error) {
+    console.error('[devagent] no se pudo guardar memoria persistente:', error.message);
     return false;
   }
 }
 
-function addMemory(clientId, text) {
+/**
+ * @param {unknown} clientId
+ * @returns {string[]}
+ */
+function loadMemory(clientId) {
+  const id = sanitizeClientId(clientId);
+  return id ? readMemoryFile(memoryFile(id)) : [];
+}
+
+/**
+ * @param {unknown} clientId
+ * @param {unknown} items
+ * @returns {boolean}
+ */
+function saveMemory(clientId, items) {
+  const id = sanitizeClientId(clientId);
+  if (!id || !Array.isArray(items)) return false;
+  return writeMemoryFile(memoryFile(id), items.filter((item) => typeof item === 'string'));
+}
+
+/**
+ * Lee solo la memoria del UID validado por Firebase.
+ * @param {unknown} uid
+ * @returns {string[]}
+ */
+function loadAuthenticatedMemory(uid) {
+  if (typeof uid !== 'string' || uid.length === 0 || uid.length > MAX_FIREBASE_UID_LENGTH) return [];
+  return readMemoryFile(authenticatedMemoryFile(uid));
+}
+
+/**
+ * @param {unknown} uid
+ * @param {unknown} text
+ * @returns {{ saved: boolean, memory: string[] }}
+ */
+function addAuthenticatedMemory(uid, text) {
+  if (typeof uid !== 'string' || uid.length === 0 || uid.length > MAX_FIREBASE_UID_LENGTH) {
+    return { saved: false, memory: [] };
+  }
   const clean = String(text || '').trim();
-  if (!clean) return { saved: false, memory: [] };
-  const items = loadMemory(clientId);
-  if (items.includes(clean)) return { saved: false, memory: items }; // no duplicados
+  const items = loadAuthenticatedMemory(uid);
+  if (!clean || items.includes(clean)) return { saved: false, memory: items };
   items.push(clean);
   while (items.length > MAX_MEMORY_ITEMS) items.shift();
-  saveMemory(clientId, items);
+  if (!writeMemoryFile(authenticatedMemoryFile(uid), items)) {
+    return { saved: false, memory: loadAuthenticatedMemory(uid) };
+  }
   return { saved: true, memory: items };
+}
+
+/**
+ * @param {unknown} uid
+ * @param {number} index
+ * @returns {{ ok: boolean, memory: string[] }}
+ */
+function forgetAuthenticatedMemory(uid, index) {
+  if (typeof uid !== 'string' || uid.length === 0 || uid.length > MAX_FIREBASE_UID_LENGTH) {
+    return { ok: false, memory: [] };
+  }
+  const items = loadAuthenticatedMemory(uid);
+  if (!Number.isInteger(index) || index < 0 || index >= items.length) return { ok: false, memory: items };
+  items.splice(index, 1);
+  if (!writeMemoryFile(authenticatedMemoryFile(uid), items)) {
+    return { ok: false, memory: loadAuthenticatedMemory(uid) };
+  }
+  return { ok: true, memory: items };
+}
+
+// API legacy conservada para no mover, borrar ni reasignar sus archivos.
+function addMemory(clientId, text) {
+  const clean = String(text || '').trim();
+  const items = loadMemory(clientId);
+  if (!clean || items.includes(clean)) return { saved: false, memory: items };
+  items.push(clean);
+  while (items.length > MAX_MEMORY_ITEMS) items.shift();
+  const saved = saveMemory(clientId, items);
+  return { saved, memory: saved ? items : loadMemory(clientId) };
 }
 
 function forgetMemory(clientId, index) {
   const items = loadMemory(clientId);
-  if (index < 0 || index >= items.length) return { ok: false, memory: items };
+  if (!Number.isInteger(index) || index < 0 || index >= items.length) return { ok: false, memory: items };
   items.splice(index, 1);
-  saveMemory(clientId, items);
-  return { ok: true, memory: items };
+  const ok = saveMemory(clientId, items);
+  return { ok, memory: ok ? items : loadMemory(clientId) };
 }
 
 module.exports = {
-  sanitizeClientId,
-  loadMemory,
-  saveMemory,
+  addAuthenticatedMemory,
   addMemory,
+  forgetAuthenticatedMemory,
   forgetMemory,
+  loadAuthenticatedMemory,
+  loadMemory,
   MAX_MEMORY_ITEMS,
+  sanitizeClientId,
+  saveMemory,
 };

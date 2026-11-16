@@ -9,20 +9,20 @@
 
 const express = require('express');
 const tools = require('./toolsClient');
-const { getSession } = require('./sessionStore');
+const { getOwnedSession } = require('./sessionStore');
 
 const router = express.Router();
 
 // Baro v6 (seguridad): estos endpoints queman cuota de pago
 // (Tavily, BytePlus) y antes respondían a CUALQUIERA sin sesión.
-// Ahora exigen un sessionId válido (body o query) de una sesión
-// viva; sin sesión → 401. El frontend actual no los llama
+// Ahora exigen una sesión viva propiedad del UID Firebase validado.
+// El frontend actual no los llama
 // directamente (todo pasa por /api/chat), así que no rompe la UI.
 router.use('/tools', (req, res, next) => {
   const sessionId = (req.body && req.body.sessionId) || req.query.sessionId;
-  const session = sessionId ? getSession(String(sessionId)) : null;
+  const session = sessionId ? getOwnedSession(String(sessionId), req.auth.uid) : null;
   if (!session) {
-    return res.status(401).json({ error: 'Se requiere una sesión válida (sessionId) para usar las herramientas.' });
+    return res.status(404).json({ error: 'Sesión no encontrada o no accesible.' });
   }
   req.agentSession = session;
   return next();

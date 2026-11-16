@@ -1,9 +1,8 @@
 // ═══════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════
-// ID persistente del cliente: se genera una vez y vive en localStorage.
-// Es lo que ata la memoria del agente a ESTE navegador entre sesiones,
-// pestañas y reinicios del servidor (el sessionId es temporal y expira).
+// ID local persistente usado solo para restaurar el historial de chat del
+// navegador; no se envía al backend ni identifica al usuario.
 function getClientId() {
   try {
     let id = localStorage.getItem('devagent_client_id');
@@ -36,7 +35,7 @@ const S = {
   totalTokens: 0,
   maxTokens: 131072,
   sessionId: null,       // id de la sesion/workspace real en el servidor
-  clientId: getClientId(), // ID persistente de ESTE navegador: la memoria sobrevive sesiones
+  clientId: getClientId(), // clave local del historial de chat
   serverConfig: null,    // { ollamaReady, ollamaModel, aiProvider, githubPreconfigured }
   lastAutoAppliedPaths: [],
   lastAppliedDiffs: [],
@@ -49,6 +48,7 @@ const S = {
 // (el backend de Express sirve ambas cosas), asi que en
 // Railway esto simplemente funciona sin configuracion extra.
 const API = '/api';
+const BLOB_URL_REVOKE_DELAY_MS = 1000;
 
 // ═══════════════════════════════════════════
 // FUENTE UNICA DE TAREAS RAPIDAS
@@ -365,7 +365,7 @@ async function submitFeedback() {
   button.disabled = true;
   button.textContent = 'Enviando...';
   try {
-    const response = await fetch(`${API}/feedback`, {
+    const response = await apiFetch(`${API}/feedback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -568,20 +568,35 @@ function isSessionGone(data) {
   return typeof data.error === 'string' && data.error.toLowerCase().includes('sesi');
 }
 
-async function apiFetch(url, options, retry = true) {
-  await ensureSession();
-  // Si el servidor exige AGENT_API_TOKEN, se envia desde localStorage
-  // (clave 'agent_token'). Sin token configurado no se envia nada.
+/** @param {string} url @param {RequestInit} [options] @returns {Promise<Response>} */
+async function authorizedApiFetch(url, options = {}) {
+  if (typeof window.FB?.getIdToken !== 'function') {
+    throw new Error('La sesión de Firebase todavía no está lista.');
+  }
+  const firebaseToken = await window.FB.getIdToken();
   const agentToken = (() => { try { return localStorage.getItem('agent_token'); } catch { return null; } })();
-  const resp = await fetch(url, {
+  return fetch(url, {
     ...options,
     headers: {
       ...(options.headers || {}),
+      Authorization: `Bearer ${firebaseToken}`,
       ...(agentToken ? { 'x-agent-token': agentToken } : {}),
     },
-    body: options.body
-      ? options.body.replace ? options.body.replace(/"sessionId":"[^"]*"/, `"sessionId":"${S.sessionId}"`) : options.body
-      : undefined,
+  });
+}
+
+/** @param {string} url @param {RequestInit} [options] @param {boolean} [retry] @returns {Promise<Response>} */
+async function apiFetch(url, options = {}, retry = true) {
+  await ensureSession();
+  const requestUrl = typeof url === 'string'
+    ? url.replace(/([?&]sessionId=)[^&]*/, `$1${encodeURIComponent(S.sessionId)}`)
+    : url;
+  const body = typeof options.body === 'string'
+    ? options.body.replace(/"sessionId":"[^"]*"/, `"sessionId":"${S.sessionId}"`)
+    : options.body;
+  const resp = await authorizedApiFetch(requestUrl, {
+    ...options,
+    body,
   });
   if (resp.status === 404 && retry) {
     const data = await resp.clone().json().catch(() => ({}));
@@ -608,7 +623,7 @@ async function connectRepo(repo) {
     instructions: S.instructions || '',
   });
 
-  let resp = await fetch(`${API}/repo/connect`, {
+  let resp = await apiFetch(`${API}/repo/connect`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: makeBody(),
@@ -620,7 +635,7 @@ async function connectRepo(repo) {
     if (isSessionGone(d)) {
       S.sessionId = null;
       await initSession();
-      resp = await fetch(`${API}/repo/connect`, {
+      resp = await apiFetch(`${API}/repo/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: makeBody(),
@@ -671,7 +686,7 @@ async function fetchFile(path) {
   S._lastFileError = '';
   if (!S.repoData || !S.sessionId) { S._lastFileError = 'sin repositorio conectado'; return null; }
   try {
-    const r = await fetch(`${API}/repo/file?sessionId=${encodeURIComponent(S.sessionId)}&path=${encodeURIComponent(path)}`);
+    const r = await apiFetch(`${API}/repo/file?sessionId=${encodeURIComponent(S.sessionId)}&path=${encodeURIComponent(path)}`);
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
       S._lastFileError = d.error || `Error ${r.status}`;
@@ -863,7 +878,7 @@ async function confirmPush() {
     // real en disco (el mismo donde ya se aplicaron los diffs
     // con applyDiff). Nunca se reconstruye contenido en el
     // navegador, asi que nunca puede subirse un archivo vacio.
-    const resp = await fetch(`${API}/agent/push`, {
+    const resp = await apiFetch(`${API}/agent/push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1154,7 +1169,7 @@ function cvDesktop(payload) {
         const box = document.getElementById(`cv-confirm-${cid}`);
         btn.disabled = true;
         try {
-          const resp = await fetch(`${API}/computer/confirm`, {
+          const resp = await apiFetch(`${API}/computer/confirm`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sessionId: S.sessionId, confirmId: cid, approved }),
@@ -1625,7 +1640,7 @@ async function applyDiff(id, btn) {
   btn.disabled = true;
 
   try {
-    const resp = await fetch(`${API}/agent/apply-diff`, {
+    const resp = await apiFetch(`${API}/agent/apply-diff`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: S.sessionId, diff: rawDiff }),
@@ -1840,7 +1855,6 @@ async function callAI(msg, onStream) {
 
   const makeBody = () => JSON.stringify({
     sessionId: S.sessionId,
-    clientId: S.clientId,
     message: msg,
     planMode: S.planModeEnabled,
     fileLimit: S.fileLimit,
@@ -1854,7 +1868,7 @@ async function callAI(msg, onStream) {
   const agentToken = (() => { try { return localStorage.getItem('agent_token'); } catch { return null; } })();
   const chatHeaders = { 'Content-Type': 'application/json', ...(agentToken ? { 'x-agent-token': agentToken } : {}) };
 
-  let resp = await fetch(`${API}/chat`, {
+  let resp = await authorizedApiFetch(`${API}/chat`, {
     method: 'POST',
     headers: chatHeaders,
     signal: S.abortController.signal,
@@ -1868,7 +1882,7 @@ async function callAI(msg, onStream) {
       S.sessionId = null;
       await initSession();
       S.abortController = new AbortController();
-      resp = await fetch(`${API}/chat`, {
+      resp = await authorizedApiFetch(`${API}/chat`, {
         method: 'POST',
         headers: chatHeaders,
         signal: S.abortController.signal,
@@ -2163,7 +2177,7 @@ async function doUndo() {
   const btn = document.getElementById('undo-btn');
   if (btn) btn.disabled = true;
   try {
-    const resp = await fetch(`${API}/agent/undo`, {
+    const resp = await apiFetch(`${API}/agent/undo`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: S.sessionId }),
@@ -2193,7 +2207,7 @@ async function openDiffModal() {
   if (filesEl) filesEl.innerHTML = '';
   modal.classList.add('open');
   try {
-    const resp = await fetch(`${API}/agent/diff?sessionId=${encodeURIComponent(S.sessionId)}`);
+    const resp = await apiFetch(`${API}/agent/diff?sessionId=${encodeURIComponent(S.sessionId)}`);
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error || `Error ${resp.status}`);
     const files = Array.isArray(data.files) ? data.files : [];
@@ -2214,7 +2228,7 @@ async function doCreateAgentsMd() {
   if (!S.sessionId) { showToast('Sesión no lista todavía'); return; }
   if (!S.repoData) { showToast('Conecta un repositorio primero'); return; }
   try {
-    const resp = await fetch(`${API}/agent/init`, {
+    const resp = await apiFetch(`${API}/agent/init`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: S.sessionId }),
@@ -2378,7 +2392,7 @@ async function startDeviceFlow() {
   sheet.classList.add('open');
 
   try {
-    const resp = await fetch(`${API}/auth/github/device`, { method: 'POST' });
+    const resp = await apiFetch(`${API}/auth/github/device`, { method: 'POST' });
     const data = await resp.json();
     if (data.error) { showDeviceFlowError(data.error); return; }
 
@@ -2417,7 +2431,7 @@ async function startDeviceFlow() {
 
 async function pollDeviceFlow(deviceCode) {
   try {
-    const resp = await fetch(`${API}/auth/github/poll`, {
+    const resp = await apiFetch(`${API}/auth/github/poll`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deviceCode }),
@@ -2460,8 +2474,8 @@ async function loadGitHubRepos(token) {
   if (c) c.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24" class="spin"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg><p style="margin-top:10px;font-size:13px">Cargando tus repositorios...</p></div>`;
 
   try {
-    const resp = await fetch(`${API}/auth/github/repos`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const resp = await apiFetch(`${API}/auth/github/repos`, {
+      headers: { 'x-github-token': token },
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || 'Error cargando repos');
@@ -2631,6 +2645,42 @@ function updateScrollFab() {
   fab.classList.toggle('show', away > 320);
 }
 
+/** @param {MouseEvent} event */
+async function downloadProtectedFile(event) {
+  const clickedElement = event.target instanceof Element ? event.target : null;
+  const link = clickedElement?.closest('a[href]');
+  if (!link) return;
+
+  let targetUrl;
+  try {
+    targetUrl = new URL(link.href, window.location.href);
+  } catch {
+    return;
+  }
+  if (targetUrl.origin !== window.location.origin || targetUrl.pathname !== `${API}/files/download`) return;
+
+  event.preventDefault();
+  try {
+    const response = await authorizedApiFetch(`${targetUrl.pathname}${targetUrl.search}`);
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Error ${response.status}`);
+    }
+    const blobUrl = URL.createObjectURL(await response.blob());
+    const downloadLink = document.createElement('a');
+    downloadLink.href = blobUrl;
+    downloadLink.download = targetUrl.searchParams.get('file')?.split('/').pop() || 'archivo';
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), BLOB_URL_REVOKE_DELAY_MS);
+  } catch (error) {
+    showToast(`No se pudo descargar el archivo: ${error.message}`);
+  }
+}
+
+document.addEventListener('click', downloadProtectedFile);
+
 document.getElementById('chat-scroll').addEventListener('scroll', updateScrollFab, { passive: true });
 window.addEventListener('resize', autoGrow);
 autoGrow();
@@ -2647,10 +2697,10 @@ window.onFirebaseAuthReady = async function(user) {
 async function initSession() {
   try {
     // Consulta configuración del servidor (Ollama, GitHub OAuth).
-    const cfgResp = await fetch(`${API}/config`);
+    const cfgResp = await authorizedApiFetch(`${API}/config`);
     S.serverConfig = await cfgResp.json();
 
-    const sessResp = await fetch(`${API}/session`, { method: 'POST' });
+    const sessResp = await authorizedApiFetch(`${API}/session`, { method: 'POST' });
     if (!sessResp.ok) throw new Error('No se pudo iniciar sesion con el servidor');
     const sess = await sessResp.json();
     S.sessionId = sess.sessionId;

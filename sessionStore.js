@@ -15,6 +15,7 @@ const memoryStore = require('./memoryStore');
 
 const WORKSPACES_ROOT = path.join(__dirname, 'workspaces');
 const MAX_MEMORY_ITEMS = 100; // legacy por sesión; el almacén persistente usa su propio tope
+const MAX_OWNER_UID_LENGTH = 128;
 
 /** @type {Map<string, Session>} */
 const sessions = new Map();
@@ -24,8 +25,15 @@ const sessions = new Map();
 const SESSION_TTL_MS = 1000 * 60 * 60 * 6; // 6 horas
 
 class Session {
-  constructor(id) {
+  /** @param {string} id @param {string} ownerUid */
+  constructor(id, ownerUid) {
     this.id = id;
+    Object.defineProperty(this, 'ownerUid', {
+      value: ownerUid,
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
     this.dir = path.join(WORKSPACES_ROOT, id);
     this.repoFullName = null;   // "usuario/repo"
     this.repoUrl = null;
@@ -43,20 +51,7 @@ class Session {
     // cliente ("Recuerda:"); es el cuaderno de trabajo de ESTA tarea.
     this.notes = [];
     this.checkpoints = [];      // checkpoints git estilo Codex (stash): [{id, label, ref, ts}] — tope 10
-    this.clientId = null;       // ID persistente del cliente (localStorage) para memoria real
-    this.memory = this.loadMemory(); // legacy por sesión; se reemplaza con setClientId()
-  }
-
-  // Vincula la sesión a la memoria PERSISTENTE del cliente.
-  // Sin esto, la memoria muere con el workspace (6h). Con esto, sobrevive
-  // entre sesiones, pestañas y reinicios del servidor.
-  setClientId(rawId) {
-    const id = memoryStore.sanitizeClientId(rawId);
-    if (!id) return false;
-    if (this.clientId === id) return true;
-    this.clientId = id;
-    this.memory = memoryStore.loadMemory(id);
-    return true;
+    this.memory = memoryStore.loadAuthenticatedMemory(ownerUid);
   }
 
   memoryFile() {
@@ -83,32 +78,15 @@ class Session {
   }
 
   addMemory(text) {
-    // Con cliente vinculado, la memoria es persistente de verdad.
-    if (this.clientId) {
-      const { saved, memory } = memoryStore.addMemory(this.clientId, text);
-      this.memory = memory;
-      return saved;
-    }
-    // Legacy: sin clientId, memoria atada a la sesión (muere con el workspace).
-    const clean = String(text || '').trim();
-    if (!clean) return false;
-    if (this.memory.includes(clean)) return false; // no duplicados
-    this.memory.push(clean);
-    if (this.memory.length > MAX_MEMORY_ITEMS) this.memory.shift();
-    this.saveMemory();
-    return true;
+    const { saved, memory } = memoryStore.addAuthenticatedMemory(this.ownerUid, text);
+    this.memory = memory;
+    return saved;
   }
 
   forgetMemory(index) {
-    if (this.clientId) {
-      const { ok, memory } = memoryStore.forgetMemory(this.clientId, Number(index));
-      this.memory = memory;
-      return ok;
-    }
-    if (index < 0 || index >= this.memory.length) return false;
-    this.memory.splice(index, 1);
-    this.saveMemory();
-    return true;
+    const { ok, memory } = memoryStore.forgetAuthenticatedMemory(this.ownerUid, Number(index));
+    this.memory = memory;
+    return ok;
   }
 
   touch() {
@@ -139,9 +117,13 @@ class Session {
   }
 }
 
-function createSession() {
+/** @param {unknown} ownerUid @returns {Session} */
+function createSession(ownerUid) {
+  if (typeof ownerUid !== 'string' || ownerUid.length === 0 || ownerUid.length > MAX_OWNER_UID_LENGTH) {
+    throw new TypeError('Se requiere un UID autenticado para crear la sesión.');
+  }
   const id = crypto.randomUUID();
-  const session = new Session(id);
+  const session = new Session(id, ownerUid);
   sessions.set(id, session);
   return session;
 }
@@ -153,6 +135,7 @@ Session.prototype.addCheckpoint = function addCheckpoint(checkpoint) {
   return checkpoint;
 };
 
+/** @param {string} id @returns {Session | null} */
 function getSession(id) {
   const session = sessions.get(id);
   if (!session) return null;
@@ -169,6 +152,19 @@ function getSession(id) {
   }
   session.touch();
   return session;
+}
+
+/**
+ * Devuelve la sesión y renueva su TTL únicamente si pertenece al UID dado.
+ * @param {unknown} id
+ * @param {unknown} ownerUid
+ * @returns {Session | null}
+ */
+function getOwnedSession(id, ownerUid) {
+  if (typeof id !== 'string' || !id || typeof ownerUid !== 'string' || !ownerUid) return null;
+  const session = sessions.get(id);
+  if (!session || session.ownerUid !== ownerUid) return null;
+  return getSession(id);
 }
 
 function deleteSession(id) {
@@ -195,6 +191,7 @@ module.exports = {
   SESSION_TTL_MS,
   createSession,
   getSession,
+  getOwnedSession,
   deleteSession,
   listSessions,
   sweepExpired,

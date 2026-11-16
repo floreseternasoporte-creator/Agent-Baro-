@@ -10,7 +10,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { getSession } = require('./sessionStore');
+const { getOwnedSession } = require('./sessionStore');
 const git = require('./gitAgent');
 const groq = require('./groqClient');
 const ollama = require('./ollamaClient');
@@ -712,9 +712,7 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
     if (command.tool === 'memory') {
       const saved = session.addMemory(command.text);
       send('log', { type: saved ? 'ok' : 'info', title: saved ? 'Guardado en memoria' : 'Ya estaba en memoria', detail: command.text });
-      const scopeNote = session.clientId
-        ? 'Lo recordaré en futuras conversaciones, aunque cierres la app.'
-        : 'Lo recordaré durante esta sesión.';
+      const scopeNote = 'Lo recordaré en futuras conversaciones, aunque cierres la app.';
       return saved
         ? `### Memoria guardada\nHe guardado en mi memoria: "${command.text}". ${scopeNote}`
         : `### Memoria\nEse dato ya estaba en mi memoria: "${command.text}".`;
@@ -842,8 +840,6 @@ function summarizeDiffResults(results) {
 
 async function handleChatTurn(req, res) {
   const {
-    sessionId,
-    clientId,
     message,
     model,
     planMode,
@@ -857,11 +853,8 @@ async function handleChatTurn(req, res) {
   const effectiveFileLimit = Number.isFinite(requestedFileLimit)
     ? Math.min(300, Math.max(10, Math.trunc(requestedFileLimit)))
     : 10;
-  const session = getSession(sessionId);
+  const session = req.agentSession;
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada. Recarga la app.' });
-  // Vincula la memoria persistente del cliente en cada turno: así el agente
-  // recuerda datos entre sesiones aunque el sessionId sea nuevo.
-  if (clientId) session.setClientId(clientId);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -1443,7 +1436,10 @@ async function handleChatTurn(req, res) {
 }
 
 router.post('/chat', async (req, res) => {
-  const lockKey = String(req.body?.sessionId || '__sin_sesion__');
+  const session = getOwnedSession(String(req.body?.sessionId || ''), req.auth.uid);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada. Recarga la app.' });
+  req.agentSession = session;
+  const lockKey = `${session.ownerUid}:${session.id}`;
   const previous = chatTurnChains.get(lockKey) || Promise.resolve();
   let releaseCurrent;
   const currentGate = new Promise((resolve) => { releaseCurrent = resolve; });

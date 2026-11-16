@@ -15,6 +15,7 @@ const fs = require('fs');
 const rateLimit = require('express-rate-limit');
 
 const { sweepExpired, WORKSPACES_ROOT } = require('./sessionStore');
+const { createFirebaseAuthMiddleware } = require('./authMiddleware');
 
 const repoRoutes = require('./repoRoutes');
 const chatRoutes = require('./chatRoutes');
@@ -50,11 +51,10 @@ const corsOrigins = process.env.CORS_ORIGIN
 app.use(cors({ origin: corsOrigins || false }));
 app.use(express.json({ limit: '2mb' }));
 
-// Token opcional para la API: si defines AGENT_API_TOKEN, todo /api/*
-// (menos /api/health) exige la cabecera `x-agent-token` con ese valor.
-// Util si expones la instancia en internet y no quieres que extraños
-// consuman tus claves de IA. El frontend lo envia solo si existe en
-// localStorage bajo la clave 'agent_token'.
+// Capa adicional opcional para la API: si defines AGENT_API_TOKEN,
+// todo /api/* (menos /api/health) exige x-agent-token además de Firebase.
+// No sustituye la autenticación por usuario. El frontend lo envía solo
+// si existe en localStorage bajo la clave 'agent_token'.
 const AGENT_API_TOKEN = process.env.AGENT_API_TOKEN || null;
 const nodeCrypto = require('crypto');
 
@@ -90,6 +90,8 @@ const apiLimiter = rateLimit({
   message: { error: 'Demasiadas solicitudes, espera un momento.' },
 });
 app.use('/api', apiLimiter);
+// Firebase autentica cada solicitud API; solo health permanece público.
+app.use('/api', createFirebaseAuthMiddleware());
 
 // ── Workspaces (clones de repos reales) ───────────────────
 if (!fs.existsSync(WORKSPACES_ROOT)) fs.mkdirSync(WORKSPACES_ROOT, { recursive: true });

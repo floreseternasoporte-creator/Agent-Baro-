@@ -168,6 +168,11 @@ _fbAuth.onAuthStateChanged(async (user) => {
 // ── API pública ───────────────────────────
 window.FB = {
   get currentUser() { return _fbUser; },
+  /** @returns {Promise<string>} */
+  async getIdToken() {
+    if (!_fbUser) throw new Error('Inicia sesión con Firebase para continuar.');
+    return _fbUser.getIdToken();
+  },
   saveUserData: _saveUserData,
   saveLastRepo: _saveLastRepo,
   loadUserData: _loadUserData,

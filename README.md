@@ -30,7 +30,7 @@ Baro adopta el flujo de trabajo de los agentes de código modernos (estilo Codex
 
 ## Arquitectura
 
-Todo el proyecto es plano — sin subcarpetas de codigo, para poder subirlo directo a un repo de GitHub sin reorganizar nada:
+El backend y el frontend viven en la raíz, sin build ni frameworks; las pruebas se guardan en `tests/`:
 
 ```
 index.html         → Frontend: markup responsive (tabs móviles y sidebar en escritorio)
@@ -38,10 +38,13 @@ script.js           → Frontend: chat, tareas, archivos y llamadas a /api/*
 app-shell.js        → Frontend: acción de nueva conversación, JSDoc con @ts-check
 style.css           → Frontend: workspace cristalino, azul #007AFF y modo oscuro
 AGENTS.md           → Instrucciones de este repo para agentes (Baro lo lee al conectar)
-.env.example        → Plantilla de variables de entorno (todas opcionales)
+.env.example        → Plantilla de variables de entorno (incluye FIREBASE_PROJECT_ID)
 
 server.js           → Backend: entry point, sirve el frontend + monta la API (esto arranca "npm start")
+firebaseTokenVerifier.js → Backend: verifica firma y claims de ID tokens Firebase con certificados públicos
+authMiddleware.js   → Backend: autentica API y adjunta el UID verificado a cada solicitud
 sessionStore.js      → Backend: sesiones/workspaces en memoria + disco
+memoryStore.js       → Backend: memoria persistente separada por UID autenticado
 gitAgent.js          → Backend: clonado, lectura/escritura, aplicacion segura de diffs, commit+push
 commandRunner.js     → Backend: ejecucion automatica de comandos reales con lista blanca de seguridad
 groqClient.js        → Backend: cliente de Groq (streaming SSE) con el prompt del agente Baro
@@ -51,6 +54,7 @@ agentRoutes.js       → Backend: aplicar diffs, ejecutar comandos, push
 toolsClient.js        → Backend: busqueda web (Tavily), Wikipedia, video (Seedance), edicion de imagenes
 toolsRoutes.js        → Backend: endpoints /api/tools/* en streaming (SSE) para cada herramienta
 toolCommands.js        → Backend: detecta "Buscar:", "Investigación profunda:", "Wikipedia:", "Generar video:", "Editar imagen:" en las respuestas de la IA
+tests/               → Pruebas nativas de Node para interfaz, tokens y aislamiento de sesiones
 
 workspaces/          → Clones reales de repos (uno por sesion, no se versiona — ver .gitignore)
 ```
@@ -65,7 +69,7 @@ El frontend nunca habla directo con Groq o GitHub — todo pasa por `/api/*`, qu
 
 ```bash
 npm install
-cp .env.example .env   # opcional: pon ahi tus claves (GROQ_API_KEY, TAVILY_API_KEY...)
+cp .env.example .env   # FIREBASE_PROJECT_ID debe coincidir con firebase-auth.js
 npm start
 ```
 
@@ -92,7 +96,8 @@ El agente puede ejecutar proyectos JavaScript y Python. En Replit se incluye Pyt
 1. Sube este proyecto (el contenido de esta carpeta) a un repositorio de GitHub.
 2. En Railway: **New Project → Deploy from GitHub repo**, elige ese repositorio.
 3. Railway detecta `package.json` y usa Nixpacks automaticamente (confirmado por `railway.json`: build con `npm install`, arranque con `npm start`).
-4. En **Variables**, agrega (todas opcionales, pero recomendadas para no pedirle claves a cada usuario):
+4. En **Variables**, configura `FIREBASE_PROJECT_ID` con el ID del proyecto que usa Firebase Auth en el frontend. Es obligatorio para verificar usuarios; mantén las claves de proveedores como opcionales:
+   - `FIREBASE_PROJECT_ID` — ID público del mismo proyecto Firebase declarado en `firebase-auth.js`
    - `GROQ_API_KEY` — tu clave gratuita de [console.groq.com/keys](https://console.groq.com/keys)
    - `GITHUB_TOKEN` — un Personal Access Token con permiso `repo` (Settings → Developer settings → Personal access tokens en GitHub)
    - `AGENT_GIT_NAME` / `AGENT_GIT_EMAIL` — nombre/email que apareceran en los commits que haga el agente
@@ -131,6 +136,8 @@ Estas herramientas funcionan de dos maneras:
 1. **Dentro del chat**, la propia IA decide usarlas cuando hacen falta (por ejemplo, si preguntas algo sobre noticias actuales, escribe `Buscar: ...` en su respuesta y el backend ejecuta la busqueda real, mostrando en vivo cada pagina visitada en el log de la conversacion).
 2. **Como endpoints directos** en streaming (SSE) bajo `/api/tools/*`, por si el frontend quiere una UI dedicada (por ejemplo un boton "Investigar" o un editor de fotos separado del chat).
 
+Las llamadas directas deben enviar `Authorization: Bearer <ID token Firebase>` y un `sessionId` vigente propiedad de esa cuenta. El UID no se toma de un parámetro del cliente; se deriva del token validado.
+
 ### Investigación profunda (estilo Deep Research)
 - Para preguntas que merecen análisis en serio, no un dato puntual: el usuario toca la tarjeta **"Investigación profunda"** en la pantalla inicial, o la IA escribe `Investigación profunda: <tema>` en su respuesta.
 - El backend lanza **4–6 búsquedas Tavily en paralelo** desde ángulos complementarios (panorama, análisis, datos, actualidad, explicación), **lee las fuentes reales**, deduplica por URL y le pide a la IA que redacte un **informe estructurado con citas [n]** ancladas a las fuentes.
@@ -140,26 +147,40 @@ Estas herramientas funcionan de dos maneras:
 ### Busqueda web en tiempo real — Tavily
 - Gratis: **1000 busquedas al mes, sin tarjeta de credito**. Se creo especificamente para agentes de IA (a diferencia de Google/Bing, ya devuelve el contenido extraido y limpio de cada pagina, no solo el enlace).
 - Consigue tu clave en [tavily.com](https://tavily.com) y ponla en `TAVILY_API_KEY`.
-- Endpoint: `POST /api/tools/search` `{ query, topic }` → eventos `step` (`search_start`, `search_visit`, `search_done`) y `done` con `{ answer, results }`.
+- Endpoint: `POST /api/tools/search` `{ sessionId, query, topic }` → eventos `step` (`search_start`, `search_visit`, `search_done`) y `done` con `{ answer, results }`.
 
 ### Wikipedia
 - API publica oficial de Wikimedia, **gratis y sin clave**. Busca el articulo mas relevante y devuelve su resumen real.
-- Endpoint: `POST /api/tools/wikipedia` `{ query, lang }` (lang por defecto `es`).
+- Endpoint: `POST /api/tools/wikipedia` `{ sessionId, query, lang }` (lang por defecto `es`).
 
 ### Generacion de video con IA — Seedance (ByteDance / BytePlus)
 - **Es un servicio de pago por segundo generado.** No existe, a la fecha, ningun proveedor serio con tier gratuito real de video con IA en produccion — se paga con tu propia clave de BytePlus/Volcengine ModelArk.
 - Limite tecnico real del modelo: **15 segundos por generacion individual** (Seedance 2.0) o 30s (Seedance 2.5). Para pedidos mas largos, el backend **encadena automaticamente clips** usando el ultimo frame de cada clip como referencia del siguiente, hasta el tope que pediste de **10 minutos (600s) por video**.
 - Limite de uso: **maximo 10 videos generados por dia** en toda la instancia (contador en memoria del servidor, ver `MAX_VIDEOS_PER_DAY` en `toolsClient.js`; para multiples usuarios reales conviene mover ese contador a una base de datos compartida).
 - Consigue tu clave en BytePlus ModelArk y ponla en `BYTEPLUS_API_KEY`.
-- Endpoint: `POST /api/tools/video` `{ prompt, durationSec, referenceImageUrl }` → eventos `step` por cada clip (`video_clip_start`, `video_clip_progress`, `video_clip_ready`) y `done` con la lista de clips generados.
-- `GET /api/tools/video/usage` devuelve cuantos videos quedan disponibles hoy.
+- Endpoint: `POST /api/tools/video` `{ sessionId, prompt, durationSec, referenceImageUrl }` → eventos `step` por cada clip (`video_clip_start`, `video_clip_progress`, `video_clip_ready`) y `done` con la lista de clips generados.
+- `GET /api/tools/video/usage?sessionId=...` devuelve cuantos videos quedan disponibles hoy.
 
 ### Edicion y animacion de imagenes con IA
 - Usa Pollinations (modelo `kontext`, **gratis y sin clave**). Sirve para "edita esta foto", "quitale el fondo", "animala", etc. Para animar una imagen (convertirla en video), el resultado se puede pasar como `referenceImageUrl` a la generacion de video.
 - Soporta lotes: si le pasas una lista de fotos con la misma instruccion, las procesa una por una y reporta el progreso en vivo.
-- Endpoint: `POST /api/tools/image-edit` `{ imageUrl, instruction }` o `{ images: [...], instruction }` para lotes.
+- Endpoint: `POST /api/tools/image-edit` `{ sessionId, imageUrl, instruction }` o `{ sessionId, images: [...], instruction }` para lotes.
 
 ## Seguridad
+
+- Toda ruta `/api/*` exige un ID token Firebase en `Authorization: Bearer …`; el servidor verifica su firma RS256 y las claims de proyecto, emisor y vigencia. Solo `/api/health` permanece público. Si configuras `AGENT_API_TOKEN`, también se exige `x-agent-token`: es una capa adicional, no reemplaza la identidad Firebase.
+- Las sesiones se vinculan al UID validado en el servidor. Un `uid` o `clientId` enviado en el body no demuestra identidad ni puede cambiar el dueño de una sesión; el acceso a workspaces, archivos, chat, herramientas y memoria comprueba propiedad.
+- La memoria nueva se guarda en un espacio separado derivado del UID validado. Los archivos legacy indexados por `clientId` quedan intactos y no se migran ni reasignan automáticamente.
+- Ejemplo mínimo para iniciar una sesión desde el frontend autenticado:
+
+  ```js
+  const idToken = await window.FB.getIdToken();
+  const response = await fetch('/api/session', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  const { sessionId } = await response.json();
+  ```
 
 - Los comandos que el agente puede ejecutar estan en una lista blanca explicita (`commandRunner.js`): `npm`, `npx`, `node`, `python`/`python3`, `pip`, `pytest`, `yarn`, `go`, `cargo`, y subcomandos de solo lectura de `git`. Cualquier otro binario se rechaza.
 - `Ejecuta:` tambien es un comando directo del usuario (no solo del modelo): escribir `Crear script: x.py :: ...` y en la linea siguiente `Ejecuta: python3 scripts/x.py` crea y corre el script en el mismo turno, en orden y con la salida real — sin depender de que el modelo repita el comando.

@@ -11,7 +11,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { getSession } = require('./sessionStore');
+const { getOwnedSession } = require('./sessionStore');
 const git = require('./gitAgent');
 const { runCommand, TASK_PRESETS, ALLOWED_BINARIES } = require('./commandRunner');
 
@@ -32,7 +32,7 @@ const router = express.Router();
 const DOWNLOAD_ALLOWED_ROOTS = new Set(['docs', 'scripts']);
 
 router.get('/files/download', (req, res) => {
-  const session = getSession(req.query.sessionId);
+  const session = getOwnedSession(req.query.sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesión no encontrada o expirada' });
   const rel = String(req.query.file || '').replace(/\\/g, '/').replace(/^\/+/, '');
   if (!rel || rel.includes('\0')) return res.status(400).json({ error: 'Archivo inválido' });
@@ -59,7 +59,7 @@ router.get('/files/download', (req, res) => {
 
 router.post('/agent/apply-diff', async (req, res) => {
   const { sessionId, diff } = req.body || {};
-  const session = getSession(sessionId);
+  const session = getOwnedSession(sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   if (!session.repoFullName) return res.status(400).json({ error: 'No hay repositorio conectado en esta sesion' });
   if (!diff) return res.status(400).json({ error: 'Falta el contenido del diff' });
@@ -91,7 +91,7 @@ router.get('/agent/allowed-commands', (_req, res) => {
 
 router.post('/agent/run', async (req, res) => {
   const { sessionId, preset, binary, args } = req.body || {};
-  const session = getSession(sessionId);
+  const session = getOwnedSession(sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   if (!session.repoFullName) return res.status(400).json({ error: 'No hay repositorio conectado en esta sesion' });
 
@@ -121,7 +121,7 @@ router.post('/agent/run', async (req, res) => {
 
 router.post('/agent/push', async (req, res) => {
   const { sessionId, message, branch, githubToken } = req.body || {};
-  const session = getSession(sessionId);
+  const session = getOwnedSession(sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   if (!session.repoFullName) return res.status(400).json({ error: 'No hay repositorio conectado en esta sesion' });
 
@@ -160,7 +160,7 @@ router.post('/agent/push', async (req, res) => {
 });
 
 router.get('/agent/status', async (req, res) => {
-  const session = getSession(req.query.sessionId);
+  const session = getOwnedSession(req.query.sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   if (!session.repoFullName) return res.json({ hasChanges: false, files: [] });
 
@@ -175,7 +175,7 @@ router.get('/agent/status', async (req, res) => {
 });
 
 router.get('/agent/log', (req, res) => {
-  const session = getSession(req.query.sessionId);
+  const session = getOwnedSession(req.query.sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   res.json({ log: session.actionLog });
 });
@@ -189,7 +189,7 @@ router.get('/agent/log', (req, res) => {
 // Contrato fijo para el frontend: ver baro-v6/seguridad-RESUMEN.md
 // ═════════════════════════════════════════════════════════
 router.get('/agent/diff', async (req, res) => {
-  const session = getSession(req.query.sessionId);
+  const session = getOwnedSession(req.query.sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   if (!fs.existsSync(path.join(session.dir, '.git'))) {
     return res.json({ files: [], diff: '' });
@@ -204,7 +204,7 @@ router.get('/agent/diff', async (req, res) => {
 
 router.post('/agent/checkpoint', async (req, res) => {
   const { sessionId, label } = req.body || {};
-  const session = getSession(sessionId);
+  const session = getOwnedSession(sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   if (!fs.existsSync(path.join(session.dir, '.git'))) {
     return res.status(400).json({ error: 'No hay repositorio conectado en esta sesion' });
@@ -226,7 +226,7 @@ router.post('/agent/checkpoint', async (req, res) => {
 
 router.post('/agent/undo', async (req, res) => {
   const { sessionId, checkpointId } = req.body || {};
-  const session = getSession(sessionId);
+  const session = getOwnedSession(sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   const checkpoints = session.checkpoints || [];
   if (!checkpoints.length) return res.json({ ok: false, error: 'Sin checkpoints' });
@@ -246,7 +246,7 @@ router.post('/agent/undo', async (req, res) => {
 
 router.post('/agent/init', async (req, res) => {
   const { sessionId } = req.body || {};
-  const session = getSession(sessionId);
+  const session = getOwnedSession(sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   const target = path.join(session.dir, 'AGENTS.md');
   if (fs.existsSync(target)) {
@@ -268,34 +268,29 @@ router.post('/agent/init', async (req, res) => {
 });
 
 // ── Memoria a largo plazo ─────────────────────────────────
-// GET  /api/agent/memory?sessionId=&clientId=  -> { memory: [...] }
-// POST /api/agent/memory { sessionId, clientId, text } -> guarda un dato
-// DELETE /api/agent/memory { sessionId, clientId, index } -> olvida un dato
-// Con clientId, la memoria es PERSISTENTE: vive en data/memories/<clientId>.json
-// y sobrevive sesiones nuevas, pestañas y reinicios. Sin clientId, cae al
-// legacy por sesión (muere con el workspace).
+// GET  /api/agent/memory?sessionId=        -> { memory: [...] }
+// POST /api/agent/memory { sessionId, text } -> guarda un dato
+// DELETE /api/agent/memory { sessionId, index } -> olvida un dato
+// La clave persistente se deriva exclusivamente del UID Firebase verificado.
 router.get('/agent/memory', (req, res) => {
-  const session = getSession(req.query.sessionId);
+  const session = getOwnedSession(req.query.sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
-  if (req.query.clientId) session.setClientId(req.query.clientId);
-  res.json({ memory: session.memory, persistent: !!session.clientId });
+  res.json({ memory: session.memory, persistent: Boolean(session.ownerUid) });
 });
 
 router.post('/agent/memory', (req, res) => {
-  const { sessionId, clientId, text } = req.body || {};
-  const session = getSession(sessionId);
+  const { sessionId, text } = req.body || {};
+  const session = getOwnedSession(sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
-  if (clientId) session.setClientId(clientId);
   if (!text || !String(text).trim()) return res.status(400).json({ error: 'Falta "text"' });
   const saved = session.addMemory(text);
-  res.json({ saved, memory: session.memory, persistent: !!session.clientId });
+  res.json({ saved, memory: session.memory, persistent: Boolean(session.ownerUid) });
 });
 
 router.delete('/agent/memory', (req, res) => {
-  const { sessionId, clientId, index } = req.body || {};
-  const session = getSession(sessionId);
+  const { sessionId, index } = req.body || {};
+  const session = getOwnedSession(sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
-  if (clientId) session.setClientId(clientId);
   const ok = session.forgetMemory(Number(index));
   if (!ok) return res.status(400).json({ error: 'Índice inválido' });
   res.json({ ok: true, memory: session.memory });
@@ -308,7 +303,7 @@ router.delete('/agent/memory', (req, res) => {
 router.post('/computer/confirm', (req, res) => {
   const { sessionId, confirmId, approved } = req.body || {};
   if (!sessionId || !confirmId) return res.status(400).json({ error: 'Faltan sessionId/confirmId' });
-  const session = getSession(sessionId);
+  const session = getOwnedSession(sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   const { resolveConfirmation } = require('./computerUse');
   const ok = resolveConfirmation(session.id, String(confirmId), !!approved);

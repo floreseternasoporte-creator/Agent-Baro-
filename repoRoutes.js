@@ -8,20 +8,20 @@
 
 const express = require('express');
 const path = require('path');
-const { getSession, createSession } = require('./sessionStore');
+const { getOwnedSession, createSession } = require('./sessionStore');
 const git = require('./gitAgent');
 
 const router = express.Router();
 
 // Crea una sesion nueva (workspace propio en disco para este usuario/pestaña).
 router.post('/session', (req, res) => {
-  const session = createSession();
+  const session = createSession(req.auth.uid);
   res.json({ sessionId: session.id });
 });
 
 router.post('/repo/connect', async (req, res) => {
   const { sessionId, url, branch, token, instructions } = req.body || {};
-  const session = getSession(sessionId);
+  const session = getOwnedSession(sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada. Recarga la app.' });
 
   const parsed = git.parseRepoUrl(url);
@@ -99,7 +99,7 @@ router.post('/repo/connect', async (req, res) => {
 });
 
 router.get('/repo/files', (req, res) => {
-  const session = getSession(req.query.sessionId);
+  const session = getOwnedSession(req.query.sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   if (!session.repoFullName) return res.json({ files: [] });
 
@@ -109,7 +109,7 @@ router.get('/repo/files', (req, res) => {
 });
 
 router.get('/repo/file', async (req, res) => {
-  const session = getSession(req.query.sessionId);
+  const session = getOwnedSession(req.query.sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
   const relPath = req.query.path;
   if (!relPath) return res.status(400).json({ error: 'Falta el parametro path' });

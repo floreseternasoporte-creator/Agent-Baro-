@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
+const { getOwnedSession } = require('./sessionStore');
 
 const router = express.Router();
 const FEEDBACK_DIR = path.join(__dirname, 'feedback');
@@ -16,9 +17,13 @@ router.post('/feedback', async (req, res) => {
   const description = clean(body.description, 8000);
   const steps = clean(body.steps, 4000);
   const severity = ['low', 'medium', 'high', 'blocking'].includes(body.severity) ? body.severity : 'medium';
+  const sessionId = clean(body.sessionId, 100) || null;
 
   if (!title || !description) {
     return res.status(400).json({ error: 'El título y la descripción son obligatorios.' });
+  }
+  if (sessionId && !getOwnedSession(sessionId, req.auth.uid)) {
+    return res.status(404).json({ error: 'Sesión no encontrada o no accesible.' });
   }
 
   const report = {
@@ -28,7 +33,7 @@ router.post('/feedback', async (req, res) => {
     description,
     steps,
     severity,
-    sessionId: clean(body.sessionId, 100) || null,
+    sessionId,
     page: clean(body.page, 120) || null,
     createdAt: new Date().toISOString(),
   };

@@ -56,10 +56,13 @@ router.post('/auth/github/poll', async (req, res) => {
   }
 });
 
-// Lista los repositorios del usuario autenticado (token en header).
+// Lista los repositorios del usuario autenticado en GitHub (token separado
+// del Bearer Firebase usado para autenticar esta API).
 // Devuelve los 100 repos mas recientemente actualizados.
 router.get('/auth/github/repos', async (req, res) => {
-  const token = req.headers['authorization']?.replace('Bearer ', '').trim();
+  const token = typeof req.headers['x-github-token'] === 'string'
+    ? req.headers['x-github-token'].trim()
+    : '';
   if (!token) return res.status(401).json({ error: 'Sin token de autorizacion.' });
   try {
     const [reposResp, userResp] = await Promise.all([
