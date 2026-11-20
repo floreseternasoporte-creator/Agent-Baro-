@@ -119,7 +119,7 @@ async function streamWithFailover({ model, messages, signal, onDelta, onProvider
       }
     }
   }
-  const err = new Error(lastError ? `Ningún proveedor respondió. Último error: ${lastError.message}` : 'Ningún proveedor de IA disponible');
+  const err = new Error(lastError ? `No se pudo responder. Último error: ${lastError.message}` : 'Servicio no disponible');
   err.status = lastError?.status || 503;
   throw err;
 }
@@ -184,7 +184,7 @@ async function streamWithFailoverTools({ model, messages, tools, signal, onDelta
       }
     }
   }
-  const err = new Error(lastError ? `Ningún proveedor respondió. Último error: ${lastError.message}` : 'Ningún proveedor de IA disponible');
+  const err = new Error(lastError ? `No se pudo responder. Último error: ${lastError.message}` : 'Servicio no disponible');
   err.status = lastError?.status || 503;
   throw err;
 }
@@ -212,7 +212,7 @@ async function generateText(prompt, signal) {
       if (attempt === 0) { try { await sleepAbortable(1200, signal); } catch { throw lastError; } }
     }
   }
-  throw new Error(`Ningún proveedor pudo generar texto: ${lastError?.message || 'desconocido'}`);
+  throw new Error(`Ningún servicio pudo generar texto: ${lastError?.message || 'desconocido'}`);
 }
 
 /**
@@ -756,7 +756,7 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
         send('computer', { mode: 'browser', action: 'search_done', count: step.count });
         break;
       case 'wiki_start':
-        send('log', { type: 'run', title: `Consultando Wikipedia: "${step.query}"` });
+        send('log', { type: 'run', title: `Buscando un dato: "${step.query}"` });
         send('computer', { mode: 'browser', action: 'search', engine: 'wikipedia', query: step.query });
         break;
       case 'wiki_visit':
@@ -764,7 +764,7 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
         send('computer', { mode: 'browser', action: 'visit', url: `https://es.wikipedia.org/wiki/${encodeURIComponent(step.title.replace(/ /g, '_'))}`, title: step.title, snippet: 'Abriendo artículo…' });
         break;
       case 'wiki_done':
-        send('log', { type: step.found ? 'ok' : 'err', title: step.found ? 'Wikipedia consultada' : 'No se encontró artículo' });
+        send('log', { type: step.found ? 'ok' : 'err', title: step.found ? 'Dato encontrado' : 'No se encontró artículo' });
         if (step.found) send('computer', { mode: 'browser', action: 'visit', url: step.url, title: step.title, snippet: step.extract });
         else send('computer', { mode: 'browser', action: 'search_done', count: 0 });
         break;
@@ -1270,14 +1270,14 @@ async function handleChatTurn(req, res) {
       tools: BARO_TOOLS,
       signal: abortController.signal,
       onDelta: (delta) => send('delta', { delta }),
-      onProvider: (name) => send('log', { type: 'info', title: `Respondiendo con ${name}`, detail: model || 'modelo por defecto' }),
+      onProvider: () => send('log', { type: 'info', title: 'Respondiendo…' }),
     });
     let result = firstTurn.text;
     let pendingToolCalls = Array.isArray(firstTurn.toolCalls) ? firstTurn.toolCalls : [];
     if (firstTurn.toolsSupported === false) {
-      send('log', { type: 'info', title: 'Herramientas nativas no disponibles en este proveedor', detail: 'Usando el formato de texto como respaldo' });
+      send('log', { type: 'info', title: 'Acciones directas no disponibles aquí', detail: 'Usando el formato de texto como respaldo' });
     } else if (pendingToolCalls.length) {
-      send('log', { type: 'info', title: `Herramientas nativas: ${pendingToolCalls.length} llamada(s)`, detail: pendingToolCalls.map((c) => c.name).join(', ') });
+      send('log', { type: 'info', title: 'Ejecutando acciones…' });
     }
 
     // La IA puede pedir comandos de inspección o validación en una línea
@@ -1318,10 +1318,10 @@ async function handleChatTurn(req, res) {
         const toolName = userToolCommands[i].tool;
         send('log', {
           type: 'info',
-          title: `Modo plan: herramienta no ejecutada (${toolName})`,
+          title: 'Modo plan: acción no ejecutada',
           detail: 'Solo se permiten herramientas de lectura y búsqueda',
         });
-        preToolTexts[i] = `### Herramienta no ejecutada por modo plan\nLa herramienta "${toolName}" genera o modifica contenido. En modo plan Baro solo usa lectura, búsqueda y revisión de código; no se ejecutó ninguna acción.`;
+        preToolTexts[i] = `### Acción no ejecutada por modo plan\nEsta acción genera o modifica contenido. En modo plan solo uso lectura, búsqueda y revisión; no se ejecutó nada.`;
       }
       // El texto fuente para las herramientas de los comandos del
       // usuario incluye la RESPUESTA del modelo: "Crear script" busca
@@ -1415,8 +1415,8 @@ async function handleChatTurn(req, res) {
       for (const tc of toolCalls || []) {
         const translated = toolCallToCommand(tc);
         if (translated.kind === 'invalid') {
-          send('log', { type: 'err', title: `Llamada de herramienta inválida (${translated.name})`, detail: translated.error });
-          out.toolResults.push(`### Llamada de herramienta inválida (${translated.name})\n${translated.error}\nEl modelo debe llamar a las herramientas con argumentos JSON válidos; si no puede, usa el formato de texto.`);
+          send('log', { type: 'err', title: 'No se pudo interpretar una acción', detail: 'Revisa la acción e inténtalo de nuevo.' });
+          out.toolResults.push(`### No se pudo interpretar una acción\nLos argumentos no eran válidos; si no puedes, usa el formato de texto.`);
           continue;
         }
         if (translated.kind === 'diff') {
@@ -1447,7 +1447,7 @@ async function handleChatTurn(req, res) {
         if (seenToolCommands.has(key)) continue;
         seenToolCommands.add(key);
         if (isPlanMode && !PLAN_MODE_READ_ONLY_TOOLS.has(command.tool)) {
-          send('log', { type: 'info', title: `Modo plan: herramienta no ejecutada (${command.tool})`, detail: 'Solo se permiten herramientas de lectura y búsqueda' });
+          send('log', { type: 'info', title: 'Modo plan: acción no ejecutada', detail: 'Solo se permiten herramientas de lectura y búsqueda' });
           out.toolResults.push(`### Herramienta no ejecutada por modo plan\nLa herramienta "${command.tool}" genera o modifica contenido. En modo plan Baro solo usa lectura, búsqueda y revisión de código; no se ejecutó ninguna acción.`);
           continue;
         }
@@ -1572,10 +1572,10 @@ async function handleChatTurn(req, res) {
         const toolName = requestedTools[i].tool;
         send('log', {
           type: 'info',
-          title: `Modo plan: herramienta no ejecutada (${toolName})`,
+          title: 'Modo plan: acción no ejecutada',
           detail: 'Solo se permiten herramientas de lectura y búsqueda',
         });
-        roundToolTexts[i] = `### Herramienta no ejecutada por modo plan\nLa herramienta "${toolName}" genera o modifica contenido y quedó bloqueada por el backend.`;
+        roundToolTexts[i] = `### Acción no ejecutada por modo plan\nEsta acción genera o modifica contenido y quedó bloqueada.`;
       }
       for (const i of computerIdx) {
         roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session, abortController.signal, result);
@@ -1651,12 +1651,12 @@ async function handleChatTurn(req, res) {
         tools: BARO_TOOLS,
         signal: abortController.signal,
         onDelta: (delta) => send('delta', { delta }),
-        onProvider: (name) => send('log', { type: 'info', title: `Continuando con ${name}` }),
+        onProvider: () => send('log', { type: 'info', title: 'Continuando…' }),
       });
       result = nextTurn.text;
       pendingToolCalls = Array.isArray(nextTurn.toolCalls) ? nextTurn.toolCalls : [];
       if (pendingToolCalls.length) {
-        send('log', { type: 'info', title: `Herramientas nativas: ${pendingToolCalls.length} llamada(s)`, detail: pendingToolCalls.map((c) => c.name).join(', ') });
+        send('log', { type: 'info', title: 'Ejecutando acciones…' });
       }
       const previous = visibleResult;
       visibleResult = `${previous}\n\n${result}`;

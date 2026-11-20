@@ -77,7 +77,7 @@
     </button>
     <button class="side-action" onclick="openDiffModal()">
       <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="3" width="7" height="18" rx="1.5"/><rect x="13" y="3" width="7" height="18" rx="1.5"/></svg>
-      Ver diff
+      Ver cambios
     </button>
     <button class="side-action" onclick="doUndo()">
       <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
@@ -172,10 +172,10 @@
 
     <!-- Context window bar -->
     <div id="context-bar">
-      <span class="ctx-label">Contexto</span>
+      <span class="ctx-label">Uso</span>
       <div class="ctx-bar"><div class="ctx-fill" id="ctx-fill" style="width:0%"></div></div>
-      <span class="ctx-pct" id="ctx-pct">0%</span>
-      <span id="ctx-tokens" style="color:var(--text3)">0 tokens</span>
+      <span class="ctx-pct" id="ctx-pct" style="display:none">0%</span>
+      <span id="ctx-tokens" style="color:var(--text3);display:none"></span>
     </div>
 
   <div class="chat-body">
@@ -185,7 +185,7 @@
       <!-- Empty state -->
       <div id="empty">
         <div class="empty-hero">
-          <div class="empty-eyebrow"><span class="empty-pulse" aria-hidden="true"></span> TU WORKSPACE PERSONAL</div>
+          <div class="empty-eyebrow"><span class="empty-pulse" aria-hidden="true"></span> TU ASISTENTE PERSONAL</div>
           <div class="empty-icon"><svg class="logo-svg" viewBox="0 0 48 48" width="96" height="96" aria-hidden="true" focusable="false"><use href="#baro-mark"/></svg></div>
           <div class="empty-title">¿Qué quieres resolver hoy?</div>
           <div class="empty-sub">Programa y verifica cambios, crea archivos descargables o investiga con fuentes reales. Empieza con una tarea o escribe tu propia idea.</div>
@@ -280,7 +280,7 @@
     <div id="plan-panel">
       <div class="plan-head">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1.2 1.2L6.5 5"/><path d="m3 12 1.2 1.2L6.5 11"/><path d="m3 18 1.2 1.2L6.5 17"/></svg>
-        <span>Plan del agente</span>
+        <span>Qué estoy haciendo</span>
         <span id="verify-chip" class="verify-chip" style="display:none"></span>
       </div>
       <ul id="plan-steps"></ul>
@@ -291,7 +291,6 @@
       <div class="act-head" onclick="toggleActivity()">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
         <span id="act-head-txt">Trabajando...</span>
-        <span id="act-token-est" style="margin-left:auto;font-size:9.5px;color:var(--text3)"></span>
       </div>
       <div id="act-log" aria-live="polite"></div>
     </div>
@@ -313,7 +312,7 @@
           </button>
           <button type="button" class="mini-act" id="diff-btn" onclick="openDiffModal()">
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="3" width="7" height="18" rx="1.5"/><rect x="13" y="3" width="7" height="18" rx="1.5"/></svg>
-            Ver diff
+            Ver cambios
           </button>
         </div>
       </div>
@@ -422,7 +421,7 @@
             </div>
             <div class="settings-row-content">
               <div class="settings-row-label">IA local</div>
-              <div class="settings-row-sub" id="ollama-settings-sub">Comprobando proveedor de IA...</div>
+              <div class="settings-row-sub" id="ollama-settings-sub">Comprobando…</div>
             </div>
             <div class="settings-row-right">
               <span class="badge-warn" id="ollama-warn-badge" style="display:none">Iniciando</span>
@@ -433,15 +432,15 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-label">Modelo de IA</div>
+        <div class="settings-section-label">Inteligencia</div>
         <div class="settings-group">
           <div class="settings-row" style="cursor:default">
             <div class="settings-row-icon" style="background:rgba(88,127,92,.1)">
               <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" style="color:var(--green)"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-5h2v2h-2zm0-8h2v6h-2z"/></svg>
             </div>
             <div class="settings-row-content">
-              <div class="settings-row-label" id="ai-model-label">Modelo de IA</div>
-              <div class="settings-row-sub" id="ai-model-sub">Comprobando proveedor y modelo...</div>
+              <div class="settings-row-label" id="ai-model-label">Inteligencia</div>
+              <div class="settings-row-sub" id="ai-model-sub">Comprobando…</div>
             </div>
             <span class="badge-ok" id="ai-model-badge">IA</span>
           </div>
@@ -453,10 +452,10 @@
         <div class="settings-group">
           <div class="settings-row">
             <div class="settings-row-content">
-              <div class="settings-row-label">Modo multi-agente</div>
+              <div class="settings-row-label">Trabajo en paralelo</div>
               <div class="settings-row-sub">Analiza archivos en paralelo</div>
             </div>
-            <div class="toggle on" id="multiagent-toggle" role="switch" aria-checked="true" tabindex="0" aria-label="Modo multi-agente" onclick="toggleSetting('multiagent')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSetting('multiagent')}"></div>
+            <div class="toggle on" id="multiagent-toggle" role="switch" aria-checked="true" tabindex="0" aria-label="Trabajo en paralelo" onclick="toggleSetting('multiagent')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSetting('multiagent')}"></div>
           </div>
           <div class="settings-row">
             <div class="settings-row-content">
@@ -469,14 +468,14 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-label">Contexto</div>
+        <div class="settings-section-label">Lectura de archivos</div>
         <div class="settings-group">
           <div class="settings-row" style="cursor:default">
             <div class="settings-row-content">
-              <div class="settings-row-label">Archivos por turno</div>
-              <div class="settings-row-sub">Cuántos archivos del repo lee el agente en cada turno</div>
+              <div class="settings-row-label">Archivos en cada respuesta</div>
+              <div class="settings-row-sub">Cuántos archivos leo en cada respuesta</div>
             </div>
-            <select class="filelimit-select" id="filelimit-select" onchange="setFileLimit(this.value)" aria-label="Archivos por turno">
+            <select class="filelimit-select" id="filelimit-select" onchange="setFileLimit(this.value)" aria-label="Archivos en cada respuesta">
               <option value="50">50</option>
               <option value="100">100</option>
               <option value="200">200</option>
@@ -520,7 +519,7 @@
   <nav id="bottomnav" aria-label="Navegación principal">
     <div class="nav-brand" aria-label="Baro, espacio de trabajo de agente">
       <span class="nav-brand-mark" aria-hidden="true">B</span>
-      <span class="nav-brand-copy"><strong>Baro</strong><small>AGENT WORKSPACE</small></span>
+      <span class="nav-brand-copy"><strong>Baro</strong><small>AGENTE PERSONAL</small></span>
     </div>
     <div class="nav-section-label">ESPACIO DE TRABAJO</div>
     <button class="nav-item active" id="nav-chat" onclick="showScreen('chat')">
@@ -551,7 +550,6 @@
       <span class="sb-item" id="sb-model">IA configurada</span>
     </div>
     <div class="sb-group">
-      <span class="sb-item" id="sb-ctx">Contexto 0%</span>
       <span class="sb-item"><span class="sb-dot" id="sb-dot"></span><span id="sb-conn">Sin conexión</span></span>
     </div>
   </footer>
@@ -592,7 +590,7 @@
       </button>
     </div>
     <div class="mbdy">
-      <p class="feedback-intro">Cuéntanos qué pasó. El reporte se guarda con el contexto de esta sesión para poder investigarlo.</p>
+      <p class="feedback-intro">Cuéntanos qué pasó. El reporte se guarda con la información de esta sesión para poder investigarlo.</p>
       <div class="fg">
         <label class="fl" for="feedback-title">Título del problema</label>
         <input class="fi" id="feedback-title" maxlength="160" placeholder="Ej: El agente no ejecutó los tests">
@@ -691,7 +689,7 @@
 <!-- FILE PICKER -->
 <div id="file-picker">
   <div class="fp-header">
-    <span class="fp-title">Agregar archivo al contexto</span>
+    <span class="fp-title">Agregar archivo a la conversación</span>
     <button class="mx" onclick="closeFilePicker()"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
   </div>
   <div class="fp-search-wrap">
@@ -707,7 +705,7 @@
     <div class="m-handle"></div>
     <div class="mhead">
       <span class="mtitle">Cambios sin subir</span>
-      <button class="mx" onclick="closeDiffModal()" aria-label="Cerrar diff"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+      <button class="mx" onclick="closeDiffModal()" aria-label="Cerrar cambios"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
     </div>
     <div class="mbdy">
       <div id="diff-files"></div>
@@ -715,7 +713,7 @@
     </div>
     <div class="mfoot">
       <button class="btn btn-g" onclick="closeDiffModal()">Cerrar</button>
-      <button class="btn btn-p" onclick="closeDiffModal();doUndo()">Deshacer cambios</button>
+      <button class="btn btn-p" onclick="closeDiffModal();doUndo()">Volver al estado anterior</button>
     </div>
   </div>
 </div>

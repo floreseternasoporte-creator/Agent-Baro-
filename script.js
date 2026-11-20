@@ -72,17 +72,17 @@ const QUICK_TASKS = {
       prompt: 'Crear documento: ',
     },
     {
-      id: 'pyscript', color: 'green', title: 'Script Python', sub: 'Lo escribo y lo ejecuto',
+      id: 'pyscript', color: 'green', title: 'Crear código', sub: 'Lo escribo y lo ejecuto',
       icon: '<path d="M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>',
-      prompt: 'Quiero un script Python que ',
+      prompt: 'Quiero un código que ',
     },
     {
-      id: 'image', color: 'amber', title: 'Crear imagen', sub: 'IA gratis, sin clave',
+      id: 'image', color: 'amber', title: 'Crear imagen', sub: 'Describe lo que imaginas',
       icon: '<path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>',
       prompt: 'Generar imagen: ',
     },
     {
-      id: 'video', color: 'purple', title: 'Generar video', sub: 'Hasta 10 min · 10/dia',
+      id: 'video', color: 'purple', title: 'Generar video', sub: 'Vídeo corto a partir de texto',
       icon: '<path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/>',
       prompt: 'Generar video: ',
     },
@@ -109,9 +109,9 @@ const QUICK_TASKS = {
       prompt: 'Buscar: ',
     },
     {
-      id: 'wikipedia', color: 'green', title: 'Consultar Wikipedia', sub: 'Datos enciclopédicos',
+      id: 'wikipedia', color: 'green', title: 'Buscar un dato', sub: 'Respuestas rápidas con fuentes',
       icon: '<path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95a15.65 15.65 0 0 0-1.38-3.56A8.03 8.03 0 0 1 18.92 8zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zM4.34 16h3.02c.2.9.55 1.76 1.03 2.56A8.03 8.03 0 0 1 4.34 16zM8.56 8H5.61a8.03 8.03 0 0 1 4.03-3.56C9.17 5.24 8.72 6.55 8.56 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM13.34 14H10.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.35.16-2h2.68c.09.65.16 1.32.16 2 0 .68-.07 1.35-.16 2zm.25 5.56c.48-.8.83-1.66 1.03-2.56h3.02a8.03 8.03 0 0 1-4.05 2.56zM15.45 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.29c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.29z"/>',
-      prompt: 'Wikipedia: ',
+      prompt: 'Busca un dato sobre ',
     },
     {
       id: 'imageedit', color: 'amber', title: 'Editar/animar imagen', sub: 'Sube o pega una URL',
@@ -121,19 +121,19 @@ const QUICK_TASKS = {
   ],
   code: [
     {
-      id: 'analyze', color: 'accent', title: 'Analizar repo', sub: 'Arquitectura y stack',
+      id: 'analyze', color: 'accent', title: 'Analizar repo', sub: 'Arquitectura y tecnologías',
       icon: '<path d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z"/>',
-      prompt: 'Analiza el repositorio completo: arquitectura, stack tecnologico, patrones de diseno usados, dependencias clave y top 5 problemas criticos con recomendaciones.',
+      prompt: 'Analiza el repositorio completo: arquitectura, tecnologías usadas, patrones de diseño usados, dependencias clave y los 5 problemas más importantes con recomendaciones.',
     },
     {
-      id: 'bugs', color: 'green', title: 'Detectar bugs', sub: 'Fix con diffs exactos',
+      id: 'bugs', color: 'green', title: 'Detectar bugs', sub: 'Con el cambio exacto',
       icon: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>',
-      prompt: 'Detecta y corrige todos los bugs del proyecto. Para cada bug muestra: archivo, linea exacta, descripcion del problema y el diff preciso del fix.',
+      prompt: 'Detecta y corrige todos los bugs del proyecto. Para cada bug muestra: archivo, linea exacta, descripcion del problema y el cambio exacto para arreglarlo.',
     },
     {
-      id: 'security', color: 'amber', title: 'Seguridad OWASP', sub: 'Vulnerabilidades',
+      id: 'security', color: 'amber', title: 'Revisar seguridad', sub: 'Vulnerabilidades',
       icon: '<path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>',
-      prompt: 'Haz auditoria de seguridad OWASP Top 10. Para cada vulnerabilidad: archivo, linea, riesgo y el codigo exacto de la correccion.',
+      prompt: 'Haz una revisión de seguridad completa. Para cada problema: archivo, linea, riesgo y el código exacto de la corrección.',
     },
     {
       id: 'perf', color: 'purple', title: 'Rendimiento', sub: 'Optimizar velocidad',
@@ -157,17 +157,17 @@ const SESSION_TASKS = [
     action: () => { clearChat(); showScreen('chat'); },
   },
   {
-    id: 'agentsmd', color: 'blue', title: 'Crear AGENTS.md', sub: 'Instrucciones del repo para el agente',
+    id: 'agentsmd', color: 'blue', title: 'Reglas del proyecto', sub: 'Cómo debe trabajar en este proyecto',
     icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>',
     action: () => doCreateAgentsMd(),
   },
   {
-    id: 'diff', color: 'purple', title: 'Ver diff', sub: 'Cambios del workspace sin subir',
+    id: 'diff', color: 'purple', title: 'Ver cambios', sub: 'Cambios sin subir',
     icon: '<rect x="4" y="3" width="7" height="18" rx="1.5"/><rect x="13" y="3" width="7" height="18" rx="1.5"/>',
     action: () => openDiffModal(),
   },
   {
-    id: 'undo', color: 'amber', title: 'Deshacer cambios', sub: 'Volver al ultimo checkpoint',
+    id: 'undo', color: 'amber', title: 'Volver al estado anterior', sub: 'Recupera el último estado guardado',
     icon: '<path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>',
     action: () => doUndo(),
   },
@@ -466,36 +466,25 @@ function updateStatusBadges() {
 
   el('ollama-ok-badge') && (el('ollama-ok-badge').style.display = ollamaOk ? '' : 'none');
   el('ollama-warn-badge') && (el('ollama-warn-badge').style.display = ollamaOk ? 'none' : '');
-  const provider = S.serverConfig?.aiProvider || 'IA configurada';
-  const rawModel = S.serverConfig?.aiModel || S.serverConfig?.ollamaModel || 'modelo disponible';
-  // Nombre bonito para los modelos 100% gratuitos; el resto se muestra tal cual.
-  const model = rawModel.includes('llama-3.3-70b') ? 'Llama 3.3 70B'
-    : rawModel.includes('deepseek-r1') ? 'DeepSeek R1'
-    : rawModel.includes('llama-3.1-8b') ? 'Llama 3.1 8B'
-    : rawModel.includes('openai-fast') || rawModel === 'openai' ? 'Pollinations (gratis)'
-    : rawModel;
-  const chain = (S.serverConfig?.providerChain || []).filter((p) => p !== provider);
-  const chainTxt = chain.length ? ` · respaldo: ${chain.join(' → ')}` : '';
-  el('ollama-settings-sub') && (el('ollama-settings-sub').textContent = ollamaOk
-    ? `${provider} activo — ${model}${chainTxt}`
-    : `${provider} no disponible todavía`);
-  el('ai-model-label') && (el('ai-model-label').textContent = model);
-  el('ai-model-sub') && (el('ai-model-sub').textContent = `${provider}${chainTxt} · ejecución autónoma con verificación`);
+  // En pantalla nunca se muestran nombres de proveedor ni de modelo:
+  // solo el estado (Listo / Comprobando…). Los datos reales siguen en
+  // S.serverConfig para uso interno.
+  el('ollama-settings-sub') && (el('ollama-settings-sub').textContent = ollamaOk ? 'Listo' : 'Comprobando…');
+  el('ai-model-label') && (el('ai-model-label').textContent = 'Inteligencia');
+  el('ai-model-sub') && (el('ai-model-sub').textContent = ollamaOk ? 'Listo para trabajar' : 'Comprobando…');
 
   const ghOk = !!S.repoData;
   el('gh-settings-badge') && (el('gh-settings-badge').style.display = ghOk ? 'none' : '');
   el('gh-settings-badge-ok') && (el('gh-settings-badge-ok').style.display = ghOk ? '' : 'none');
   el('gh-settings-sub') && (el('gh-settings-sub').textContent = ghOk ? S.repoData.full_name : 'Conecta un repositorio');
-  // La insignia del modelo muestra el PROVEEDOR real de /api/config
-  // (Groq, Pollinations u Ollama), no un "Local" fijo engañoso.
   const modelBadge = el('ai-model-badge');
-  if (modelBadge) modelBadge.textContent = provider;
-  // Sidebar v7: mismo estado del repo y del modelo, siempre visible.
+  if (modelBadge) modelBadge.textContent = ollamaOk ? 'Listo' : 'Comprobando…';
+  // Sidebar v7: mismo estado del repo y de la inteligencia, siempre visible.
   el('side-repo-name') && (el('side-repo-name').textContent = ghOk ? S.repoData.full_name : 'Sin repositorio');
   el('side-repo-sub') && (el('side-repo-sub').textContent = ghOk
     ? (S.branch ? `Rama ${S.branch} · conectado` : 'Conectado a GitHub')
     : 'Conecta un repo para trabajar sobre código real');
-  el('side-model') && (el('side-model').textContent = `${provider} · ${model}`);
+  el('side-model') && (el('side-model').textContent = ollamaOk ? 'Listo para trabajar' : 'Comprobando…');
   syncStatusBar();
 }
 
@@ -881,7 +870,7 @@ function analyzeCurrentFile() {
   if (!S.currentFile) return;
   closeFileViewer();
   showScreen('chat');
-  doQuick(`Analiza el archivo \`${S.currentFile}\` en detalle: que hace, patrones usados, bugs potenciales, problemas de calidad, y si encuentras algo muestra el diff exacto del cambio sugerido.`);
+  doQuick(`Analiza el archivo \`${S.currentFile}\` en detalle: que hace, patrones usados, bugs potenciales, problemas de calidad, y si encuentras algo muestra el cambio exacto sugerido.`);
 }
 
 function editCurrentFile() {
@@ -898,7 +887,7 @@ function editCurrentFile() {
 
 function askAboutFile(path) {
   showScreen('chat');
-  doQuick(`Analiza el archivo \`${path}\`: que hace, patrones usados, bugs potenciales y si encuentras algo muestra el diff exacto del cambio.`);
+  doQuick(`Analiza el archivo \`${path}\`: que hace, patrones usados, bugs potenciales y si encuentras algo muestra el cambio exacto.`);
 }
 
 // ═══════════════════════════════════════════
@@ -928,7 +917,7 @@ function openPushModal() {
         <span style="font-family:var(--mono);color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.path)}</span>
       </div>`).join('');
   } else {
-    list.innerHTML = `<div style="font-size:13px;color:var(--text3);padding:8px 0;line-height:1.6">Aun no hay cambios aplicados. Toca "Aplicar" en un bloque de diff del chat para escribirlo de verdad en el archivo, y aparecera aqui.</div>`;
+    list.innerHTML = `<div style="font-size:13px;color:var(--text3);padding:8px 0;line-height:1.6">Aun no hay cambios aplicados. Toca "Aplicar" en un bloque de cambios del chat para escribirlo de verdad en el archivo, y aparecera aqui.</div>`;
   }
   document.getElementById('push-modal').classList.add('open');
 }
@@ -1366,7 +1355,7 @@ function cvBrowser(payload) {
   if (_cvMode !== 'browser') { _cvMode = 'browser'; cvSetBody(''); }
 
   if (payload.action === 'search') {
-    const engineLabel = payload.engine === 'wikipedia' ? 'es.wikipedia.org' : 'google.com/search';
+    const engineLabel = payload.engine === 'wikipedia' ? 'Enciclopedia' : 'google.com/search';
     const engineUrl = payload.engine === 'wikipedia'
       ? `es.wikipedia.org/w/index.php?search=${encodeURIComponent(payload.query)}`
       : `google.com/search?q=${encodeURIComponent(payload.query)}`;
@@ -1549,7 +1538,7 @@ function renderSearchCard(raw) {
 
 function renderWikiCard(raw) {
   const titleMatch = raw.match(/^### Wikipedia: (.+)/);
-  const title = titleMatch ? titleMatch[1].replace(/^"|"$/g, '') : 'Wikipedia';
+  const title = titleMatch ? titleMatch[1].replace(/^"|"$/g, '') : 'Dato';
   const notFound = raw.includes('No se encontró ningún artículo');
   const urlMatch = raw.match(/Fuente: (\S+)/);
   const extract = raw
@@ -1561,7 +1550,7 @@ function renderWikiCard(raw) {
     <div class="media-card-head">
       <div class="media-card-ic search" style="background:rgba(88,127,92,.1);color:var(--green)"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zM1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0z"/></svg></div>
       <div class="media-card-title">${esc(title)}</div>
-      <div class="media-card-badge">Wikipedia</div>
+      <div class="media-card-badge">Enciclopedia</div>
     </div>
     <div class="media-card-body" style="padding:10px 12px;font-size:12.5px;color:var(--text2);line-height:1.6">
       ${notFound ? 'No se encontró ningún artículo relevante.' : esc(extract)}
@@ -1742,7 +1731,7 @@ function cpBlock(id, btn) {
 }
 async function applyDiff(id, btn) {
   const rawDiff = DIFF_RAW.get(id);
-  if (!rawDiff) { showToast('No se encontro el contenido del diff'); return; }
+  if (!rawDiff) { showToast('No se encontro el contenido del cambio'); return; }
   if (!S.sessionId || !S.repoData) { showToast('Conecta un repositorio primero'); return; }
 
   const originalLabel = btn.innerHTML;
@@ -2069,9 +2058,6 @@ async function callAI(msg, onStream) {
 
   const estTokens = Math.round((msg.length + finalText.length) / 4) + 400;
   updateContextBar(estTokens);
-  // La estimación del turno, visible junto al log de actividad.
-  const tokEst = document.getElementById('act-token-est');
-  if (tokEst) tokEst.textContent = `~${estTokens.toLocaleString()} tokens`;
 
   return finalText;
 }
@@ -2101,7 +2087,7 @@ function detectEditsAndShowPushBanner(text) {
 // ═══════════════════════════════════════════
 function autoAnalyze() {
   if (!S.repoData) return;
-  const msg = `He conectado **${S.repoData.full_name}** en la rama **${S.branch}**. Empieza ahora una revisión autónoma del proyecto: inspecciona su estructura y manifiestos, identifica el stack, ejecuta las comprobaciones y tests seguros disponibles, corrige los bugs importantes que puedas confirmar, aplica los cambios, vuelve a verificar y termina con un resumen de lo que hiciste y lo que necesita atención. No me pidas confirmación para leer, editar o ejecutar validaciones; solo deja el push manual como acción explícita.`;
+  const msg = `He conectado **${S.repoData.full_name}** en la rama **${S.branch}**. Revisa el proyecto por tu cuenta: mira su estructura y sus archivos principales, identifica las tecnologías que usa, ejecuta las comprobaciones seguras disponibles, corrige los problemas importantes que puedas confirmar, aplica los cambios, vuelve a verificar y termina con un resumen de lo que hiciste y lo que necesita atención. No me pidas confirmación para leer, editar o ejecutar comprobaciones; solo deja el envío a GitHub como acción explícita.`;
   doQuick(msg);
 }
 
@@ -2299,7 +2285,7 @@ async function doUndo() {
     updateTasksBadge();
     hidePushBanner();
     buzz([20, 50, 20]);
-    showToast(data.message || 'Cambios deshechos al último checkpoint ✓');
+    showToast(data.message || 'Vuelto al estado anterior ✓');
   } catch (e) {
     showToast('No se pudo deshacer: ' + e.message);
   } finally {
@@ -2916,8 +2902,7 @@ function syncStatusBar() {
   const t = (id) => document.getElementById(id)?.textContent || '';
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('sb-repo-txt', t('side-repo-name') || 'Sin repositorio');
-  set('sb-model', t('side-model') || 'IA configurada');
-  set('sb-ctx', `Contexto ${t('ctx-pct') || '0%'} · ${t('ctx-tokens') || '0 tokens'}`);
+  set('sb-model', t('side-model') || 'Listo para trabajar');
   const dot = document.getElementById('conn-dot');
   const ok = !!dot?.classList.contains('ok');
   const busy = !!dot?.classList.contains('busy');
@@ -2932,11 +2917,11 @@ const PALETTE_ACTIONS = [
   { label: 'Ir a Chats', hint: 'Lista de conversaciones', run: () => showScreen('chats') },
   { label: 'Ir a Archivos', hint: 'Explorador del repo', run: () => showScreen('files') },
   { label: 'Ir a Tareas', hint: 'Rápidas y herramientas', run: () => showScreen('tasks') },
-  { label: 'Ir a Configuración', hint: 'Conexiones y modelo', run: () => showScreen('settings') },
-  { label: 'Cambiar modo de aplicación', hint: 'Auto o Preguntar antes de aplicar', run: () => setApplyMode(S.applyMode === 'ask' ? 'auto' : 'ask') },
+  { label: 'Ir a Configuración', hint: 'Conexiones y ajustes', run: () => showScreen('settings') },
+  { label: 'Preguntar antes de aplicar', hint: 'Aplicar o preguntar primero', run: () => setApplyMode(S.applyMode === 'ask' ? 'auto' : 'ask') },
   { label: 'Conectar repo de GitHub', hint: 'Opcional', run: () => openModal() },
-  { label: 'Ver diff', hint: 'Cambios sin subir', run: () => openDiffModal() },
-  { label: 'Deshacer cambios', hint: 'Vuelve al checkpoint', run: () => doUndo() },
+  { label: 'Ver cambios', hint: 'Cambios sin subir', run: () => openDiffModal() },
+  { label: 'Volver al estado anterior', hint: 'Recupera el último estado guardado', run: () => doUndo() },
   { label: 'Exportar conversación', hint: 'Descarga el chat', run: () => exportConversation() },
   { label: 'Reportar un problema', hint: 'Enviar un bug', run: () => openFeedbackModal() },
   { label: 'Guardar configuración', hint: 'Y volver al chat', run: () => saveSettings() },

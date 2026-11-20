@@ -45,7 +45,7 @@ async function streamChat({ model, messages, signal, onDelta }) {
   });
 
   if (!resp.ok) {
-    const err = new Error(`Error ${resp.status} de Pollinations (gratis)`);
+    const err = new Error(`Error ${resp.status} del servicio de chat`);
     err.status = resp.status;
     throw err;
   }
@@ -76,7 +76,7 @@ async function streamChat({ model, messages, signal, onDelta }) {
       // como error real en vez de terminar con una respuesta vacía
       // silenciosa (el fallo histórico de este proveedor).
       if (parsed.error) {
-        const err = new Error(`Error de Pollinations (gratis): ${parsed.error.message || 'desconocido'}`);
+        const err = new Error(`Error del servicio de chat: ${parsed.error.message || 'desconocido'}`);
         err.status = parsed.error.status || 502;
         throw err;
       }
@@ -149,7 +149,7 @@ async function streamChatWithTools({ model, messages, tools, signal, onDelta }) 
       const text = await streamChat({ model, messages, signal, onDelta });
       return { text, toolCalls: [], finishReason: null, toolsSupported: false };
     }
-    const err = new Error(`Error ${resp.status} de Pollinations (gratis)`);
+    const err = new Error(`Error ${resp.status} del servicio de chat`);
     err.status = resp.status;
     throw err;
   }
@@ -179,7 +179,7 @@ async function streamChatWithTools({ model, messages, tools, signal, onDelta }) 
         continue;
       }
       if (parsed.error) {
-        const err = new Error(`Error de Pollinations (gratis): ${parsed.error.message || 'desconocido'}`);
+        const err = new Error(`Error del servicio de chat: ${parsed.error.message || 'desconocido'}`);
         err.status = parsed.error.status || 502;
         throw err;
       }

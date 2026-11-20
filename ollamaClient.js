@@ -53,7 +53,7 @@ async function streamChat({ model, messages, signal, onDelta }) {
   }
 
   if (!resp.ok) {
-    let message = `Error ${resp.status} de Ollama`;
+    let message = `Error ${resp.status} del servicio local`;
     try {
       const body = await resp.json();
       message = body.error?.message || body.error || message;
@@ -137,7 +137,7 @@ async function streamChatWithTools({ model, messages, tools, signal, onDelta }) 
       const text = await streamChat({ model, messages, signal, onDelta });
       return { text, toolCalls: [], finishReason: null, toolsSupported: false };
     }
-    let message = `Error ${resp.status} de Ollama`;
+    let message = `Error ${resp.status} del servicio local`;
     try {
       const body = JSON.parse(detail);
       message = body.error?.message || body.error || message;

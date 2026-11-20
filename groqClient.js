@@ -177,7 +177,7 @@ async function streamChat({ model, messages, signal, onDelta }) {
   });
 
   if (!resp.ok) {
-    let message = `Error ${resp.status} de Groq`;
+    let message = `Error ${resp.status} del servicio de chat`;
     try {
       const body = await resp.json();
       message = body.error?.message || message;
@@ -256,7 +256,7 @@ async function streamChatWithTools({ model, messages, tools, signal, onDelta }) 
   });
 
   if (!resp.ok) {
-    let message = `Error ${resp.status} de Groq`;
+    let message = `Error ${resp.status} del servicio de chat`;
     try {
       const body = await resp.json();
       message = body.error?.message || message;
