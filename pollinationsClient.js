@@ -10,6 +10,7 @@
 // ═══════════════════════════════════════════════════════
 
 const { buildSystemPrompt } = require('./groqClient');
+const { accumulateToolCallDeltas, finalizeToolCalls } = require('./toolsCatalog');
 
 const POLLINATIONS_URL = 'https://text.pollinations.ai/openai';
 // v6: el modelo por defecto ya NO es 'openai-fast' (gpt-oss-20b).
@@ -110,4 +111,92 @@ async function checkHealth() {
   }
 }
 
-module.exports = { DEFAULT_MODEL, buildSystemPrompt, streamChat, checkHealth };
+/**
+ * Function calling (H1) con degradación EXPLÍCITA: Pollinations es
+ * un pool gratuito y su soporte de `tools` no está garantizado.
+ * Se intenta con tools; si el upstream rechaza el parámetro
+ * (400 mencionando tools/function), se reintenta SIN tools y se
+ * devuelve toolsSupported:false para que el turno use el protocolo
+ * de texto. Nunca se finge que hubo tools.
+ */
+async function streamChatWithTools({ model, messages, tools, signal, onDelta }) {
+  const payload = {
+    model: model || DEFAULT_MODEL,
+    messages,
+    stream: true,
+    temperature: 0.13,
+    seed: Math.floor(Math.random() * 1_000_000_000),
+    tools: tools || [],
+    tool_choice: 'auto',
+  };
+  let resp;
+  try {
+    resp = await fetch(POLLINATIONS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    throw e;
+  }
+
+  if (!resp.ok) {
+    let detail = '';
+    try { detail = JSON.stringify(await resp.json()); } catch { detail = await resp.text().catch(() => ''); }
+    if (resp.status === 400 && /tool|function/i.test(detail)) {
+      console.error('[baro] Pollinations no acepta tools, degradando a texto');
+      const text = await streamChat({ model, messages, signal, onDelta });
+      return { text, toolCalls: [], finishReason: null, toolsSupported: false };
+    }
+    const err = new Error(`Error ${resp.status} de Pollinations (gratis)`);
+    err.status = resp.status;
+    throw err;
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let result = '';
+  let buffer = '';
+  let toolCallsRaw = [];
+  let finishReason = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') continue;
+      let parsed;
+      try {
+        parsed = JSON.parse(data);
+      } catch {
+        continue;
+      }
+      if (parsed.error) {
+        const err = new Error(`Error de Pollinations (gratis): ${parsed.error.message || 'desconocido'}`);
+        err.status = parsed.error.status || 502;
+        throw err;
+      }
+      const choice = parsed.choices?.[0] || {};
+      if (choice.finish_reason) finishReason = choice.finish_reason;
+      const delta = choice.delta || {};
+      if (delta.content) {
+        result += delta.content;
+        if (onDelta) onDelta(delta.content, result);
+      }
+      if (Array.isArray(delta.tool_calls) && delta.tool_calls.length) {
+        toolCallsRaw = accumulateToolCallDeltas(toolCallsRaw, delta.tool_calls);
+      }
+    }
+  }
+
+  return { text: result, toolCalls: finalizeToolCalls(toolCallsRaw), finishReason, toolsSupported: true };
+}
+
+module.exports = { DEFAULT_MODEL, buildSystemPrompt, streamChat, streamChatWithTools, checkHealth };

@@ -6,6 +6,8 @@
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
+const { accumulateToolCallDeltas, finalizeToolCalls } = require('./toolsCatalog');
+
 const MODELS = [
   'llama-3.3-70b-versatile',
   'deepseek-r1-distill-llama-70b',
@@ -208,6 +210,92 @@ async function streamChat({ model, messages, signal, onDelta }) {
   return result;
 }
 
+/**
+ * Llamada con HERRAMIENTAS NATIVAS (function calling, H1).
+ * Misma firma de streaming que streamChat, más `tools` (catálogo
+ * OpenAI-compatible de toolsCatalog.js). Los deltas de
+ * `choices[0].delta.tool_calls` se acumulan por índice y al final
+ * se devuelven parseados. Devuelve
+ * { text, toolCalls: [{id, name, arguments, argumentsRaw, parseError}],
+ *   finishReason, toolsSupported: true }.
+ * El texto sigue llegando por onDelta igual que en streamChat.
+ */
+async function streamChatWithTools({ model, messages, tools, signal, onDelta }) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    const err = new Error('Falta GROQ_API_KEY. Agregala en las variables de entorno del servidor.');
+    err.status = 503;
+    throw err;
+  }
+
+  const resp = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    signal,
+    body: JSON.stringify({
+      model: MODELS.includes(model) ? model : MODELS[0],
+      messages,
+      max_tokens: 16384,
+      temperature: 0.13,
+      stream: true,
+      tools: tools || [],
+      tool_choice: 'auto',
+    }),
+  });
+
+  if (!resp.ok) {
+    let message = `Error ${resp.status} de Groq`;
+    try {
+      const body = await resp.json();
+      message = body.error?.message || message;
+    } catch {}
+    const err = new Error(message);
+    err.status = resp.status;
+    throw err;
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let result = '';
+  let buffer = '';
+  let toolCallsRaw = [];
+  let finishReason = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') continue;
+      try {
+        const parsed = JSON.parse(data);
+        const choice = parsed.choices?.[0] || {};
+        if (choice.finish_reason) finishReason = choice.finish_reason;
+        const delta = choice.delta || {};
+        if (delta.content) {
+          result += delta.content;
+          if (onDelta) onDelta(delta.content, result);
+        }
+        if (Array.isArray(delta.tool_calls) && delta.tool_calls.length) {
+          toolCallsRaw = accumulateToolCallDeltas(toolCallsRaw, delta.tool_calls);
+        }
+      } catch {
+        // linea SSE incompleta o keepalive, se ignora
+      }
+    }
+  }
+
+  return { text: result, toolCalls: finalizeToolCalls(toolCallsRaw), finishReason, toolsSupported: true };
+}
+
 async function checkHealth() {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) return { ready: false, model: DEFAULT_MODEL, error: 'GROQ_API_KEY no configurada' };
@@ -223,4 +311,4 @@ async function checkHealth() {
   }
 }
 
-module.exports = { MODELS, DEFAULT_MODEL, buildSystemPrompt, streamChat, checkHealth };
+module.exports = { MODELS, DEFAULT_MODEL, buildSystemPrompt, streamChat, streamChatWithTools, checkHealth };
