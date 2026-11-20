@@ -68,76 +68,76 @@ const QUICK_TASKS = {
   create: [
     {
       id: 'doc', color: 'blue', title: 'Crear documento', sub: 'Word real y descargable',
-      icon: '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
+      icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>',
       prompt: 'Crear documento: ',
     },
     {
       id: 'pyscript', color: 'green', title: 'Script Python', sub: 'Lo escribo y lo ejecuto',
-      icon: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+      icon: '<path d="M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>',
       prompt: 'Quiero un script Python que ',
     },
     {
       id: 'image', color: 'amber', title: 'Crear imagen', sub: 'IA gratis, sin clave',
-      icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/>',
+      icon: '<path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>',
       prompt: 'Generar imagen: ',
     },
     {
       id: 'video', color: 'purple', title: 'Generar video', sub: 'Hasta 10 min · 10/dia',
-      icon: '<rect x="2" y="4" width="15" height="16" rx="2"/><path d="M17 9l5-3v12l-5-3"/>',
+      icon: '<path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/>',
       prompt: 'Generar video: ',
     },
     {
       id: 'sheet', color: 'green', title: 'Hoja de cálculo', sub: 'Excel real y descargable',
-      icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>',
+      icon: '<path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/>',
       prompt: 'Hoja de cálculo: ',
     },
     {
       id: 'slides', color: 'red', title: 'Presentación', sub: 'PowerPoint descargable',
-      icon: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+      icon: '<path d="M20 3H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h6v2H8v2h8v-2h-2v-2h6a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z"/>',
       prompt: 'Crear presentación: ',
     },
   ],
   investigate: [
     {
       id: 'deepresearch', color: 'red', title: 'Investigación profunda', sub: 'Informe con fuentes citadas',
-      icon: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/>',
+      icon: '<path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/>',
       prompt: 'Investigación profunda: ',
     },
     {
       id: 'websearch', color: 'blue', title: 'Buscar en internet', sub: 'Resultados en tiempo real',
-      icon: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>',
+      icon: '<path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/>',
       prompt: 'Buscar: ',
     },
     {
       id: 'wikipedia', color: 'green', title: 'Consultar Wikipedia', sub: 'Datos enciclopédicos',
-      icon: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20 15.3 15.3 0 010-20z"/>',
+      icon: '<path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95a15.65 15.65 0 0 0-1.38-3.56A8.03 8.03 0 0 1 18.92 8zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zM4.34 16h3.02c.2.9.55 1.76 1.03 2.56A8.03 8.03 0 0 1 4.34 16zM8.56 8H5.61a8.03 8.03 0 0 1 4.03-3.56C9.17 5.24 8.72 6.55 8.56 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM13.34 14H10.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.35.16-2h2.68c.09.65.16 1.32.16 2 0 .68-.07 1.35-.16 2zm.25 5.56c.48-.8.83-1.66 1.03-2.56h3.02a8.03 8.03 0 0 1-4.05 2.56zM15.45 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.29c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.29z"/>',
       prompt: 'Wikipedia: ',
     },
     {
       id: 'imageedit', color: 'amber', title: 'Editar/animar imagen', sub: 'Sube o pega una URL',
-      icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/>',
+      icon: '<path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>',
       prompt: 'Editar imagen: ',
     },
   ],
   code: [
     {
       id: 'analyze', color: 'accent', title: 'Analizar repo', sub: 'Arquitectura y stack',
-      icon: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/>',
+      icon: '<path d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z"/>',
       prompt: 'Analiza el repositorio completo: arquitectura, stack tecnologico, patrones de diseno usados, dependencias clave y top 5 problemas criticos con recomendaciones.',
     },
     {
       id: 'bugs', color: 'green', title: 'Detectar bugs', sub: 'Fix con diffs exactos',
-      icon: '<path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/>',
+      icon: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>',
       prompt: 'Detecta y corrige todos los bugs del proyecto. Para cada bug muestra: archivo, linea exacta, descripcion del problema y el diff preciso del fix.',
     },
     {
       id: 'security', color: 'amber', title: 'Seguridad OWASP', sub: 'Vulnerabilidades',
-      icon: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+      icon: '<path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>',
       prompt: 'Haz auditoria de seguridad OWASP Top 10. Para cada vulnerabilidad: archivo, linea, riesgo y el codigo exacto de la correccion.',
     },
     {
       id: 'perf', color: 'purple', title: 'Rendimiento', sub: 'Optimizar velocidad',
-      icon: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
+      icon: '<path d="M7 2v11h3v9l7-12h-4l4-8z"/>',
       prompt: 'Optimiza el rendimiento: lazy loading, N+1 queries, bundle size, caching, async/await mal usado. Muestra el codigo optimizado.',
     },
   ],
@@ -148,27 +148,27 @@ const QUICK_TASKS = {
 const SESSION_TASKS = [
   {
     id: 'export', color: 'green', title: 'Exportar conversacion', sub: 'Descargar como Markdown',
-    icon: '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    icon: '<path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>',
     action: () => exportConversation(),
   },
   {
     id: 'newchat', color: 'red', title: 'Nueva conversacion', sub: 'Limpiar chat y empezar de cero',
-    icon: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+    icon: '<path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>',
     action: () => { clearChat(); showScreen('chat'); },
   },
   {
     id: 'agentsmd', color: 'blue', title: 'Crear AGENTS.md', sub: 'Instrucciones del repo para el agente',
-    icon: '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/>',
+    icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>',
     action: () => doCreateAgentsMd(),
   },
   {
     id: 'diff', color: 'purple', title: 'Ver diff', sub: 'Cambios del workspace sin subir',
-    icon: '<path d="M8 3H5a2 2 0 00-2 2v14a2 2 0 002 2h3"/><path d="M16 3h3a2 2 0 012 2v14a2 2 0 01-2 2h-3"/><path d="M12 2v20"/>',
+    icon: '<rect x="4" y="3" width="7" height="18" rx="1.5"/><rect x="13" y="3" width="7" height="18" rx="1.5"/>',
     action: () => openDiffModal(),
   },
   {
     id: 'undo', color: 'amber', title: 'Deshacer cambios', sub: 'Volver al ultimo checkpoint',
-    icon: '<path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.7L3 8"/><path d="M3 3v5h5"/>',
+    icon: '<path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>',
     action: () => doUndo(),
   },
 ];
@@ -179,7 +179,7 @@ function renderQuickCards() {
     if (!el) return;
     el.innerHTML = list.map((t) => `
       <button class="qcard" onclick="${fn}(${JSON.stringify(t.prompt)})">
-        <div class="qcard-icon ${t.color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--${t.color})">${t.icon}</svg></div>
+        <div class="qcard-icon ${t.color}"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style="color:#fff">${t.icon}</svg></div>
         <div class="qcard-title">${esc(t.title)}</div>
         <div class="qcard-sub">${esc(t.sub)}</div>
       </button>
@@ -196,8 +196,8 @@ function renderTaskScreen() {
   if (quickEl) {
     quickEl.innerHTML = quickList.map((t) => `
       <div class="task-card" onclick='doQuick(${JSON.stringify(t.prompt)});showScreen("chat")'>
-        <div class="task-icon" style="background:var(--${t.color === 'accent' ? 'accent-bg' : t.color === 'blue' ? 'bb' : t.color === 'purple' ? 'pb' : t.color === 'green' ? 'gb' : t.color === 'amber' ? 'ab' : 'accent-bg'})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="color:var(--${t.color})">${t.icon}</svg>
+        <div class="task-icon" style="background:var(--${t.color})">
+          <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="20" height="20" style="color:#fff">${t.icon}</svg>
         </div>
         <div class="task-info">
           <div class="task-name">${esc(t.title)}</div>
@@ -212,8 +212,8 @@ function renderTaskScreen() {
   if (toolsEl) {
     toolsEl.innerHTML = [...QUICK_TASKS.investigate, ...QUICK_TASKS.code].map((t) => `
       <div class="task-card" onclick='${t.prompt.endsWith(': ') ? `doQuickPrefill(${JSON.stringify(t.prompt)})` : `doQuick(${JSON.stringify(t.prompt)});showScreen("chat")`}'>
-        <div class="task-icon" style="background:var(--${t.color === 'blue' ? 'bb' : t.color === 'purple' ? 'pb' : t.color === 'green' ? 'gb' : t.color === 'amber' ? 'ab' : 'accent-bg'})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="color:var(--${t.color})">${t.icon}</svg>
+        <div class="task-icon" style="background:var(--${t.color})">
+          <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="20" height="20" style="color:#fff">${t.icon}</svg>
         </div>
         <div class="task-info">
           <div class="task-name">${esc(t.title)}</div>
@@ -228,8 +228,8 @@ function renderTaskScreen() {
   if (sessionEl) {
     sessionEl.innerHTML = SESSION_TASKS.map((t, i) => `
       <div class="task-card" onclick="SESSION_TASKS[${i}].action()">
-        <div class="task-icon" style="background:var(--${({ green: 'gb', red: 'rb', blue: 'bb', purple: 'pb', amber: 'ab' })[t.color] || 'bb'})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="color:var(--${t.color})">${t.icon}</svg>
+        <div class="task-icon" style="background:var(--${t.color})">
+          <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="20" height="20" style="color:#fff">${t.icon}</svg>
         </div>
         <div class="task-info">
           <div class="task-name">${esc(t.title)}</div>
@@ -247,6 +247,9 @@ function renderTaskScreen() {
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.side-nav').forEach(n => n.classList.toggle('active', n.dataset.screen === name));
+  // En móvil, navegar cierra el drawer de la sidebar.
+  document.body.classList.remove('side-open');
   const screen = document.getElementById('screen-' + name);
   const nav = document.getElementById('nav-' + name);
   if (screen) screen.classList.add('active');
@@ -256,6 +259,66 @@ function showScreen(name) {
   if (name === 'settings') syncSettingsUI();
   if (name === 'files') renderFileList();
   if (name === 'tasks') renderTaskScreen();
+  if (name === 'chats') renderChatsList();
+  // v8: en móvil el chat arranca oculto (inicio = lista); al entrar,
+  // el textarea necesita su altura real (autoGrow con scrollHeight 0
+  // lo dejaba en 0px y el placeholder se veía recortado).
+  if (name === 'chat') autoGrow();
+}
+
+// ═══════════════════════════════════════════
+// BARO v8 — lista de chats + perfil (shell app iOS)
+// La app tiene una sola conversación (Baro); la lista muestra
+// su último mensaje como preview, como la lista de Grok.
+// ═══════════════════════════════════════════
+function renderChatsList() {
+  const prev = document.getElementById('chats-row-preview');
+  const time = document.getElementById('chats-row-time');
+  if (!prev) return;
+  const last = [...document.querySelectorAll('#msgs .msg')].pop();
+  if (!last) {
+    prev.textContent = 'Sin mensajes aún';
+    if (time) time.textContent = '';
+    return;
+  }
+  const body = last.querySelector('.mbody');
+  const text = (body?.innerText || body?.textContent || '').trim().replace(/\s+/g, ' ');
+  prev.textContent = text ? text.slice(0, 90) : 'Sin mensajes aún';
+  if (time) time.textContent = last.querySelector('.mtime')?.textContent || '';
+}
+
+// Nombre/iniciales del usuario para el avatar (Firebase o invitado).
+function userDisplayName() {
+  const u = window.FB?.currentUser;
+  if (u?.displayName) return u.displayName;
+  if (u?.email) return u.email.split('@')[0];
+  return 'Usuario de Baro';
+}
+function userInitials() {
+  const name = userDisplayName().replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]/g, '').trim();
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return (parts[0]?.[0] || 'B').toUpperCase();
+}
+function syncUserAvatar() {
+  const ini = userInitials();
+  const av = document.getElementById('chats-avatar');
+  if (av) av.textContent = ini;
+  const sav = document.getElementById('settings-avatar');
+  if (sav) sav.textContent = ini;
+  const nm = document.getElementById('settings-profile-name');
+  if (nm) nm.textContent = userDisplayName();
+  const sub = document.getElementById('settings-profile-sub');
+  if (sub) sub.textContent = window.FB?.currentUser?.email || 'Sesión local';
+}
+function showProfileInfo() {
+  const email = window.FB?.currentUser?.email;
+  showToast(email ? `Sesión: ${email}` : 'Sesión local sin cuenta');
+}
+// Baro es solo texto por diseño (v6): el micrófono del composer
+// no graba ni dicta; solo lo explica. No reintroducir audio.
+function voiceUnavailable() {
+  showToast('Baro es solo texto: escribe tu tarea');
 }
 
 // ═══════════════════════════════════════════
@@ -272,6 +335,7 @@ function loadSettings() {
 }
 
 function syncSettingsUI() {
+  syncUserAvatar();
   const maToggle = document.getElementById('multiagent-toggle');
   if (maToggle) { maToggle.classList.toggle('on', S.multiAgentEnabled); maToggle.setAttribute('aria-checked', String(S.multiAgentEnabled)); }
 
@@ -296,6 +360,9 @@ function updateTasksBadge() {
   const n = S.pendingEdits.length;
   badge.textContent = n > 9 ? '9+' : String(n);
   badge.style.display = n > 0 ? '' : 'none';
+  // La sidebar de escritorio refleja el mismo contador.
+  const sideBadge = document.getElementById('tasks-side-badge');
+  if (sideBadge) { sideBadge.textContent = badge.textContent; sideBadge.style.display = badge.style.display; }
 }
 
 function toggleSetting(name) {
@@ -423,6 +490,13 @@ function updateStatusBadges() {
   // (Groq, Pollinations u Ollama), no un "Local" fijo engañoso.
   const modelBadge = el('ai-model-badge');
   if (modelBadge) modelBadge.textContent = provider;
+  // Sidebar v7: mismo estado del repo y del modelo, siempre visible.
+  el('side-repo-name') && (el('side-repo-name').textContent = ghOk ? S.repoData.full_name : 'Sin repositorio');
+  el('side-repo-sub') && (el('side-repo-sub').textContent = ghOk
+    ? (S.branch ? `Rama ${S.branch} · conectado` : 'Conectado a GitHub')
+    : 'Conecta un repo para trabajar sobre código real');
+  el('side-model') && (el('side-model').textContent = `${provider} · ${model}`);
+  syncStatusBar();
 }
 
 // ═══════════════════════════════════════════
@@ -1009,7 +1083,7 @@ function updateLastLog(type, title, detail='') {
 
 function logIcon(type) {
   const icons = {
-    run:`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>`,
+    run:`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5h-2v6l5.2 3.1 1-1.7-4.2-2.4V7z"/></svg>`,
     ok:`<svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>`,
     err:`<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.5a5.5 5.5 0 110 11 5.5 5.5 0 010-11zM8 4a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 018 4zm0 8a1 1 0 100-2 1 1 0 000 2z"/></svg>`,
     info:`<svg viewBox="0 0 16 16" fill="currentColor"><path d="M0 8a8 8 0 1116 0A8 8 0 010 8zm8-6.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 6a1 1 0 100-2 1 1 0 000 2zM6.5 7.75A.75.75 0 017.25 7h1a.75.75 0 01.75.75v2.75h.25a.75.75 0 010 1.5h-2a.75.75 0 010-1.5h.25v-2h-.25a.75.75 0 01-.75-.75z"/></svg>`,
@@ -1264,7 +1338,7 @@ function cvBrowser(payload) {
     cvSetAddress(engineUrl, true);
     cvSetBody(`
       <div class="cv-search-row">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="7" cy="7" r="5.5"/><path d="M14 14l-3-3"/></svg>
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
         <div>Buscando en <b>${esc(engineLabel)}</b>: “${esc(payload.query)}”<span class="cv-term-caret"></span></div>
       </div>
     `);
@@ -1347,6 +1421,7 @@ function updateContextBar(tokens) {
   if (fill) { fill.style.width = pct + '%'; fill.className = 'ctx-fill' + (pct > 90 ? ' full' : pct > 70 ? ' warn' : ''); }
   if (pctEl) pctEl.textContent = pct + '%';
   if (tokEl) tokEl.textContent = tokens.toLocaleString() + ' tokens';
+  syncStatusBar();
 }
 
 let _toastT;
@@ -1797,14 +1872,10 @@ function mkStream() {
   const msgs = document.getElementById('msgs');
   document.getElementById('empty').classList.add('gone');
   const div = document.createElement('div');
-  div.className = 'msg ai';
+  div.className = 'msg ai gen';
   div.innerHTML = `
-    <div class="msg-meta">
-      <div class="av ai">B</div>
-      <span class="mname">Baro</span>
-      <span class="mtime">${now()}</span>
-    </div>
-    <div class="mbubble"><div class="mbody"><div class="typing-indicator"><div class="dots"><span></span><span></span><span></span></div> Generando...</div></div></div>
+    <div class="gen-status"><svg class="logo-svg" viewBox="0 0 48 48" width="26" height="26" aria-hidden="true" focusable="false"><use href="#baro-mark"/></svg><span>Generando…</span></div>
+    <div class="mbubble"><div class="mbody"></div></div>
   `;
   msgs.appendChild(div);
   if (isNearBottom()) scrollChatToBottom(false);
@@ -1826,6 +1897,10 @@ function patchStream(div, text, force) {
 }
 
 function finalStream(div, text) {
+  // Fin del turno: se retira el estado "Generando…" y la burbuja
+  // queda con el aspecto normal de mensaje de Baro.
+  div.classList.remove('gen');
+  div.querySelector('.gen-status')?.remove();
   const body = div.querySelector('.mbody');
   if (!body) return;
   body.innerHTML = md(text);
@@ -2097,6 +2172,7 @@ function clearChat() {
   resetPlanPanel();
   try { localStorage.removeItem(chatStoreKey()); } catch {}
   document.getElementById('context-bar')?.classList.remove('show');
+  renderChatsList();
   showToast('Conversacion nueva');
 }
 
@@ -2569,7 +2645,10 @@ async function selectOAuthRepo(fullName, branch, isPrivate) {
 // ═══════════════════════════════════════════
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeModal(); closePushModal(); closeFileViewer(); cancelDeviceFlow(); closeDiffModal(); }
-  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); clearChat(); }
+  // v7: Ctrl/⌘+K es la paleta de comandos (ver sección App shell al final);
+  // Nuevo chat por teclado pasa a Ctrl/⌘+Mayús+K para no borrar el chat
+  // cada vez que se abre la paleta.
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); clearChat(); }
 });
 
 document.getElementById('modal')?.addEventListener('click', e => {
@@ -2597,6 +2676,10 @@ document.getElementById('inp').addEventListener('input', autoGrow);
 loadSettings();
 renderQuickCards();
 restoreChatHistory();
+// BARO v8 — en móvil la lista de chats es la pantalla de inicio,
+// como en las apps de chat: avatar + nuevo chat + buscar.
+syncUserAvatar();
+if (window.matchMedia('(max-width: 768px)').matches) showScreen('chats');
 // NO llamamos initSession() aqui: esperamos a Firebase Auth.
 
 // ═══════════════════════════════════════════
@@ -2619,7 +2702,10 @@ function autoGrow() {
   const inp = document.getElementById('inp');
   if (!inp) return;
   inp.style.height = 'auto';
-  inp.style.height = Math.min(inp.scrollHeight, 140) + 'px';
+  // Si el chat está oculto (p. ej. inicio móvil en la lista),
+  // scrollHeight es 0: no pisar la altura con 0px.
+  const h = Math.min(inp.scrollHeight, 140);
+  if (h > 0) inp.style.height = h + 'px';
   document.getElementById('sndbtn').disabled = !inp.value.trim() || S.busy;
 }
 
@@ -2739,3 +2825,155 @@ async function initSession() {
   }
 
 }
+
+// ═══════════════════════════════════════════
+// BARO v7 — App shell: sidebar, paleta, atajos, inspector
+// Solo chrome de aplicación; el chat y el agente no se tocan.
+// ═══════════════════════════════════════════
+const _isDesktopApp = () => window.matchMedia('(min-width: 900px)').matches;
+
+function toggleSidebar() {
+  if (_isDesktopApp()) {
+    // Escritorio: colapsar la sidebar (se reabre con el mismo botón).
+    const collapsed = document.body.classList.toggle('side-collapsed');
+    try { localStorage.setItem('baro_sidebar_collapsed', collapsed ? 'true' : 'false'); } catch {}
+  } else {
+    // Móvil: la sidebar es un drawer sobre el contenido.
+    document.body.classList.toggle('side-open');
+  }
+}
+function closeSidebarDrawer() { document.body.classList.remove('side-open'); }
+try {
+  if (localStorage.getItem('baro_sidebar_collapsed') === 'true') document.body.classList.add('side-collapsed');
+} catch {}
+
+// Inspector: el rail lateral solo existe mientras el agente trabaja.
+// Plan, Actividad o Vista de computadora muestran algo -> aparece;
+// cuando terminan y se ocultan, el chat recupera todo el ancho.
+function syncInspector() {
+  const insp = document.getElementById('inspector');
+  if (!insp) return;
+  const anyShown = ['computer-view', 'plan-panel', 'activity'].some((id) => {
+    const el = document.getElementById(id);
+    return el && el.classList.contains('show');
+  });
+  insp.classList.toggle('has-panel', anyShown);
+}
+if (window.MutationObserver) {
+  const _inspObs = new MutationObserver(syncInspector);
+  ['computer-view', 'plan-panel', 'activity'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) _inspObs.observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
+}
+syncInspector();
+if (window.MutationObserver) {
+  const _sbObs = new MutationObserver(syncStatusBar);
+  const _dot = document.getElementById('conn-dot');
+  if (_dot) _sbObs.observe(_dot, { attributes: true, attributeFilter: ['class'] });
+}
+syncStatusBar();
+
+
+// BARO v7.1 — Barra de estado: refleja lo que ya pintan la sidebar
+// y la barra de contexto, sin duplicar lógica de proveedor/modelo.
+function syncStatusBar() {
+  const t = (id) => document.getElementById(id)?.textContent || '';
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('sb-repo-txt', t('side-repo-name') || 'Sin repositorio');
+  set('sb-model', t('side-model') || 'IA configurada');
+  set('sb-ctx', `Contexto ${t('ctx-pct') || '0%'} · ${t('ctx-tokens') || '0 tokens'}`);
+  const dot = document.getElementById('conn-dot');
+  const ok = !!dot?.classList.contains('ok');
+  const busy = !!dot?.classList.contains('busy');
+  set('sb-conn', ok ? 'Conectado' : busy ? 'Trabajando…' : 'Sin conexión');
+  document.getElementById('sb-dot')?.classList.toggle('ok', ok);
+}
+// ── Paleta de comandos (Ctrl/⌘+K) ──────────────────────────
+// Todas las acciones ya existían; la paleta solo las reúne.
+const _palIco = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z"/></svg>';
+const PALETTE_ACTIONS = [
+  { label: 'Nuevo chat', hint: 'Vacía la conversación · Ctrl/⌘+Mayús+K', run: () => { clearChat(); showScreen('chat'); } },
+  { label: 'Ir a Chats', hint: 'Lista de conversaciones', run: () => showScreen('chats') },
+  { label: 'Ir a Archivos', hint: 'Explorador del repo', run: () => showScreen('files') },
+  { label: 'Ir a Tareas', hint: 'Rápidas y herramientas', run: () => showScreen('tasks') },
+  { label: 'Ir a Configuración', hint: 'Conexiones y modelo', run: () => showScreen('settings') },
+  { label: 'Cambiar modo de aplicación', hint: 'Auto o Preguntar antes de aplicar', run: () => setApplyMode(S.applyMode === 'ask' ? 'auto' : 'ask') },
+  { label: 'Conectar repo de GitHub', hint: 'Opcional', run: () => openModal() },
+  { label: 'Ver diff', hint: 'Cambios sin subir', run: () => openDiffModal() },
+  { label: 'Deshacer cambios', hint: 'Vuelve al checkpoint', run: () => doUndo() },
+  { label: 'Exportar conversación', hint: 'Descarga el chat', run: () => exportConversation() },
+  { label: 'Reportar un problema', hint: 'Enviar un bug', run: () => openFeedbackModal() },
+  { label: 'Guardar configuración', hint: 'Y volver al chat', run: () => saveSettings() },
+  { label: 'Mostrar u ocultar la barra lateral', hint: 'Ctrl/⌘+B', run: () => toggleSidebar() },
+];
+let _palSel = 0;
+function palFiltered() {
+  const q = (document.getElementById('pal-input')?.value || '').trim().toLowerCase();
+  if (!q) return PALETTE_ACTIONS;
+  return PALETTE_ACTIONS.filter((a) => (a.label + ' ' + a.hint).toLowerCase().includes(q));
+}
+function renderPalette() {
+  const list = document.getElementById('pal-list');
+  if (!list) return;
+  const items = palFiltered();
+  _palSel = Math.max(0, Math.min(_palSel, items.length - 1));
+  list.innerHTML = items.length
+    ? items.map((a, i) => `<button type="button" class="pal-item${i === _palSel ? ' sel' : ''}" role="option" aria-selected="${i === _palSel}" data-pal-idx="${i}">${_palIco}<span>${a.label}</span><span class="pal-hint">${a.hint || ''}</span></button>`).join('')
+    : '<div class="pal-empty">Sin resultados para esa búsqueda.</div>';
+  list.querySelectorAll('.pal-item').forEach((btn) => {
+    btn.addEventListener('click', () => palRun(parseInt(btn.dataset.palIdx, 10)));
+    btn.addEventListener('mousemove', () => {
+      const i = parseInt(btn.dataset.palIdx, 10);
+      if (i !== _palSel) { _palSel = i; renderPalette(); }
+    });
+  });
+}
+function openPalette() {
+  const pal = document.getElementById('palette');
+  if (!pal) return;
+  closeSidebarDrawer();
+  _palSel = 0;
+  pal.classList.add('open');
+  renderPalette();
+  const inp = document.getElementById('pal-input');
+  if (inp) { inp.value = ''; inp.focus(); renderPalette(); }
+}
+function closePalette() {
+  document.getElementById('palette')?.classList.remove('open');
+  document.getElementById('inp')?.focus();
+}
+function palRun(i) {
+  const item = palFiltered()[i];
+  if (!item) return;
+  closePalette();
+  item.run();
+}
+document.getElementById('pal-input')?.addEventListener('input', () => { _palSel = 0; renderPalette(); });
+document.getElementById('pal-input')?.addEventListener('keydown', (e) => {
+  const items = palFiltered();
+  if (e.key === 'ArrowDown') { e.preventDefault(); _palSel = Math.min(_palSel + 1, items.length - 1); renderPalette(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); _palSel = Math.max(_palSel - 1, 0); renderPalette(); }
+  else if (e.key === 'Enter') { e.preventDefault(); palRun(_palSel); }
+});
+document.getElementById('palette')?.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'palette') closePalette();
+});
+
+// ── Atajos globales de app ─────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && (e.key === 'k' || e.key === 'K')) {
+    // Ctrl/⌘+Mayús+K es Nuevo chat (handler viejo, más arriba); la
+    // paleta solo responde al Ctrl/⌘+K sin Mayús.
+    if (e.shiftKey) return;
+    e.preventDefault();
+    document.getElementById('palette')?.classList.contains('open') ? closePalette() : openPalette();
+    return;
+  }
+  if (mod && (e.key === 'b' || e.key === 'B')) { e.preventDefault(); toggleSidebar(); return; }
+  if (e.key === 'Escape') {
+    if (document.getElementById('palette')?.classList.contains('open')) { closePalette(); return; }
+    closeSidebarDrawer();
+  }
+});

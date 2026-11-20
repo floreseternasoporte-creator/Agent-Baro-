@@ -1793,4 +1793,487 @@ html,body{
   .empty-icon{width:76px;height:76px;border-radius:24px}
   .empty-icon svg{width:49px;height:49px}
   .empty-title{letter-spacing:-1px}
+/* ═══════════════════════════════════════════════════════════
+   BARO v7 — App shell
+   Por qué existía el problema: no había ni un solo breakpoint
+   de escritorio; la app era una columna móvil estirada a lo
+   ancho, con topbar + página + tab bar. Eso se lee como web.
+   v7 convierte la raíz en una app de verdad:
+   - Sidebar persistente (drawer en móvil) con marca, buscar,
+     nuevo chat, navegación, acciones y estado del repo/modelo.
+   - Columna central con ancho de lectura (860px) en escritorio.
+   - Inspector lateral: Plan / Actividad / Vista de computadora
+     dejan de ser tarjetas apiladas en el scroll y pasan a un
+     rail propio que solo aparece mientras el agente trabaja.
+   - Paleta de comandos (Ctrl/⌘+K) y atajos de app.
+   Todo reutiliza los IDs y funciones existentes; aquí solo hay
+   layout. El fondo de móvil no cambia: la sidebar es un drawer
+   y la bottomnav sigue siendo la navegación principal.
+   ═══════════════════════════════════════════════════════════ */
+:root{
+  --sidebar-w:280px;
+  --inspector-w:340px;
+}
+
+/* ── Raíz en fila: sidebar + columna principal ── */
+#app{flex-direction:row}
+#main{
+  flex:1;min-width:0;min-height:0;
+  display:flex;flex-direction:column;
+}
+
+/* ── Scrim del drawer (solo móvil) ── */
+#scrim{
+  position:fixed;inset:0;z-index:60;
+  background:rgba(0,0,0,.32);
+  opacity:0;pointer-events:none;transition:opacity .2s ease;
+}
+body.side-open #scrim{opacity:1;pointer-events:auto}
+
+/* ── Sidebar (base: drawer móvil; escritorio en el media) ── */
+#sidebar{
+  position:fixed;top:0;bottom:0;left:0;z-index:70;
+  width:min(300px,84vw);
+  display:flex;flex-direction:column;gap:4px;
+  background:var(--glass-strong);
+  -webkit-backdrop-filter:blur(24px) saturate(180%);
+  backdrop-filter:blur(24px) saturate(180%);
+  border-right:.5px solid var(--hairline);
+  padding:10px 12px calc(12px + var(--safe-bottom));
+  transform:translateX(-105%);
+  transition:transform .25s ease;
+  overflow-y:auto;
+}
+#sidebar::-webkit-scrollbar{display:none}
+body.side-open #sidebar{transform:translateX(0)}
+.side-brand{
+  display:flex;align-items:center;gap:9px;
+  padding:6px 6px 12px;
+}
+.side-traffic{display:flex;gap:6px;flex:none}
+.side-traffic span{width:11px;height:11px;border-radius:50%;background:var(--border3)}
+.side-traffic span:nth-child(1){background:#FF5F57}
+.side-traffic span:nth-child(2){background:#FEBC2E}
+.side-traffic span:nth-child(3){background:#28C840}
+.side-brand-name{font-size:16px;font-weight:700;letter-spacing:-.3px;color:var(--text)}
+.side-version{
+  margin-left:auto;flex:none;
+  font-size:10px;font-weight:700;color:var(--text3);
+  background:var(--bg3);border:.5px solid var(--hairline);
+  padding:3px 8px;border-radius:999px;white-space:nowrap;
+}
+.side-search{
+  display:flex;align-items:center;gap:9px;
+  width:100%;padding:9px 12px;margin-bottom:6px;
+  background:rgba(120,120,128,.12);
+  border:.5px solid transparent;border-radius:12px;
+  color:var(--text3);font:inherit;font-size:13.5px;text-align:left;
+  cursor:pointer;transition:border-color .15s;
+}
+.side-search:hover{border-color:var(--hairline)}
+.side-search svg{width:16px;height:16px;flex:none;display:block}
+.side-search span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side-search kbd,
+.pal-input-row kbd{
+  font-family:var(--mono);font-size:10px;color:var(--text3);
+  background:var(--bg2);border:.5px solid var(--hairline);
+  border-radius:5px;padding:2px 6px;flex:none;
+}
+.side-new{
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  width:100%;padding:10px 12px;margin-bottom:10px;
+  background:var(--bubble-me);color:#fff;
+  border:none;border-radius:12px;
+  font:inherit;font-size:14px;font-weight:600;cursor:pointer;
+  box-shadow:0 4px 14px rgba(0,122,255,.28);
+  transition:transform .12s;
+}
+.side-new:active{transform:scale(.97)}
+.side-new svg{width:17px;height:17px;display:block;flex:none}
+.side-label{
+  font-size:10.5px;font-weight:700;color:var(--text3);
+  text-transform:uppercase;letter-spacing:.7px;
+  padding:10px 8px 5px;
+}
+.side-nav-list{display:flex;flex-direction:column;gap:2px}
+.side-nav{
+  display:flex;align-items:center;gap:11px;
+  width:100%;padding:9px 10px;
+  border:none;border-radius:11px;background:transparent;
+  color:var(--text2);font:inherit;font-size:14px;font-weight:500;
+  text-align:left;cursor:pointer;transition:background .12s;
+}
+.side-nav:hover{background:var(--bg3)}
+.side-nav.active{background:var(--accent-bg);color:var(--accent);font-weight:600}
+.side-nav svg{width:20px;height:20px;display:block;flex:none}
+.side-badge{
+  margin-left:auto;flex:none;
+  background:var(--red);color:#fff;
+  font-size:10px;font-weight:700;
+  min-width:18px;height:18px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 5px;
+}
+.side-actions{display:flex;flex-direction:column;gap:2px}
+.side-action{
+  display:flex;align-items:center;gap:11px;
+  width:100%;padding:8px 10px;
+  border:none;border-radius:11px;background:transparent;
+  color:var(--text2);font:inherit;font-size:13.5px;
+  text-align:left;cursor:pointer;transition:background .12s;
+}
+.side-action:hover{background:var(--bg3)}
+.side-action svg{width:18px;height:18px;display:block;flex:none;color:var(--text3)}
+.side-foot{margin-top:auto;padding-top:14px;display:flex;flex-direction:column;gap:8px}
+.side-repo{
+  display:flex;align-items:center;gap:10px;
+  width:100%;padding:10px;border-radius:14px;
+  background:var(--bg2);border:.5px solid var(--hairline);
+  cursor:pointer;font:inherit;text-align:left;transition:background .12s;
+}
+.side-repo:hover{background:var(--bg3)}
+.side-repo-ic{
+  width:32px;height:32px;border-radius:9px;flex:none;
+  background:var(--accent-bg);color:var(--accent);
+  display:grid;place-items:center;
+}
+.side-repo-txt{flex:1;min-width:0}
+.side-repo-name{
+  font-size:12.5px;font-weight:600;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.side-repo-sub{
+  font-size:10.5px;color:var(--text3);margin-top:1px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.side-model{
+  display:flex;align-items:center;gap:7px;
+  padding:2px 6px;
+  font-size:11px;color:var(--text3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.side-model-dot{
+  width:7px;height:7px;border-radius:50%;flex:none;
+  background:var(--green);box-shadow:0 0 6px rgba(52,199,89,.5);
+}
+
+/* ── Topbar de app ── */
+#menu-btn{display:grid}
+.tb-collapse{display:none}
+.tb-search-btn{display:grid}
+
+/* ── Cuerpo del chat: columna + inspector ── */
+.chat-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.chat-col{
+  flex:1;min-height:0;min-width:0;
+  display:flex;flex-direction:column;position:relative;
+}
+#inspector{display:contents}
+
+/* ── Paleta de comandos ── */
+#palette{
+  position:fixed;inset:0;z-index:200;
+  display:none;align-items:flex-start;justify-content:center;
+  padding:12vh 16px 16px;
+  background:rgba(0,0,0,.32);
+}
+#palette.open{display:flex}
+.pal-box{
+  width:100%;max-width:560px;
+  background:var(--bg2);
+  border:.5px solid var(--hairline);border-radius:16px;
+  box-shadow:0 24px 60px rgba(0,0,0,.28);
+  overflow:hidden;animation:fadeUp .15s ease;
+}
+.pal-input-row{
+  display:flex;align-items:center;gap:10px;
+  padding:14px 16px;border-bottom:.5px solid var(--hairline);
+}
+.pal-input-row svg{width:18px;height:18px;flex:none;color:var(--text3);display:block}
+#pal-input{
+  flex:1;min-width:0;border:none;outline:none;background:transparent;
+  color:var(--text);font:inherit;font-size:16px;
+}
+#pal-input::placeholder{color:var(--text3)}
+#pal-list{max-height:320px;overflow-y:auto;padding:6px}
+#pal-list::-webkit-scrollbar{display:none}
+.pal-item{
+  display:flex;align-items:center;gap:11px;
+  width:100%;padding:10px 12px;
+  border:none;border-radius:10px;background:transparent;
+  color:var(--text);font:inherit;font-size:14px;text-align:left;
+  cursor:pointer;
+}
+.pal-item.sel{background:var(--accent-bg)}
+.pal-item svg{width:18px;height:18px;flex:none;color:var(--text3);display:block}
+.pal-item.sel svg{color:var(--accent)}
+.pal-item .pal-hint{margin-left:auto;flex:none;color:var(--text3);font-size:11px}
+.pal-empty{padding:18px 16px;color:var(--text3);font-size:13px;text-align:center}
+.pal-foot{
+  display:flex;gap:16px;
+  padding:9px 16px;border-top:.5px solid var(--hairline);
+  color:var(--text3);font-size:11px;
+}
+
+/* ══ Escritorio (≥900px): la app de verdad ══ */
+@media (min-width:900px){
+  #sidebar{
+    position:static;transform:none;flex:none;
+    width:var(--sidebar-w);height:auto;
+    padding-top:12px;
+  }
+  body.side-collapsed #sidebar{display:none}
+  #menu-btn{display:none}
+  .tb-collapse{display:grid}
+  #topbar .tb-logo{display:none}
+  #topbar{height:56px;padding:0 16px}
+  #bottomnav{display:none}
+
+  /* Columna de lectura centrada, no página estirada */
+  #msgs,#empty{width:100%;max-width:860px;margin-inline:auto}
+  #apply-mode-row,.ibox{width:100%;max-width:860px;margin-inline:auto}
+  .settings-content,.tasks-content{max-width:860px;margin-inline:auto;width:100%}
+  #screen-files .screen-header-title,
+  #screen-files .search-bar{max-width:860px;margin-inline:auto}
+  #file-list-wrap{max-width:860px;margin-inline:auto;width:100%}
+
+  /* Inspector: rail lateral que solo existe mientras hay trabajo */
+  .chat-body{flex-direction:row}
+  #inspector{
+    display:none;width:var(--inspector-w);flex:none;
+    flex-direction:column;overflow-y:auto;
+    padding:12px 12px 12px 0;gap:10px;
+  }
+  #inspector.has-panel{display:flex}
+  #inspector #computer-view,
+  #inspector #plan-panel,
+  #inspector #activity{margin:0;flex-shrink:0}
+  #inspector .cv-body{max-height:300px}
+  #inspector #act-log{max-height:220px}
+}
+@media (min-width:1280px){
+  :root{--inspector-w:360px}
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BARO v7.1 — Que parezca una aplicación de verdad
+   ───────────────────────────────────────────────────────────
+   La v7 puso el esqueleto (sidebar, inspector, paleta) pero
+   seguía leyendo como web: iconos outline finos, baldosas
+   pastel de landing, hero gigante, sidebar del mismo color
+   que el contenido y sin barra de estado.
+   - Iconos sólidos: los glifos ya son sólidos (script.js);
+     aquí las baldosas pasan de pastel a color sólido con
+     glifo blanco.
+   - Sidebar sólida y compacta; contenido blanco en escritorio:
+     dos superficies distintas como en una app de escritorio.
+   - Barra de estado al pie (estilo VS Code): repo, modelo,
+     contexto y conexión siempre visibles.
+   - Empty state compacto: hero pequeño y acciones como lista
+     densa en escritorio, no tarjetas de landing.
+   ═══════════════════════════════════════════════════════════ */
+:root{--sidebar-bg:#F5F5F7}
+@media (prefers-color-scheme:dark){:root{--sidebar-bg:#151517}}
+#sidebar{background:var(--sidebar-bg);backdrop-filter:none;-webkit-backdrop-filter:none}
+.side-nav{padding:8px 10px;font-size:13.5px;gap:10px}
+.side-nav svg{width:19px;height:19px}
+.side-label{font-size:10px;margin:16px 4px 5px}
+.side-search{padding:8px 10px}
+.side-new{padding:9px 12px}
+.side-action{padding:7px 10px}
+.side-foot{padding:10px 12px}
+.qcard-icon.blue,.qcard-icon.accent{background:#007AFF}
+.qcard-icon.green{background:#34C759}
+.qcard-icon.amber{background:#FF9500}
+.qcard-icon.purple{background:#AF52DE}
+.qcard-icon.red{background:#FF3B30}
+.qcard-icon svg{color:#fff!important}
+.task-icon svg{color:#fff!important}
+#statusbar{display:none}
+@media (min-width:900px){
+  #main{background:var(--bg2)}
+  #statusbar{display:flex;align-items:center;justify-content:space-between;gap:12px;height:26px;flex:none;padding:0 12px;background:var(--sidebar-bg);border-top:1px solid var(--border2);font-size:11px;color:var(--text2);z-index:30}
+  .sb-group{display:flex;align-items:center;gap:14px;min-width:0}
+  .sb-item{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sb-item svg{flex:none;color:var(--text3)}
+  #sb-repo-txt{max-width:220px;overflow:hidden;text-overflow:ellipsis}
+  .sb-dot{width:7px;height:7px;border-radius:50%;background:var(--border3);flex:none}
+  .sb-dot.ok{background:#34C759}
+  #empty{gap:14px;padding-top:6px}
+  .empty-icon svg{width:56px;height:56px}
+  .empty-title{font-size:22px}
+  .empty-sub{font-size:13.5px;max-width:480px}
+  .empty-section{max-width:560px}
+  .empty-label{margin-bottom:2px}
+  .quick-grid{grid-template-columns:1fr 1fr;gap:6px}
+  .qcard{display:grid;grid-template-columns:36px 1fr;grid-template-rows:auto auto;column-gap:12px;align-items:center;min-height:0;padding:9px 12px;text-align:left;border-radius:12px}
+  .qcard-icon{grid-row:1/3;width:34px;height:34px;border-radius:10px}
+  .qcard-icon svg{width:19px;height:19px}
+  .qcard-title{grid-column:2;grid-row:1;font-size:13.5px}
+  .qcard-sub{grid-column:2;grid-row:2;font-size:11.5px}
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BARO v8 — shell estilo app iOS (refs Grok, sin su marca)
+   ───────────────────────────────────────────────────────────
+   Lenguaje visual de las referencias: fondo negro puro, tarjetas
+   agrupadas #1C1C1E con radio 20-24px, hairlines suaves,
+   texto blanco, secundario #8E8E93, chevrons, toggles iOS,
+   botones circulares #2C2C2E y marca Baro (squircle azul).
+   - Lista de chats como inicio en móvil; chat con burbujas
+     Baro = azul de marca, usuario = gris oscuro; ajustes con
+     tarjetas agrupadas y sección Cuenta.
+   - En móvil (≤768px) manda el shell Grok: desaparecen
+     sidebar, topbar, barra de estado y bottomnav de pestañas.
+   - El oscuro es el tema principal; el claro sigue por
+     prefers-color-scheme con los mismos componentes.
+   ═══════════════════════════════════════════════════════════ */
+:root{--hair-soft:rgba(60,60,67,.08);--bubble-user:#1C1C1E}
+@media (prefers-color-scheme:dark){:root{--hair-soft:rgba(255,255,255,.08);--bubble-user:#2C2C2E}}
+
+/* ── Botón circular estilo Grok ── */
+.circle-btn{
+  width:44px;height:44px;border-radius:50%;border:none;
+  background:var(--bg3);color:var(--text);cursor:pointer;
+  display:grid;place-items:center;flex:none;
+  transition:transform .12s,background .12s;
+}
+.circle-btn:active{transform:scale(.92)}
+.circle-btn svg{width:22px;height:22px;display:block;flex:none}
+.circle-btn.chats-avatar{font-size:15px;font-weight:700;color:var(--text2)}
+
+/* ── Pantalla LISTA DE CHATS ── */
+#screen-chats{padding:calc(10px + var(--safe-top)) 16px calc(16px + var(--safe-bottom))}
+.chats-top{display:flex;align-items:center;justify-content:space-between;flex:none}
+#chats-list{flex:1;min-height:0;overflow-y:auto;margin-top:14px}
+#chats-list::-webkit-scrollbar{display:none}
+.chat-row{
+  display:flex;align-items:center;gap:14px;width:100%;
+  padding:14px 4px;background:transparent;border:none;
+  border-bottom:.5px solid var(--hair-soft);
+  cursor:pointer;text-align:left;font:inherit;
+}
+.chat-row:active{background:var(--bg3)}
+.chat-row-mark{width:48px;height:48px;flex:none}
+.chat-row-mark svg{width:48px;height:48px;display:block}
+.chat-row-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.chat-row-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.chat-row-name{font-size:17px;font-weight:600;color:var(--text)}
+.chat-row-time{font-size:12px;color:var(--text3);flex:none}
+.chat-row-preview{
+  font-size:14px;color:var(--text3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.chats-bottom{margin-top:auto;display:flex;align-items:center;gap:12px;padding-top:12px;flex:none}
+.chats-search{
+  flex:1;display:flex;align-items:center;gap:10px;height:52px;
+  padding:0 18px;border-radius:999px;
+  border:.5px solid var(--hair-soft);background:var(--bg3);
+  color:var(--text3);font:inherit;font-size:16px;cursor:pointer;
+}
+.chats-search:active{transform:scale(.98)}
+.chats-search svg{width:20px;height:20px;flex:none}
+
+/* ── Header móvil del CHAT (atrás · píldora Baro · …) ── */
+#chat-mheader{display:none}
+.chat-mpill{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
+  height:40px;border-radius:999px;
+  background:var(--bg3);border:.5px solid var(--hair-soft);
+  font-size:16px;font-weight:600;color:var(--text);
+}
+.chat-mpill svg{width:22px;height:22px;display:block;flex:none}
+
+/* ── Burbujas v8: Baro = azul de marca, usuario = gris oscuro ── */
+.msg.me .mbubble{
+  background:var(--bubble-user);color:#fff;
+  border-radius:20px;box-shadow:none;
+}
+.msg.me .mbody a{color:#7AB8FF}
+.msg.ai .mbubble{
+  background:#0A84FF;color:#fff;
+  border-radius:22px;box-shadow:none;
+}
+.msg.ai .mbody a{color:#fff}
+.msg.ai .mbody h1,.msg.ai .mbody h2,.msg.ai .mbody h3{color:#fff}
+.msg.ai .mbody blockquote{background:rgba(255,255,255,.12);border-left-color:rgba(255,255,255,.6);color:#fff}
+.msg.ai .mbody hr{border-top-color:rgba(255,255,255,.25)}
+.msg.ai .mbody code{background:rgba(255,255,255,.2);color:#fff;border-color:rgba(255,255,255,.3)}
+.msg.ai .mbody .cite{background:rgba(255,255,255,.2);color:#fff}
+.msg.ai .cblock{background:rgba(0,0,0,.22);border-color:rgba(255,255,255,.15)}
+.msg.ai .cblock-head{background:rgba(0,0,0,.18)}
+.msg.ai .cblock pre{color:#EAF2FF}
+.msg.ai .cblock .clang{color:#fff}
+
+/* ── Estado "Generando…" con logo Baro ── */
+.gen-status{
+  display:flex;align-items:center;gap:10px;
+  padding:6px 4px;color:var(--text3);font-size:15px;
+}
+.gen-status svg{flex:none}
+.msg.ai.gen .mbubble:has(.mbody:empty){display:none}
+
+/* ── Ajustes v8: tarjetas agrupadas estilo Grok ── */
+.settings-section-label{text-transform:none;font-size:13px;font-weight:400;letter-spacing:0}
+.settings-group{
+  background:var(--bg2);border:.5px solid var(--hair-soft);
+  border-radius:22px;box-shadow:none;
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+}
+.settings-row{border-bottom-color:var(--hair-soft)}
+.settings-row-label{font-size:15px}
+.settings-row-sub{font-size:12px}
+.settings-row-right{display:flex;align-items:center;gap:8px}
+.settings-row-avatar{
+  width:52px;height:52px;border-radius:50%;flex:none;
+  background:var(--bg3);color:var(--text2);
+  display:grid;place-items:center;
+  font-size:18px;font-weight:700;
+}
+
+/* ── Composer: botones + y mic (solo visibles en móvil) ── */
+.pill-plus,.pill-mic{display:none}
+
+/* ── Móvil (≤768px): manda el shell Grok ── */
+@media (max-width:768px){
+  #sidebar,#topbar,#statusbar,#bottomnav{display:none!important}
+  #main{background:var(--bg)}
+  #chat-mheader{display:flex;align-items:center;gap:10px;padding:6px 12px 8px;flex:none}
+  #context-bar{display:none!important}
+  #apply-mode-row{display:none}
+  #input-wrap{background:transparent;border-top:none;padding:8px 12px calc(10px + var(--safe-bottom))}
+  .ibox{
+    background:var(--bg3);border:.5px solid var(--hair-soft);
+    border-radius:28px;padding:6px 6px 6px 8px;
+  }
+  .itxt-wrap{background:transparent;border:none;border-radius:0;overflow:visible}
+  .itxt-wrap:focus-within{border-color:transparent;box-shadow:none}
+  .ibtns-row{display:none}
+  #inp{padding:8px 6px}
+  .pill-plus{
+    width:32px;height:32px;border-radius:50%;border:none;
+    background:var(--bg4);color:var(--text);cursor:pointer;
+    display:grid;place-items:center;flex:none;
+    align-self:flex-end;margin-bottom:2px;
+  }
+  .pill-plus:active{transform:scale(.9)}
+  .pill-plus svg{width:18px;height:18px;display:block}
+  .pill-mic{
+    width:36px;height:36px;border:none;background:transparent;
+    color:var(--text3);cursor:pointer;
+    display:grid;place-items:center;flex:none;
+    align-self:flex-end;margin-bottom:2px;
+  }
+  .pill-mic:active{transform:scale(.9)}
+  .pill-mic svg{width:20px;height:20px;display:block}
+  #sndbtn{margin-bottom:0}
+  .msg-meta{display:none}
+  .msg{padding:0 16px}
+  #chat-scroll{padding-top:8px}
+  .settings-content{padding:12px 16px 24px}
+}
+
+/* ── Escritorio: la lista de chats es una columna centrada ── */
+@media (min-width:900px){
+  #screen-chats{max-width:860px;margin-inline:auto;width:100%}
 }

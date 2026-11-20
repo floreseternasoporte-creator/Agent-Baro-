@@ -25,8 +25,42 @@ lista blanca, verifica con tests y hace push a GitHub.
 - `sessionStore.js` / `memoryStore.js` — sesiones, workspaces y memoria.
 - `computerUse.js` / `computerTask.js` / `visionClient.js` — modo computadora
   (Chromium real con visión local).
-- `index.html` / `script.js` / `app-shell.js` / `style.css` — frontend vanilla
-  responsive: tabs móviles, sidebar de escritorio y estilo Apple/iMessage.
+- `index.html` / `script.js` / `app-shell.js` / `style.css` — frontend. Diseño Apple/iMessage
+  cristalino (ver `style.css`: cristal con blur, azul #007AFF, modo oscuro iOS).
+  **v7 App shell:** sidebar persistente + drawer móvil, columna central de
+  860px, inspector lateral (Plan/Actividad/Vista de computadora, solo visible
+  mientras el agente trabaja), paleta de comandos (Ctrl/⌘+K), atajos
+  (Ctrl/⌘+B sidebar) y PWA (`manifest.webmanifest` + `icon.svg`, servidos por
+  la whitelist de `server.js`). Sin service worker a propósito: un SW con
+  caché del shell dejaría el frontend rancio tras cada push.
+  **v7.1:** iconos SÓLIDOS en todo el chrome (sidebar, topbar, bottomnav,
+  tarjetas, paleta) — los outline finos estilo Feather quedaron fuera;
+  marca nueva = squircle azul con B (`#baro-mark`, un solo `<symbol>` en
+  `index.html`, favicon e `icon.svg` iguales); sidebar sólida y compacta
+  (`--sidebar-bg`) con contenido blanco en escritorio; barra de estado al
+  pie (repo/modelo/contexto/conexión, `syncStatusBar()` + observer del
+  punto de conexión); inicio compacto (hero pequeño, acciones como lista
+  densa en escritorio). Ctrl/⌘+K era Nuevo chat en v6: ahora es la paleta
+  y Nuevo chat es Ctrl/⌘+Mayús+K.
+  **v8 (shell estilo app iOS, refs Grok — solo lenguaje visual, no su
+  marca ni sus textos):** fondo negro puro, tarjetas agrupadas #1C1C1E
+  radio 20-24px, hairlines `--hair-soft`, botones circulares #2C2C2E.
+  Pantalla `chats` (inicio en móvil ≤768px: avatar + nuevo chat, fila
+  Baro con preview/hora vía `renderChatsList()`, abajo cuadrícula →
+  Tareas + píldora Buscar → `openPalette()`); en móvil desaparecen
+  sidebar/topbar/statusbar/bottomnav y manda el shell Grok
+  (`#chat-mheader`: atrás ‹ → lista, píldora Baro, … → ajustes).
+  Burbujas: Baro = azul #0A84FF texto blanco, usuario =
+  `--bubble-user` (#1C1C1E claro, #2C2C2E oscuro — en escritorio
+  oscuro el fondo es #1C1C1E y el #1C1C1E no se veía); composer en
+  píldora con + (paleta) y micrófono que NO graba (`voiceUnavailable()`,
+  Baro sigue siendo solo texto por diseño); `mkStream()` pinta estado
+  "Generando…" con logo Baro y `finalStream()` lo retira. Ajustes con
+  sección Cuenta (avatar con iniciales + nombre de Firebase,
+  `syncUserAvatar()`) y etiqueta Bot; solo opciones reales de Baro.
+  Trampa v8: el chat arranca oculto en móvil, así que `autoGrow()` con
+  scrollHeight 0 dejaba el textarea en 0px — ahora guarda la altura y
+  `showScreen('chat')` llama a `autoGrow()` al entrar.
 - `workspaces/` — clones por sesión. Nunca se versiona.
 
 ## Comandos

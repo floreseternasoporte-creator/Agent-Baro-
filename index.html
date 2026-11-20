@@ -10,17 +10,105 @@
 <meta name="description" content="Baro, tu espacio de trabajo para código, creación e investigación asistida.">
 <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%230A84FF'/%3E%3Cstop offset='1' stop-color='%230066D6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='48' height='48' rx='11' fill='url(%23g)'/%3E%3Ctext x='24' y='33' font-family='Arial,sans-serif' font-size='24' font-weight='700' fill='white' text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2048%2048%27%3E%3Cdefs%3E%3ClinearGradient%20id%3D%27g%27%20x1%3D%270%27%20y1%3D%270%27%20x2%3D%271%27%20y2%3D%271%27%3E%3Cstop%20offset%3D%270%27%20stop-color%3D%27%230A84FF%27%2F%3E%3Cstop%20offset%3D%271%27%20stop-color%3D%27%230057C2%27%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2748%27%20height%3D%2748%27%20rx%3D%2713%27%20fill%3D%27url%28%23g%29%27%2F%3E%3Ctext%20x%3D%2724%27%20y%3D%2732%27%20font-family%3D%27Arial%2Csans-serif%27%20font-size%3D%2723%27%20font-weight%3D%27700%27%20fill%3D%27white%27%20text-anchor%3D%27middle%27%3EB%3C%2Ftext%3E%3C%2Fsvg%3E">
 <title>Baro</title>
+<meta name="description" content="Baro — agente autónomo de código e investigación.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="baro-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A84FF"/>
+      <stop offset="1" stop-color="#0057C2"/>
+    </linearGradient>
+  </defs>
+  <symbol id="baro-mark" viewBox="0 0 48 48">
+    <rect width="48" height="48" rx="13" fill="url(#baro-g)"/>
+    <rect x="0.75" y="0.75" width="46.5" height="46.5" rx="12.5" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="1"/>
+    <ellipse cx="24" cy="7" rx="19" ry="6.5" fill="#ffffff" opacity="0.16"/>
+    <text x="24" y="32" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="23" font-weight="700" fill="#ffffff">B</text>
+  </symbol>
+</svg>
 <div id="app">
+<div id="scrim" onclick="closeSidebarDrawer()" aria-hidden="true"></div>
+<aside id="sidebar" aria-label="Navegación de Baro">
+  <div class="side-brand">
+    <div class="side-traffic" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="side-brand-name">Baro</div>
+    <span class="side-version">v8 · App</span>
+  </div>
+  <button class="side-search" onclick="openPalette()" aria-label="Buscar o ir a">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
+    <span>Buscar o ir a…</span>
+    <kbd>⌘K</kbd>
+  </button>
+  <button class="side-new" onclick="clearChat();showScreen('chat')">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+    Nuevo chat
+  </button>
+  <div class="side-label">App</div>
+  <nav class="side-nav-list">
+    <button class="side-nav active" data-screen="chat" onclick="showScreen('chat')">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg>
+      Chat
+    </button>
+    <button class="side-nav" data-screen="files" onclick="showScreen('files')">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
+      Archivos
+    </button>
+    <button class="side-nav" data-screen="tasks" onclick="showScreen('tasks')">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+      Tareas
+      <span class="side-badge" id="tasks-side-badge" style="display:none">0</span>
+    </button>
+    <button class="side-nav" data-screen="settings" onclick="showScreen('settings')">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
+      Configuración
+    </button>
+  </nav>
+  <div class="side-label">Acciones</div>
+  <div class="side-actions">
+    <button class="side-action" onclick="openModal()">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+      Conectar repo
+    </button>
+    <button class="side-action" onclick="openDiffModal()">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="3" width="7" height="18" rx="1.5"/><rect x="13" y="3" width="7" height="18" rx="1.5"/></svg>
+      Ver diff
+    </button>
+    <button class="side-action" onclick="doUndo()">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+      Deshacer
+    </button>
+  </div>
+  <div class="side-foot">
+    <button class="side-repo" onclick="openModal()" aria-label="Repositorio conectado">
+      <div class="side-repo-ic">
+        <svg viewBox="0 0 16 16" fill="currentColor" width="15" height="15"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </div>
+      <div class="side-repo-txt">
+        <div class="side-repo-name" id="side-repo-name">Sin repositorio</div>
+        <div class="side-repo-sub" id="side-repo-sub">Conecta un repo para trabajar sobre código real</div>
+      </div>
+    </button>
+    <div class="side-model"><span class="side-model-dot"></span><span id="side-model">IA configurada</span></div>
+  </div>
+</aside>
+<div id="main">
 
   <!-- TOP APP BAR -->
   <header id="topbar">
+    <button class="tba" id="menu-btn" onclick="toggleSidebar()" aria-label="Abrir menú">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="6" width="16" height="2" rx="1"/><rect x="4" y="11" width="16" height="2" rx="1"/><rect x="4" y="16" width="16" height="2" rx="1"/></svg>
+    </button>
+    <button class="tba tb-collapse" onclick="toggleSidebar()" aria-label="Ocultar o mostrar la barra lateral">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="4" width="8" height="16" rx="2"/><rect x="13" y="4" width="8" height="16" rx="2" opacity=".45"/></svg>
+    </button>
     <div class="tb-logo">
-      <svg class="logo-svg" viewBox="0 0 48 48" width="32" height="32" aria-hidden="true" focusable="false"><defs><linearGradient id="lg-top" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A84FF"/><stop offset="1" stop-color="#0066D6"/></linearGradient></defs><path fill="url(#lg-top)" d="M10 2h28a8 8 0 0 1 8 8v22a8 8 0 0 1-8 8H22l-9.4 6.3c-.9.6-2.1-.1-2.1-1.2V40H10a8 8 0 0 1-8-8V10a8 8 0 0 1 8-8z" transform="translate(0 1)"/><text x="24" y="29" text-anchor="middle" font-family="-apple-system,system-ui,sans-serif" font-size="19" font-weight="700" fill="#fff">B</text></svg>
+      <svg class="logo-svg" viewBox="0 0 48 48" width="32" height="32" aria-hidden="true" focusable="false"><use href="#baro-mark"/></svg>
     </div>
     <div class="tb-title">
       <div class="tb-title-main">Baro</div>
@@ -30,12 +118,57 @@
       <button type="button" class="tba new-chat-action" id="new-chat-btn" aria-label="Iniciar una nueva conversación" title="Nueva conversación">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5Z"/></svg>
       </button>
+      <button class="tba tb-search-btn" onclick="openPalette()" aria-label="Buscar o ir a (Ctrl+K)">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
+      </button>
       <div class="conn-dot" id="conn-dot" role="status" aria-label="Estado de conexión del agente" title="Estado de conexión"></div>
     </div>
   </header>
 
+  <!-- ════ SCREEN: CHATS (lista, inicio en móvil) ════ -->
+  <div class="screen" id="screen-chats">
+    <div class="chats-top">
+      <button class="circle-btn chats-avatar" id="chats-avatar" onclick="showScreen('settings')" aria-label="Tu cuenta">B</button>
+      <button class="circle-btn" onclick="clearChat();showScreen('chat')" aria-label="Nuevo chat">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      </button>
+    </div>
+    <div id="chats-list">
+      <button class="chat-row" id="chats-row-baro" onclick="showScreen('chat')">
+        <span class="chat-row-mark"><svg class="logo-svg" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true" focusable="false"><use href="#baro-mark"/></svg></span>
+        <span class="chat-row-txt">
+          <span class="chat-row-top"><span class="chat-row-name">Baro</span><span class="chat-row-time" id="chats-row-time"></span></span>
+          <span class="chat-row-preview" id="chats-row-preview">Sin mensajes aún</span>
+        </span>
+      </button>
+    </div>
+    <div class="chats-bottom">
+      <button class="circle-btn" onclick="showScreen('tasks')" aria-label="Herramientas">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
+      </button>
+      <button class="chats-search" onclick="openPalette()" aria-label="Buscar">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
+        <span>Buscar</span>
+      </button>
+    </div>
+  </div>
+
   <!-- ════ SCREEN: CHAT ════ -->
   <div class="screen active" id="screen-chat">
+
+    <!-- Header móvil estilo app (atrás · píldora Baro · …) -->
+    <div id="chat-mheader">
+      <button class="circle-btn" onclick="showScreen('chats')" aria-label="Volver a chats">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </button>
+      <div class="chat-mpill">
+        <svg class="logo-svg" viewBox="0 0 48 48" width="22" height="22" aria-hidden="true" focusable="false"><use href="#baro-mark"/></svg>
+        <span>Baro</span>
+      </div>
+      <button class="circle-btn" onclick="showScreen('settings')" aria-label="Ajustes">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+      </button>
+    </div>
 
     <!-- Context window bar -->
     <div id="context-bar">
@@ -45,13 +178,15 @@
       <span id="ctx-tokens" style="color:var(--text3)">0 tokens</span>
     </div>
 
+  <div class="chat-body">
+    <div class="chat-col">
     <!-- Chat messages area -->
     <div id="chat-scroll">
       <!-- Empty state -->
       <div id="empty">
         <div class="empty-hero">
           <div class="empty-eyebrow"><span class="empty-pulse" aria-hidden="true"></span> TU WORKSPACE PERSONAL</div>
-          <div class="empty-icon"><svg class="logo-svg" viewBox="0 0 48 48" width="96" height="96" aria-hidden="true" focusable="false"><defs><linearGradient id="lg-hero" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A84FF"/><stop offset="1" stop-color="#0066D6"/></linearGradient></defs><path fill="url(#lg-hero)" d="M10 2h28a8 8 0 0 1 8 8v22a8 8 0 0 1-8 8H22l-9.4 6.3c-.9.6-2.1-.1-2.1-1.2V40H10a8 8 0 0 1-8-8V10a8 8 0 0 1 8-8z" transform="translate(0 1)"/><text x="24" y="29" text-anchor="middle" font-family="-apple-system,system-ui,sans-serif" font-size="19" font-weight="700" fill="#fff">B</text></svg></div>
+          <div class="empty-icon"><svg class="logo-svg" viewBox="0 0 48 48" width="96" height="96" aria-hidden="true" focusable="false"><use href="#baro-mark"/></svg></div>
           <div class="empty-title">¿Qué quieres resolver hoy?</div>
           <div class="empty-sub">Programa y verifica cambios, crea archivos descargables o investiga con fuentes reales. Empieza con una tarea o escribe tu propia idea.</div>
           <div class="empty-capabilities" aria-label="Capacidades de Baro">
@@ -88,50 +223,8 @@
     </div>
     <!-- Boton flotante: volver abajo cuando el usuario subio en el chat -->
     <button id="scroll-fab" onclick="scrollChatToBottom(true)" aria-label="Ir al final del chat">
-      <svg viewBox="0 0 16 16" fill="currentColor" width="18" height="18"><path d="M8 2a.75.75 0 01.75.75v7.19l2.47-2.47a.75.75 0 111.06 1.06l-3.75 3.75a.75.75 0 01-1.06 0L3.72 8.53a.75.75 0 011.06-1.06l2.47 2.47V2.75A.75.75 0 018 2z"/></svg>
+      <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>
     </button>
-
-    <!-- Computer view: ventana en vivo que muestra lo que el agente esta
-         haciendo de verdad en el servidor (navegando, leyendo archivos,
-         ejecutando comandos) a medida que llegan los eventos "computer"
-         del SSE. Nada de esto es simulado: cada frame refleja un evento
-         real emitido por chatRoutes.js. -->
-    <div id="computer-view">
-      <div class="cv-head" onclick="toggleComputerViewCollapse()">
-        <div class="cv-dots"><span></span><span></span><span></span></div>
-        <div class="cv-addr" id="cv-addr">
-          <svg id="cv-addr-icon" viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zM2.5 8a5.5 5.5 0 019.79-3.43c-.6.24-1.4.43-2.29.55A10.9 10.9 0 009 2.6 5.51 5.51 0 002.5 8zm1.71 3.43c.6-.24 1.4-.43 2.29-.55.2.9.5 1.7.8 2.38a5.52 5.52 0 01-3.09-1.83zM8 13.4a9.1 9.1 0 01-.99-2.4c.32-.02.65-.03.99-.03s.67.01.99.03A9.1 9.1 0 018 13.4zm2.5-3.95c-.72-.09-1.5-.15-2.5-.15s-1.78.06-2.5.15A9.6 9.6 0 015.2 8c0-.5.11-.98.3-1.45.72.09 1.5.15 2.5.15s1.78-.06 2.5-.15c.19.47.3.95.3 1.45s-.11.98-.3 1.45zm.3-4.53a10.9 10.9 0 00-1.01-2.52 5.52 5.52 0 013.09 1.83c-.6.24-1.4.43-2.08.69z"/></svg>
-          <span id="cv-addr-text">nueva pestaña</span>
-        </div>
-        <div class="cv-badge" id="cv-badge"><span class="cv-dot-live"></span>en vivo</div>
-        <button class="cv-collapse" aria-label="Minimizar" onclick="event.stopPropagation();toggleComputerViewCollapse()">
-          <svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><path d="M3.72 6.22a.75.75 0 011.06 0L8 9.44l3.22-3.22a.75.75 0 111.06 1.06l-3.75 3.75a.75.75 0 01-1.06 0L3.72 7.28a.75.75 0 010-1.06z"/></svg>
-        </button>
-      </div>
-      <div class="cv-loadbar" id="cv-loadbar"><div class="cv-loadbar-fill"></div></div>
-      <div class="cv-body" id="cv-body"></div>
-    </div>
-
-    <!-- Plan del agente (estilo Codex): pasos del turno en vivo.
-         Lo alimenta el evento SSE "plan"; el chip lo alimenta "verify". -->
-    <div id="plan-panel">
-      <div class="plan-head">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1.2 1.2L6.5 5"/><path d="m3 12 1.2 1.2L6.5 11"/><path d="m3 18 1.2 1.2L6.5 17"/></svg>
-        <span>Plan del agente</span>
-        <span id="verify-chip" class="verify-chip" style="display:none"></span>
-      </div>
-      <ul id="plan-steps"></ul>
-    </div>
-
-    <!-- Activity log -->
-    <div id="activity">
-      <div class="act-head" onclick="toggleActivity()">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
-        <span id="act-head-txt">Trabajando...</span>
-        <span id="act-token-est" style="margin-left:auto;font-size:9.5px;color:var(--text3)"></span>
-      </div>
-      <div id="act-log" aria-live="polite"></div>
-    </div>
 
     <!-- Repo reconectado al volver: se pregunta antes de analizar -->
     <div id="reconnect-banner" style="display:none">
@@ -159,6 +252,53 @@
       </div>
     </div>
 
+    </div><!-- /chat-col -->
+    <aside id="inspector" aria-label="Actividad del agente">
+    <!-- Computer view: ventana en vivo que muestra lo que el agente esta
+         haciendo de verdad en el servidor (navegando, leyendo archivos,
+         ejecutando comandos) a medida que llegan los eventos "computer"
+         del SSE. Nada de esto es simulado: cada frame refleja un evento
+         real emitido por chatRoutes.js. -->
+    <div id="computer-view">
+      <div class="cv-head" onclick="toggleComputerViewCollapse()">
+        <div class="cv-dots"><span></span><span></span><span></span></div>
+        <div class="cv-addr" id="cv-addr">
+          <svg id="cv-addr-icon" viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zM2.5 8a5.5 5.5 0 019.79-3.43c-.6.24-1.4.43-2.29.55A10.9 10.9 0 009 2.6 5.51 5.51 0 002.5 8zm1.71 3.43c.6-.24 1.4-.43 2.29-.55.2.9.5 1.7.8 2.38a5.52 5.52 0 01-3.09-1.83zM8 13.4a9.1 9.1 0 01-.99-2.4c.32-.02.65-.03.99-.03s.67.01.99.03A9.1 9.1 0 018 13.4zm2.5-3.95c-.72-.09-1.5-.15-2.5-.15s-1.78.06-2.5.15A9.6 9.6 0 015.2 8c0-.5.11-.98.3-1.45.72.09 1.5.15 2.5.15s1.78-.06 2.5-.15c.19.47.3.95.3 1.45s-.11.98-.3 1.45zm.3-4.53a10.9 10.9 0 00-1.01-2.52 5.52 5.52 0 013.09 1.83c-.6.24-1.4.43-2.08.69z"/></svg>
+          <span id="cv-addr-text">nueva pestaña</span>
+        </div>
+        <div class="cv-badge" id="cv-badge"><span class="cv-dot-live"></span>en vivo</div>
+        <button class="cv-collapse" aria-label="Minimizar" onclick="event.stopPropagation();toggleComputerViewCollapse()">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11" aria-hidden="true"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+        </button>
+      </div>
+      <div class="cv-loadbar" id="cv-loadbar"><div class="cv-loadbar-fill"></div></div>
+      <div class="cv-body" id="cv-body"></div>
+    </div>
+
+    <!-- Plan del agente (estilo Codex): pasos del turno en vivo.
+         Lo alimenta el evento SSE "plan"; el chip lo alimenta "verify". -->
+    <div id="plan-panel">
+      <div class="plan-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1.2 1.2L6.5 5"/><path d="m3 12 1.2 1.2L6.5 11"/><path d="m3 18 1.2 1.2L6.5 17"/></svg>
+        <span>Plan del agente</span>
+        <span id="verify-chip" class="verify-chip" style="display:none"></span>
+      </div>
+      <ul id="plan-steps"></ul>
+    </div>
+
+    <!-- Activity log -->
+    <div id="activity">
+      <div class="act-head" onclick="toggleActivity()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>
+        <span id="act-head-txt">Trabajando...</span>
+        <span id="act-token-est" style="margin-left:auto;font-size:9.5px;color:var(--text3)"></span>
+      </div>
+      <div id="act-log" aria-live="polite"></div>
+    </div>
+
+    </aside>
+  </div><!-- /chat-body -->
+
     <!-- Input area -->
     <div id="input-wrap">
       <div id="apply-mode-row">
@@ -168,34 +308,40 @@
         </div>
         <div class="apply-actions">
           <button type="button" class="mini-act" id="undo-btn" onclick="doUndo()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.7 9.7 0 0 0-6.7 2.7L3 8"/><path d="M3 3v5h5"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
             Deshacer
           </button>
           <button type="button" class="mini-act" id="diff-btn" onclick="openDiffModal()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 2v20"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="3" width="7" height="18" rx="1.5"/><rect x="13" y="3" width="7" height="18" rx="1.5"/></svg>
             Ver diff
           </button>
         </div>
       </div>
       <div class="ibox">
+        <button class="pill-plus" id="pill-plus" onclick="openPalette()" aria-label="Más acciones">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        </button>
         <div class="itxt-wrap">
-          <textarea id="inp" rows="1" placeholder="Describe una tarea de codigo..." onkeydown="onKey(event)"></textarea>
+          <textarea id="inp" rows="1" placeholder="Preguntar a Baro" onkeydown="onKey(event)"></textarea>
           <div class="ibtns-row">
             <button class="ibtn-sm" id="gh-ibtn" onclick="openModal()">
               <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
               <span id="gh-ibtn-txt">Repo</span>
             </button>
             <button class="ibtn-sm" id="file-ref-btn" onclick="toggleFilePicker()" style="display:none">
-              <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M3.75 1.5a.25.25 0 00-.25.25v11.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V6H9.75A1.75 1.75 0 018 4.25V1.5H3.75zm5.75.56v2.19c0 .138.112.25.25.25h2.19L9.5 2.06zM2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75z"/></svg>
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
               @ Archivo
             </button>
           </div>
         </div>
+        <button class="pill-mic" id="pill-mic" onclick="voiceUnavailable()" aria-label="Voz no disponible en Baro">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+        </button>
         <button id="stopbtn" onclick="stopGeneration()">
           <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="2"/></svg>
         </button>
         <button id="sndbtn" onclick="send()" disabled>
-          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M.989 8 .064 2.68a1.342 1.342 0 011.85-1.462l13.402 5.744a1.13 1.13 0 010 2.076L1.913 14.782a1.342 1.342 0 01-1.85-1.463L.99 8z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
       </div>
     </div>
@@ -206,13 +352,13 @@
     <div class="screen-header">
       <div class="screen-header-title" id="files-title">Explorador de archivos</div>
       <div class="search-bar">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.68 11.74a6 6 0 01-7.922-8.982 6 6 0 018.982 7.922l3.04 3.04a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215l-3.04-3.04zm-5.44-1.19a4.5 4.5 0 006.179-6.547 4.5 4.5 0 00-6.179 6.547z"/></svg>
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
         <input type="text" id="file-search" placeholder="Buscar archivo..." oninput="filterFiles(this.value)">
       </div>
     </div>
     <div id="file-list-wrap">
       <div class="no-repo-msg" id="no-repo-msg">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
         <h3>Sin repositorio</h3>
         <p>Conecta un repo de GitHub para explorar sus archivos</p>
         <button class="connect-btn" onclick="openModal();showScreen('chat')">Conectar repo</button>
@@ -240,6 +386,20 @@
     <div class="settings-content">
 
       <div class="settings-section">
+        <div class="settings-section-label">Cuenta</div>
+        <div class="settings-group">
+          <button class="settings-row settings-button-row" onclick="showProfileInfo()">
+            <div class="settings-row-avatar" id="settings-avatar">B</div>
+            <div class="settings-row-content">
+              <div class="settings-row-label" id="settings-profile-name">Usuario de Baro</div>
+              <div class="settings-row-sub" id="settings-profile-sub">Sesión local</div>
+            </div>
+            <svg class="settings-row-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <div class="settings-section-label">Conexiones</div>
         <div class="settings-group">
           <div class="settings-row" onclick="openModal()">
@@ -253,6 +413,7 @@
             <div class="settings-row-right">
               <span class="badge-warn" id="gh-settings-badge" style="display:none">Sin repo</span>
               <span class="badge-ok" id="gh-settings-badge-ok" style="display:none">Conectado</span>
+              <svg class="settings-row-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
             </div>
           </div>
           <div class="settings-row">
@@ -288,7 +449,7 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-label">Comportamiento</div>
+        <div class="settings-section-label">Bot</div>
         <div class="settings-group">
           <div class="settings-row">
             <div class="settings-row-content">
@@ -343,7 +504,15 @@
       </div>
 
       <button class="save-btn" onclick="saveSettings()">Guardar configuracion</button>
-      <button class="save-btn" onclick="logoutFirebase()" style="background:var(--rb);color:var(--red);border:1px solid var(--rd);margin-top:8px">Cerrar sesión</button>
+      <div class="settings-section" style="margin-top:20px">
+        <div class="settings-group">
+          <button class="settings-row settings-button-row" onclick="logoutFirebase()">
+            <div class="settings-row-content">
+              <div class="settings-row-label" style="color:var(--red)">Cerrar sesión</div>
+            </div>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -355,20 +524,20 @@
     </div>
     <div class="nav-section-label">ESPACIO DE TRABAJO</div>
     <button class="nav-item active" id="nav-chat" onclick="showScreen('chat')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg>
       Chat
     </button>
     <button class="nav-item" id="nav-files" onclick="showScreen('files')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
       Archivos
     </button>
     <button class="nav-item" id="nav-tasks" onclick="showScreen('tasks')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
       Tareas
       <span class="nav-badge" id="tasks-nav-badge" style="display:none">0</span>
     </button>
     <button class="nav-item" id="nav-settings" onclick="showScreen('settings')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
       Config
     </button>
     <div class="nav-footer" aria-label="Baro trabaja en código, creación e investigación">
@@ -376,7 +545,18 @@
       <span><strong>Tu agente, listo para trabajar</strong><small>Código · creación · análisis</small></span>
     </div>
   </nav>
-</div>
+  <footer id="statusbar">
+    <div class="sb-group">
+      <span class="sb-item" id="sb-repo"><svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span id="sb-repo-txt">Sin repositorio</span></span>
+      <span class="sb-item" id="sb-model">IA configurada</span>
+    </div>
+    <div class="sb-group">
+      <span class="sb-item" id="sb-ctx">Contexto 0%</span>
+      <span class="sb-item"><span class="sb-dot" id="sb-dot"></span><span id="sb-conn">Sin conexión</span></span>
+    </div>
+  </footer>
+</div><!-- /#main -->
+</div><!-- /#app -->
 
 <!-- GITHUB MODAL -->
 <div class="mo" id="modal">
@@ -384,7 +564,7 @@
     <div class="m-handle"></div>
     <div class="mhead">
       <span class="mtitle" id="modal-title">Conectar repo</span>
-      <button class="mx" onclick="closeModal()"><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg></button>
+      <button class="mx" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
     </div>
     <div class="mbdy">
       <div class="steps" id="modal-steps">
@@ -408,7 +588,7 @@
     <div class="mhead">
       <span class="mtitle">Reportar un problema</span>
       <button class="mx" onclick="closeFeedbackModal()" aria-label="Cerrar reporte">
-        <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 01-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
       </button>
     </div>
     <div class="mbdy">
@@ -449,7 +629,7 @@
     <div class="m-handle"></div>
     <div class="mhead">
       <span class="mtitle">Autorizar en GitHub</span>
-      <button class="mx" onclick="cancelDeviceFlow()"><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg></button>
+      <button class="mx" onclick="cancelDeviceFlow()"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
     </div>
     <div class="mbdy" id="device-flow-body" style="text-align:center;padding:24px 20px">
       <div class="dfs-spinner">
@@ -466,7 +646,7 @@
     <div class="m-handle"></div>
     <div class="mhead">
       <span class="mtitle">Push a GitHub</span>
-      <button class="mx" onclick="closePushModal()"><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg></button>
+      <button class="mx" onclick="closePushModal()"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
     </div>
     <div class="mbdy">
       <div class="fg" style="margin-bottom:14px">
@@ -491,7 +671,7 @@
 <div id="file-viewer">
   <div class="fv-head">
     <button class="fv-back" onclick="closeFileViewer()">
-      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.78 12.78a.75.75 0 01-1.06 0L4.47 8.53a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 1.06L6.06 8l3.72 3.72a.75.75 0 010 1.06z"/></svg>
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
     </button>
     <div class="fv-title">
       <div class="fv-name" id="fv-name">archivo.js</div>
@@ -511,10 +691,10 @@
 <div id="file-picker">
   <div class="fp-header">
     <span class="fp-title">Agregar archivo al contexto</span>
-    <button class="mx" onclick="closeFilePicker()"><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg></button>
+    <button class="mx" onclick="closeFilePicker()"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
   </div>
   <div class="fp-search-wrap">
-    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.68 11.74a6 6 0 01-7.922-8.982 6 6 0 018.982 7.922l3.04 3.04a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215l-3.04-3.04zm-5.44-1.19a4.5 4.5 0 006.179-6.547 4.5 4.5 0 00-6.179 6.547z"/></svg>
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
     <input type="text" id="fp-search" placeholder="Buscar archivo..." oninput="filterFilePicker(this.value)" autocomplete="off" spellcheck="false">
   </div>
   <div id="fp-list"></div>
@@ -526,7 +706,7 @@
     <div class="m-handle"></div>
     <div class="mhead">
       <span class="mtitle">Cambios sin subir</span>
-      <button class="mx" onclick="closeDiffModal()" aria-label="Cerrar diff"><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg></button>
+      <button class="mx" onclick="closeDiffModal()" aria-label="Cerrar diff"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
     </div>
     <div class="mbdy">
       <div id="diff-files"></div>
@@ -539,12 +719,25 @@
   </div>
 </div>
 
+<!-- COMMAND PALETTE -->
+<div id="palette" role="dialog" aria-modal="true" aria-label="Buscar o ir a">
+  <div class="pal-box">
+    <div class="pal-input-row">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
+      <input id="pal-input" type="text" placeholder="Buscar acción o ir a…" autocomplete="off" spellcheck="false" aria-label="Buscar acción">
+      <kbd>esc</kbd>
+    </div>
+    <div id="pal-list" role="listbox"></div>
+    <div class="pal-foot"><span>↑↓ para moverte</span><span>↵ para abrir</span><span>esc para cerrar</span></div>
+  </div>
+</div>
+
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- AUTH OVERLAY -->
 <div id="auth-overlay">
   <div class="auth-box">
-    <div class="auth-logo"><svg class="logo-svg" viewBox="0 0 48 48" width="64" height="64" aria-hidden="true" focusable="false"><defs><linearGradient id="lg-auth" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A84FF"/><stop offset="1" stop-color="#0066D6"/></linearGradient></defs><path fill="url(#lg-auth)" d="M10 2h28a8 8 0 0 1 8 8v22a8 8 0 0 1-8 8H22l-9.4 6.3c-.9.6-2.1-.1-2.1-1.2V40H10a8 8 0 0 1-8-8V10a8 8 0 0 1 8-8z" transform="translate(0 1)"/><text x="24" y="29" text-anchor="middle" font-family="-apple-system,system-ui,sans-serif" font-size="19" font-weight="700" fill="#fff">B</text></svg></div>
+    <div class="auth-logo"><svg class="logo-svg" viewBox="0 0 48 48" width="64" height="64" aria-hidden="true" focusable="false"><use href="#baro-mark"/></svg></div>
     <div class="auth-tabs">
       <button class="auth-tab active" id="auth-tab-login" onclick="switchAuthMode('login')">Iniciar sesión</button>
       <button class="auth-tab" id="auth-tab-register" onclick="switchAuthMode('register')">Registrarse</button>
