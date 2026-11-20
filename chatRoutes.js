@@ -1206,6 +1206,20 @@ async function handleChatTurn(req, res) {
       send('log', { type: 'info', title: 'No se pudo cargar AGENTS.md', detail: e.message });
     }
 
+    // H6: si el entorno del repo ya se preparó (o falló), el turno
+    // lo sabe antes de escribir código; si aún se está preparando,
+    // lo dice y sigue (el setup corre en segundo plano).
+    if (session.repoFullName && session.envHealth) {
+      const h = session.envHealth;
+      send('log', {
+        type: h.status === 'running' ? 'info' : (h.ok ? 'ok' : 'info'),
+        title: h.status === 'running'
+          ? 'Preparando el entorno del repo…'
+          : (h.ok ? 'Entorno del repo listo' : 'Entorno del repo con problemas'),
+        detail: h.detail || '',
+      });
+    }
+
     // El builder del system prompt es compartido (groqClient lo define,
     // pollinationsClient lo reutiliza): un solo lugar para la fecha/hora
     // real, la memoria a largo plazo y las herramientas.

@@ -156,6 +156,18 @@ function buildAgentsMdSkeleton(dir) {
     : null;
   const lintCommand = scriptCommand(pkg, ['lint', 'check']);
   const buildCommand = scriptCommand(pkg, ['build']);
+  // H6: comando de setup canónico (lo lee envSetup.js al conectar).
+  const setupCommand = pkg?.scripts?.setup
+    ? 'npm run setup'
+    : pkg
+    ? (fss.existsSync(path.join(root, 'package-lock.json')) ? 'npm ci' : 'npm install')
+    : hasRequirements
+    ? 'pip install -r requirements.txt'
+    : goMod
+    ? 'go mod download'
+    : cargoToml
+    ? 'cargo fetch'
+    : null;
   const topLevel = listTopLevel(root);
 
   const lines = [
@@ -172,6 +184,12 @@ function buildAgentsMdSkeleton(dir) {
     `- Tests: ${testCommand ? `\`${testCommand}\`` : 'no detectado; añade aquí el comando real de tests'}`,
     `- Lint: ${lintCommand ? `\`${lintCommand}\`` : 'no detectado'}`,
     `- Build: ${buildCommand ? `\`${buildCommand}\`` : 'no detectado'}`,
+    '',
+    '## Setup',
+    `- Instalar dependencias: ${setupCommand ? `\`${setupCommand}\`` : 'no detectado; añade aquí el comando real de instalación'}`,
+    '',
+    '## Testing',
+    `- Ejecutar tests: ${testCommand ? `\`${testCommand}\`` : 'no detectado; añade aquí el comando real de tests'}`,
     '',
     '## Reglas para agentes',
     '- Lee el código existente antes de editar y sigue sus convenciones.',

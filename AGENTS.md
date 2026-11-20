@@ -78,6 +78,15 @@ lista blanca, verifica con tests y hace push a GitHub.
   api.github.com (sin token responde `no-token` honesto, nunca finge
   el PR; si ya existe uno abierto para la rama, lo devuelve). Botón
   "Abrir PR" en el modal de push (`script.js: openPullRequest()`).
+  **H6 entorno reproducible:** `envSetup.js` detecta setup + tests del
+  repo (manifiestos o secciones `## Setup` / `## Testing` de su
+  AGENTS.md, que mandan) y los ejecuta UNA vez por sesión al conectar
+  (`repoRoutes.js`, en segundo plano; `POST /api/agent/env-setup` y
+  `GET /api/agent/env-health`); el resultado queda en
+  `session.envHealth` y el turno lo anuncia en el log antes de
+  escribir código. `agentsMd.js: buildAgentsMdSkeleton` ya genera
+  esas secciones. Setup con timeout 10 min, siempre por la lista
+  blanca de `commandRunner.js`.
 - `workspaces/` — clones por sesión. Nunca se versiona.
 
 ## Comandos

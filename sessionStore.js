@@ -44,6 +44,8 @@ class Session {
     this.taskBranch = null;
     this.baseBranch = null;
     this.taskBranchAttempted = false;
+    // H6: salud del entorno del repo (setup + tests), null = sin preparar.
+    this.envHealth = null;
     this.githubToken = null;    // token del usuario para este repo, si lo dio
     this.connectedAt = Date.now();
     this.lastUsedAt = Date.now();

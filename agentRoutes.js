@@ -214,6 +214,30 @@ router.post('/agent/pr', async (req, res) => {
   }
 });
 
+// ── Entorno reproducible por repo (H6) ───────────────────
+// POST /api/agent/env-setup { sessionId, force? } -> prepara el
+// entorno (setup + healthcheck) y devuelve session.envHealth.
+// GET  /api/agent/env-health?sessionId= -> estado actual.
+router.post('/agent/env-setup', async (req, res) => {
+  const { sessionId, force } = req.body || {};
+  const session = getOwnedSession(sessionId, req.auth.uid);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  if (!session.repoFullName) return res.status(400).json({ error: 'No hay repositorio conectado en esta sesion' });
+  try {
+    const { runEnvSetup } = require('./envSetup');
+    const health = await runEnvSetup(session, null, { force: !!force });
+    res.json({ ok: true, envHealth: health });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/agent/env-health', (req, res) => {
+  const session = getOwnedSession(req.query.sessionId, req.auth.uid);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  res.json({ envHealth: session.envHealth || { status: 'pending' } });
+});
+
 router.get('/agent/status', async (req, res) => {
   const session = getOwnedSession(req.query.sessionId, req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });

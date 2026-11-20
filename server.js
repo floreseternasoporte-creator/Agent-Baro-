@@ -159,6 +159,10 @@ app.get('/api/config', async (_req, res) => {
       parallelTools: true, // multitarea: herramientas independientes en paralelo
       longContext: true, // compactación automática del historial largo
       computerUse: true, // modo computadora: Chromium real que el agente ve y controla
+      nativeTools: !!process.env.GROQ_API_KEY, // v9 H1: function calling nativo (Groq); sin key, formato de texto
+      taskBranches: true, // v9 H3: el trabajo va a ramas baro/*, nunca a main directo
+      pullRequests: true, // v9 H3: POST /api/agent/pr abre el PR de la rama de tarea
+      envSetup: true, // v9 H6: setup + healthcheck de tests al conectar un repo
       // visionAvailable() consulta Ollama sin timeout propio: si Ollama
       // se queda mudo, /api/config colgaba entero. Se acota a 3 s con
       // una carrera contra un temporizador (equivalente práctico a

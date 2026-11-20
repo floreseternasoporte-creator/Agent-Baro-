@@ -10,6 +10,7 @@ const express = require('express');
 const path = require('path');
 const { getOwnedSession, createSession } = require('./sessionStore');
 const git = require('./gitAgent');
+const { runEnvSetup } = require('./envSetup');
 
 const router = express.Router();
 
@@ -66,6 +67,14 @@ router.post('/repo/connect', async (req, res) => {
     session.repoDescription = repoInfo.description || '';
 
     session.addLog({ type: 'ok', title: `Repo clonado: ${files.length} archivos reales en disco` });
+
+    // H6: preparar el entorno en segundo plano (setup + healthcheck
+    // de tests). La respuesta de connect NO espera: el resultado
+    // queda en session.envHealth y se consulta en /api/agent/env-health.
+    session.envHealth = { status: 'running', startedAt: Date.now() };
+    runEnvSetup(session, null).catch((e) => {
+      console.error('[baro] env-setup en segundo plano falló:', e.message);
+    });
 
     res.json({
       repo: {
