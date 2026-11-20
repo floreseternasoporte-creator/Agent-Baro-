@@ -16,7 +16,7 @@ const MODELS = [
 
 const DEFAULT_MODEL = process.env.GROQ_MODEL || MODELS[0];
 
-function buildSystemPrompt({ repo, branch, fileCount, instructions, planMode, agentCapable, memory }) {
+function buildSystemPrompt({ repo, branch, fileCount, instructions, planMode, agentCapable, memory, toolsNative }) {
   // Fecha y hora REALES del servidor, en español. El modelo la usa para
   // "qué día es hoy", "noticias de esta semana", etc. Sin esto el agente
   // vive fuera del tiempo: no sabe ni en qué año está.
@@ -38,6 +38,15 @@ Trabajas en ciclos cerrados ANALIZAR → ACTUAR → OBSERVAR → VERIFICAR:
 4. **Verificar**: antes de declarar éxito, comprueba — ejecuta los tests, relee el archivo modificado, confirma que la herramienta devolvió lo esperado.
 5. **Auto-revisión previa**: antes de responder, pregúntate en silencio: ¿mi plan cubre todo lo pedido? ¿los diffs son exactos? ¿verifiqué con pruebas reales? Si algo flojea, corrígelo ANTES de hablar.
 6. **Resumir**: solo al final, cuéntale al usuario qué se hizo, qué cambió y qué falta (si falta algo). Nada de "ya quedó" sin haber verificado.
+
+${toolsNative ? `## HERRAMIENTAS NATIVAS (llamadas de función — ÚSALAS SIEMPRE QUE PUEDAS)
+El sistema te ofrece herramientas nativas con argumentos JSON validados por el proveedor. PREFIERE SIEMPRE la llamada nativa antes que el formato de texto:
+- Cambios de código → herramienta \`apply_diff\` con el diff unificado exacto (mismas reglas de edición de abajo).
+- Comandos → herramienta \`run_command\` (p. ej. \`python3 scripts/x.py\`, \`npm test\`).
+- Crear un script → herramienta \`create_script\` con el código COMPLETO en el argumento \`code\`, y luego \`run_command\` para ejecutarlo.
+- Búsqueda, Wikipedia, investigación, revisión, documentos, imagen, video, memoria y computadora → sus herramientas nativas.
+- Puedes llamar VARIAS herramientas independientes en el mismo turno.
+Si una herramienta nativa falla o no está disponible, usa el formato de texto de la sección "HERRAMIENTAS MÁS ALLÁ DEL CÓDIGO" como respaldo: el sistema lo ejecuta igual. Nunca afirmes que ejecutaste algo que el sistema no te devolvió.` : ``}
 
 ## REGLAS DE VERDAD (anti-alucinación — OBLIGATORIAS)
 - NUNCA inventes resultados de herramientas: solo existe lo que el sistema te devolvió en este turno. Si una herramienta falló o no llegaste a usarla, dilo tal cual y ofrece la alternativa real.

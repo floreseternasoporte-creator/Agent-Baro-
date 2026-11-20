@@ -16,6 +16,7 @@ const groq = require('./groqClient');
 const ollama = require('./ollamaClient');
 const { runCommand, extractAutomaticCommands, isSafeWorkspaceArgument } = require('./commandRunner');
 const { extractToolCommands } = require('./toolCommands');
+const { BARO_TOOLS, toolCallToCommand } = require('./toolsCatalog');
 const tools = require('./toolsClient');
 const { runComputerTask } = require('./computerTask');
 const { loadAgentsInstructions } = require('./agentsMd');
@@ -124,6 +125,71 @@ async function streamWithFailover({ model, messages, signal, onDelta, onProvider
 }
 
 /**
+ * Igual que streamWithFailover, pero con HERRAMIENTAS NATIVAS (H1):
+ * llama a client.streamChatWithTools cuando existe y devuelve
+ * { text, toolCalls, toolsSupported, provider }. Si el cliente no
+ * tiene streamChatWithTools, degrada a streamChat y marca
+ * toolsSupported:false (el turno usa el protocolo de texto).
+ * Una respuesta con SOLO tool_calls y texto vacío es un éxito.
+ */
+async function streamWithFailoverTools({ model, messages, tools, signal, onDelta, onProvider }) {
+  let lastError = null;
+  for (const { name, client } of providerChain()) {
+    const maxAttempts = name.startsWith('Pollinations') ? 3 : 2;
+    const retryDelays = name.startsWith('Pollinations') ? [2000, 6000] : [1500, 1500];
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      let started = false;
+      try {
+        const call = typeof client.streamChatWithTools === 'function'
+          ? await client.streamChatWithTools({
+              model,
+              messages,
+              tools,
+              signal,
+              onDelta: (delta, fullText) => {
+                if (!delta) return;
+                if (!started) { started = true; onProvider?.(name); }
+                onDelta(delta, fullText);
+              },
+            })
+          : await (async () => {
+              const text = await client.streamChat({
+                model,
+                messages,
+                signal,
+                onDelta: (delta, fullText) => {
+                  if (!delta) return;
+                  if (!started) { started = true; onProvider?.(name); }
+                  onDelta(delta, fullText);
+                },
+              });
+              return { text, toolCalls: [], finishReason: null, toolsSupported: false };
+            })();
+        const text = call.text || '';
+        const toolCalls = Array.isArray(call.toolCalls) ? call.toolCalls : [];
+        if (!text.trim() && !toolCalls.length) {
+          lastError = new Error(`${name} devolvió una respuesta vacía`);
+          console.error(`[baro] proveedor ${name} devolvió vacío (intento ${attempt + 1}), ${attempt < maxAttempts - 1 ? 'reintentando' : 'probando siguiente'}`);
+          if (attempt < maxAttempts - 1) { await sleepAbortable(retryDelays[attempt] || 1500, signal); continue; }
+          break;
+        }
+        return { text, toolCalls, toolsSupported: call.toolsSupported !== false, provider: name };
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        lastError = e;
+        if (started) throw e;
+        console.error(`[baro] proveedor ${name} fallo (intento ${attempt + 1}), probando siguiente:`, e.message);
+        if (attempt < maxAttempts - 1 && (e.status === 429 || e.status >= 500 || !e.status)) { await sleepAbortable(retryDelays[attempt] || 1500, signal); continue; }
+        break;
+      }
+    }
+  }
+  const err = new Error(lastError ? `Ningún proveedor respondió. Último error: ${lastError.message}` : 'Ningún proveedor de IA disponible');
+  err.status = lastError?.status || 503;
+  throw err;
+}
+
+/**
  * Generación de texto SIN streaming por la misma cadena de
  * proveedores (para tareas internas: redactar documentos,
  * resumir historial). Devuelve el texto completo.
@@ -178,6 +244,66 @@ async function reviewDiffWithAI(diffBlock, generateTextFn) {
     };
   }
   return { approved: m[1].toUpperCase().startsWith('S'), reason };
+}
+
+/**
+ * Pipeline de UN bloque diff (auto-review -> aplicar). Lo usan igual
+ * la vía de texto (bloque ```diff) y la vía nativa (tool apply_diff):
+ * mismo veredicto, mismos logs, mismo registro en appliedDiffs.
+ * Devuelve las entradas para diffResults (strings de rechazo o los
+ * objetos {applied, path, ...} de applyUnifiedDiff).
+ */
+async function processDiffBlock({ diffBlock, session, send, signal, autoAppliedPaths, appliedDiffs }) {
+  const results = [];
+  send('log', { type: 'run', title: 'Revisando cambio antes de aplicarlo…' });
+  let review = { approved: false, unclear: true, reason: 'Auto-review sin veredicto claro: no aplicado automáticamente' };
+  try {
+    review = await reviewDiffWithAI(diffBlock, (p) => generateText(p, signal));
+  } catch (e) {
+    review = {
+      approved: false,
+      unclear: true,
+      reason: `Auto-review sin veredicto claro: no aplicado automáticamente (revisor no disponible: ${e.message})`,
+    };
+  }
+  if (!review.approved) {
+    if (review.unclear) {
+      send('log', {
+        type: 'info',
+        title: 'Auto-review sin veredicto claro: no aplicado automáticamente',
+        detail: review.reason,
+      });
+      session.addLog({ type: 'info', title: 'Diff no auto-aplicado por auto-review incierto', detail: review.reason });
+      results.push(`### Diff NO auto-aplicado por revisión incierta\n${review.reason}. El diff queda disponible como propuesta normal para aplicación manual; no afirmes que fue aplicado.\n\`\`\`diff\n${diffBlock.trim().slice(0, 2000)}\n\`\`\``);
+      appliedDiffs.push({ diff: diffBlock.trim(), applied: false, paths: [], reason: review.reason, alreadyApplied: false });
+      return results;
+    }
+    const reason = `Rechazado por revisión automática: ${review.reason}`;
+    send('log', { type: 'err', title: 'Cambio rechazado por el revisor', detail: review.reason });
+    session.addLog({ type: 'err', title: 'Diff rechazado por auto-review', detail: review.reason });
+    results.push(`### Diff RECHAZADO por el revisor (NO aplicado)\n${reason}\nCorrige el diff y vuelve a intentarlo.\n\`\`\`diff\n${diffBlock.trim().slice(0, 2000)}\n\`\`\``);
+    appliedDiffs.push({ diff: diffBlock.trim(), applied: false, paths: [], reason, alreadyApplied: false });
+    return results;
+  }
+  const applied = await git.applyUnifiedDiff(session.dir, diffBlock);
+  results.push(...applied);
+  appliedDiffs.push({
+    diff: diffBlock.trim(),
+    applied: applied.every((r) => r.applied),
+    paths: applied.map((r) => r.path).filter(Boolean),
+    reason: applied.find((r) => !r.applied)?.reason || null,
+    alreadyApplied: applied.some((r) => r.alreadyApplied),
+  });
+  for (const item of applied) {
+    const event = item.applied
+      ? { type: 'ok', title: `Cambio aplicado automáticamente: ${item.path}`, detail: `${item.bytes} bytes escritos y listos para verificar` }
+      : { type: item.alreadyApplied ? 'info' : 'err', title: item.alreadyApplied ? `Cambio ya aplicado: ${item.path}` : `Cambio no aplicado: ${item.path || 'diff'}`, detail: item.reason };
+    send('log', event);
+    send('computer', { mode: 'files', action: item.applied ? 'write' : 'write_failed', path: item.path, bytes: item.bytes, text: item.reason });
+    session.addLog(event);
+    if (item.applied && item.path && !autoAppliedPaths.includes(item.path)) autoAppliedPaths.push(item.path);
+  }
+  return results;
 }
 
 function directoryHasPythonTests(dir, depth = 0) {
@@ -746,13 +872,17 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
       // "Ejecuta: python3 scripts/<nombre>" en el mismo turno.
       // NO necesita repositorio: es la via para crear y correr Python
       // (o JS, etc.) con trabajo visible en tiempo real.
+      // H1: con la tool nativa create_script el código llega en
+      // command.code y tiene prioridad sobre el bloque cercado.
       let name = String(command.name || '').trim();
       if (!name) return '### Crear script\nFalta el nombre del archivo. Usa el formato: `Crear script: nombre.py :: descripcion`.';
       if (!/\.[a-z0-9]{1,8}$/i.test(name)) name += '.py';
       if (name.includes('/') || name.includes('\\') || !isSafeWorkspaceArgument(name)) {
         return `### Crear script\nNombre no permitido: "${command.name}". Usa un nombre simple como \`utilidad.py\`.`;
       }
-      const code = extractFencedCode(sourceText, name);
+      const code = (typeof command.code === 'string' && command.code.trim())
+        ? command.code
+        : extractFencedCode(sourceText, name);
       if (!code) {
         return `### Crear script: ${name}\nNo encontre el codigo en tu respuesta. Escribe la linea \`Crear script: ${name}\` y justo despues el codigo completo en un bloque cercado (por ejemplo \`\`\`python ... \`\`\`).`;
       }
@@ -1037,6 +1167,10 @@ async function handleChatTurn(req, res) {
       planMode: isPlanMode,
       agentCapable: !!session.repoFullName,
       memory: session.memory,
+      // H1: con GROQ_API_KEY el primer proveedor (Groq) soporta
+      // function calling nativo; sin ella el prompt no promete
+      // tools y el turno usa el formato de texto.
+      toolsNative: !!process.env.GROQ_API_KEY,
     });
     const sessionNotesBlock = session.notesBlock?.() || '';
     if (sessionNotesBlock) {
@@ -1063,13 +1197,24 @@ async function handleChatTurn(req, res) {
     // COMPLETO acumulado (O(n²) de red por respuesta). Ahora solo viaja
     // el fragmento nuevo y el frontend lo acumula — el stream es de
     // verdad en tiempo real, sin reenviar megabytes.
-    let result = await streamWithFailover({
+    // H1: primera llamada con herramientas nativas; si el proveedor
+    // no las soporta, streamWithFailoverTools degrada a texto y lo
+    // dice en el log (nunca se finge que hubo tool_calls).
+    const firstTurn = await streamWithFailoverTools({
       model,
       messages,
+      tools: BARO_TOOLS,
       signal: abortController.signal,
       onDelta: (delta) => send('delta', { delta }),
       onProvider: (name) => send('log', { type: 'info', title: `Respondiendo con ${name}`, detail: model || 'modelo por defecto' }),
     });
+    let result = firstTurn.text;
+    let pendingToolCalls = Array.isArray(firstTurn.toolCalls) ? firstTurn.toolCalls : [];
+    if (firstTurn.toolsSupported === false) {
+      send('log', { type: 'info', title: 'Herramientas nativas no disponibles en este proveedor', detail: 'Usando el formato de texto como respaldo' });
+    } else if (pendingToolCalls.length) {
+      send('log', { type: 'info', title: `Herramientas nativas: ${pendingToolCalls.length} llamada(s)`, detail: pendingToolCalls.map((c) => c.name).join(', ') });
+    }
 
     // La IA puede pedir comandos de inspección o validación en una línea
     // "Ejecuta: ...". Los ejecutamos aquí, en el workspace de la sesión, y
@@ -1173,6 +1318,99 @@ async function handleChatTurn(req, res) {
     // fallaba ("el diff no coincide", porque el archivo ya cambio), que
     // era la fuente mas comun de "error al aplicar cambios" reportada.
     const appliedDiffs = [];
+
+    // Ejecutor de comandos automáticos, usado igual por la vía de
+    // texto ("Ejecuta:") y por la tool nativa run_command.
+    const executeAutomaticCommand = async (command) => {
+      const title = `Ejecutando automáticamente: ${command.display}`;
+      send('log', { type: 'run', title });
+      send('computer', { mode: 'terminal', action: 'run', command: command.display });
+      session.addLog({ type: 'run', title });
+
+      const commandResult = await runCommand(command.binary, command.args, session.dir);
+      const output = truncateCommandOutput(commandResult.stdout || commandResult.stderr || commandResult.error);
+      const logEntry = {
+        type: commandResult.ok ? 'ok' : 'err',
+        title: commandResult.ok ? `Completado: ${command.display}` : `Falló: ${command.display}`,
+        detail: output,
+      };
+      send('log', logEntry);
+      send('computer', { mode: 'terminal', action: 'output', text: output || (commandResult.ok ? '(sin salida)' : 'error'), ok: commandResult.ok });
+      session.addLog(logEntry);
+      return commandResultForModel(command, commandResult);
+    };
+
+    // ── Despacho de tool_calls NATIVOS (H1) ────────────────
+    // Traduce cada tool_call al mismo comando interno que su línea
+    // de texto y lo ejecuta por la misma vía (mismo plan-mode,
+    // misma deduplicación por seenToolCommands/seenDiffs, mismo
+    // auto-review de diffs). Devuelve las contribuciones a
+    // commandResults/toolResults/diffResults de la ronda.
+    const dispatchNativeToolCalls = async (toolCalls, modelText) => {
+      const out = { commandResults: [], toolResults: [], diffResults: [] };
+      for (const tc of toolCalls || []) {
+        const translated = toolCallToCommand(tc);
+        if (translated.kind === 'invalid') {
+          send('log', { type: 'err', title: `Llamada de herramienta inválida (${translated.name})`, detail: translated.error });
+          out.toolResults.push(`### Llamada de herramienta inválida (${translated.name})\n${translated.error}\nEl modelo debe llamar a las herramientas con argumentos JSON válidos; si no puede, usa el formato de texto.`);
+          continue;
+        }
+        if (translated.kind === 'diff') {
+          const diffKey = String(translated.diff || '').trim();
+          if (!diffKey || seenDiffs.has(diffKey)) continue;
+          seenDiffs.add(diffKey);
+          if (isPlanMode) {
+            send('log', { type: 'info', title: 'Modo plan: diff no aplicado automáticamente', detail: 'El backend bloquea la escritura hasta salir del modo plan' });
+            out.diffResults.push(`### Diff NO aplicado por modo plan\nEl diff queda solo como propuesta para revisión manual; el backend no escribió ningún archivo.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
+            appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: 'Modo plan activo: aplicación bloqueada por el backend', alreadyApplied: false });
+            continue;
+          }
+          if (!session.repoFullName) {
+            out.diffResults.push('### Diff sin repositorio conectado\nLa herramienta apply_diff necesita un repositorio clonado en esta sesión.');
+            continue;
+          }
+          if (!autoApply) {
+            out.diffResults.push(`### Diff propuesto (auto-apply desactivado)\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
+            appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: 'autoApply desactivado', alreadyApplied: false });
+            continue;
+          }
+          out.diffResults.push(...await processDiffBlock({ diffBlock: translated.diff, session, send, signal: abortController.signal, autoAppliedPaths, appliedDiffs }));
+          continue;
+        }
+        const command = translated.command;
+        const key = JSON.stringify(command);
+        if (seenToolCommands.has(key)) continue;
+        seenToolCommands.add(key);
+        if (isPlanMode && !PLAN_MODE_READ_ONLY_TOOLS.has(command.tool)) {
+          send('log', { type: 'info', title: `Modo plan: herramienta no ejecutada (${command.tool})`, detail: 'Solo se permiten herramientas de lectura y búsqueda' });
+          out.toolResults.push(`### Herramienta no ejecutada por modo plan\nLa herramienta "${command.tool}" genera o modifica contenido. En modo plan Baro solo usa lectura, búsqueda y revisión de código; no se ejecutó ninguna acción.`);
+          continue;
+        }
+        if (command.tool === 'computer') {
+          const text = await runToolCommand(command, send, session, abortController.signal, modelText);
+          if (text) out.toolResults.push(text);
+          continue;
+        }
+        if (command.tool === 'run') {
+          const parsed = extractAutomaticCommands(`Ejecuta: ${command.commandLine}`);
+          if (!parsed.length) {
+            out.commandResults.push(`### Ejecuta\nNo se pudo interpretar el comando: "${command.commandLine}".`);
+            continue;
+          }
+          for (const cmd of parsed.slice(0, MAX_COMMANDS_PER_ROUND)) {
+            const cmdKey = `${cmd.binary}\u0000${cmd.args.join('\u0000')}`;
+            if (seenCommands.has(cmdKey)) continue;
+            seenCommands.add(cmdKey);
+            out.commandResults.push(await executeAutomaticCommand(cmd));
+          }
+          continue;
+        }
+        const text = await runToolCommand(command, send, session, abortController.signal, modelText);
+        if (text) out.toolResults.push(text);
+      }
+      return out;
+    };
+
     for (let round = 0; round < MAX_AUTOMATIC_ROUNDS; round += 1) {
       const requested = extractAutomaticCommands(result);
       const commands = requested
@@ -1224,58 +1462,19 @@ async function handleChatTurn(req, res) {
           const diffKey = diffBlock.trim();
           if (!diffKey || seenDiffs.has(diffKey)) continue;
           seenDiffs.add(diffKey);
-          // ── Auto-review estilo Astra: segundo pase del modelo como
-          // revisor ANTES de tocar el disco. Un rechazo no rompe el
-          // turno: el motivo vuelve al loop y el agente lo corrige.
-          send('log', { type: 'run', title: 'Revisando cambio antes de aplicarlo…' });
-          let review = { approved: false, unclear: true, reason: 'Auto-review sin veredicto claro: no aplicado automáticamente' };
-          try {
-            review = await reviewDiffWithAI(diffBlock, (p) => generateText(p, abortController.signal));
-          } catch (e) {
-            review = {
-              approved: false,
-              unclear: true,
-              reason: `Auto-review sin veredicto claro: no aplicado automáticamente (revisor no disponible: ${e.message})`,
-            };
-          }
-          if (!review.approved) {
-            if (review.unclear) {
-              send('log', {
-                type: 'info',
-                title: 'Auto-review sin veredicto claro: no aplicado automáticamente',
-                detail: review.reason,
-              });
-              session.addLog({ type: 'info', title: 'Diff no auto-aplicado por auto-review incierto', detail: review.reason });
-              diffResults.push(`### Diff NO auto-aplicado por revisión incierta\n${review.reason}. El diff queda disponible como propuesta normal para aplicación manual; no afirmes que fue aplicado.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
-              appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: review.reason, alreadyApplied: false });
-              continue;
-            }
-            const reason = `Rechazado por revisión automática: ${review.reason}`;
-            send('log', { type: 'err', title: 'Cambio rechazado por el revisor', detail: review.reason });
-            session.addLog({ type: 'err', title: 'Diff rechazado por auto-review', detail: review.reason });
-            diffResults.push(`### Diff RECHAZADO por el revisor (NO aplicado)\n${reason}\nCorrige el diff y vuelve a intentarlo.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
-            appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason, alreadyApplied: false });
-            continue;
-          }
-          const results = await git.applyUnifiedDiff(session.dir, diffBlock);
-          diffResults.push(...results);
-          appliedDiffs.push({
-            diff: diffKey,
-            applied: results.every((r) => r.applied),
-            paths: results.map((r) => r.path).filter(Boolean),
-            reason: results.find((r) => !r.applied)?.reason || null,
-            alreadyApplied: results.some((r) => r.alreadyApplied),
-          });
-          for (const applied of results) {
-            const event = applied.applied
-              ? { type: 'ok', title: `Cambio aplicado automáticamente: ${applied.path}`, detail: `${applied.bytes} bytes escritos y listos para verificar` }
-              : { type: applied.alreadyApplied ? 'info' : 'err', title: applied.alreadyApplied ? `Cambio ya aplicado: ${applied.path}` : `Cambio no aplicado: ${applied.path || 'diff'}`, detail: applied.reason };
-            send('log', event);
-            send('computer', { mode: 'files', action: applied.applied ? 'write' : 'write_failed', path: applied.path, bytes: applied.bytes, text: applied.reason });
-            session.addLog(event);
-            if (applied.applied && applied.path && !autoAppliedPaths.includes(applied.path)) autoAppliedPaths.push(applied.path);
-          }
+          diffResults.push(...await processDiffBlock({ diffBlock, session, send, signal: abortController.signal, autoAppliedPaths, appliedDiffs }));
         }
+      }
+
+      // ── Tool_calls nativos de esta ronda (H1) ────────────
+      // Se despachan con el mismo plan-mode y deduplicación que la
+      // vía de texto; sus resultados se suman a los de esta ronda.
+      if (pendingToolCalls.length) {
+        const native = await dispatchNativeToolCalls(pendingToolCalls, result);
+        commandResults.push(...native.commandResults);
+        toolResults.push(...native.toolResults);
+        diffResults.push(...native.diffResults);
+        pendingToolCalls = [];
       }
 
       if (!commands.length && !diffResults.length && !requestedTools.length) break;
@@ -1342,25 +1541,6 @@ async function handleChatTurn(req, res) {
         executableCommands = [];
       }
 
-      const executeAutomaticCommand = async (command) => {
-        const title = `Ejecutando automáticamente: ${command.display}`;
-        send('log', { type: 'run', title });
-        send('computer', { mode: 'terminal', action: 'run', command: command.display });
-        session.addLog({ type: 'run', title });
-
-        const commandResult = await runCommand(command.binary, command.args, session.dir);
-        const output = truncateCommandOutput(commandResult.stdout || commandResult.stderr || commandResult.error);
-        const logEntry = {
-          type: commandResult.ok ? 'ok' : 'err',
-          title: commandResult.ok ? `Completado: ${command.display}` : `Falló: ${command.display}`,
-          detail: output,
-        };
-        send('log', logEntry);
-        send('computer', { mode: 'terminal', action: 'output', text: output || (commandResult.ok ? '(sin salida)' : 'error'), ok: commandResult.ok });
-        session.addLog(logEntry);
-        return commandResultForModel(command, commandResult);
-      };
-
       if (isMultiAgent && executableCommands.length > 1) {
         send('log', { type: 'info', title: `Modo multi-agente: ${executableCommands.length} acciones en paralelo` });
         commandResults.push(...await Promise.all(executableCommands.map(executeAutomaticCommand)));
@@ -1399,13 +1579,19 @@ async function handleChatTurn(req, res) {
         send('delta', { delta: `\n\n${toolResults.join('\n\n')}` });
       }
 
-      result = await streamWithFailover({
+      const nextTurn = await streamWithFailoverTools({
         model,
         messages: conversation,
+        tools: BARO_TOOLS,
         signal: abortController.signal,
         onDelta: (delta) => send('delta', { delta }),
         onProvider: (name) => send('log', { type: 'info', title: `Continuando con ${name}` }),
       });
+      result = nextTurn.text;
+      pendingToolCalls = Array.isArray(nextTurn.toolCalls) ? nextTurn.toolCalls : [];
+      if (pendingToolCalls.length) {
+        send('log', { type: 'info', title: `Herramientas nativas: ${pendingToolCalls.length} llamada(s)`, detail: pendingToolCalls.map((c) => c.name).join(', ') });
+      }
       const previous = visibleResult;
       visibleResult = `${previous}\n\n${result}`;
     }
@@ -1419,7 +1605,9 @@ async function handleChatTurn(req, res) {
     const diffBlocks = git.extractDiffBlocks(result);
     sendPlan(null, true);
     send('log', { type: 'ok', title: 'Completado', detail: diffBlocks.length ? `${diffBlocks.length} diff(s) propuesto(s)` : undefined });
-    send('done', { text: result, diffCount: diffBlocks.length, autoAppliedPaths, appliedDiffs });
+    // diffCount cuenta también los diffs aplicados por tool nativa
+    // (apply_diff no deja bloque ```diff en el texto visible).
+    send('done', { text: result, diffCount: Math.max(diffBlocks.length, appliedDiffs.length), autoAppliedPaths, appliedDiffs });
     stopHeartbeat();
     res.end();
   } catch (e) {
