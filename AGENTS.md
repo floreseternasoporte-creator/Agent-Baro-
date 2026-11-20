@@ -61,6 +61,23 @@ lista blanca, verifica con tests y hace push a GitHub.
   Trampa v8: el chat arranca oculto en móvil, así que `autoGrow()` con
   scrollHeight 0 dejaba el textarea en 0px — ahora guarda la altura y
   `showScreen('chat')` llama a `autoGrow()` al entrar.
+  **v9 (lote Codex H1+H3+H6, serie de commits locales v9):**
+  **H1 function calling nativo:** catálogo en `toolsCatalog.js` (14 tools
+  OpenAI-compatibles) + `streamChatWithTools()` en los 3 clientes
+  (Groq nativo; Pollinations/Ollama degradan a texto de forma explícita
+  si el proveedor rechaza `tools`). El turno (`chatRoutes.js`) despacha
+  los `tool_calls` por la MISMA vía que el texto (mismo plan-mode,
+  misma deduplicación, mismo auto-review de diffs vía `processDiffBlock`);
+  el texto ("Buscar:", "Ejecuta:", ```diff) sigue como respaldo.
+  `create_script` nativo pasa el código en el argumento `code`.
+  **H3 ramas + PRs:** el agente JAMÁS escribe sobre `main`/`master`
+  directo: antes del primer diff del turno, `ensureTaskBranch` crea
+  `baro/<slug>-<ts>` (`gitAgent.js: createTaskBranch`, publica la ref
+  si hay token) y `session.taskBranch/baseBranch` la recuerdan; el push
+  sube la rama de tarea y `POST /api/agent/pr` abre el PR contra
+  api.github.com (sin token responde `no-token` honesto, nunca finge
+  el PR; si ya existe uno abierto para la rama, lo devuelve). Botón
+  "Abrir PR" en el modal de push (`script.js: openPullRequest()`).
 - `workspaces/` — clones por sesión. Nunca se versiona.
 
 ## Comandos

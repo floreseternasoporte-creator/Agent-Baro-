@@ -986,6 +986,41 @@ async function confirmPush() {
   }
 }
 
+// ── Abrir PR estilo Codex (H3) ───────────────────────────
+// Abre el PR de la rama de tarea contra su base. Si no hay token,
+// el servidor responde con el motivo honesto (code 'no-token') y
+// aquí se muestra tal cual: nunca se finge que el PR existe.
+async function openPullRequest() {
+  if (!S.sessionId) { showToast('Sesion no lista, intenta de nuevo'); return; }
+  if (!S.repoData) { showToast('No hay repo conectado'); return; }
+  const result = document.getElementById('push-result');
+  const btn = document.getElementById('push-pr-btn');
+  const msg = document.getElementById('push-commit-msg').value.trim();
+  result.style.display = '';
+  btn.disabled = true;
+  btn.textContent = 'Abriendo...';
+  try {
+    const resp = await apiFetch(`${API}/agent/pr`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: S.sessionId,
+        title: msg || undefined,
+        githubToken: S.ghToken || undefined,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `Error ${resp.status}`);
+    result.innerHTML = `<div style="background:var(--gb);border:1px solid var(--gd);border-radius:var(--r);padding:12px;font-size:13px;color:var(--green);font-weight:600">${data.alreadyExists ? 'PR ya existente' : 'PR abierto'}: <a href="${esc(data.url)}" target="_blank" rel="noopener" style="color:var(--green)">#${data.number} — ver en GitHub</a></div>`;
+    btn.textContent = 'Abrir PR';
+    window.open(data.url, '_blank', 'noopener');
+  } catch (e) {
+    result.innerHTML = `<div style="background:var(--rb);border:1px solid var(--rd);border-radius:var(--r);padding:12px;font-size:13px;color:var(--red)">${esc(e.message)}</div>`;
+    btn.disabled = false;
+    btn.textContent = 'Abrir PR';
+  }
+}
+
 // ═══════════════════════════════════════════
 // EXPORT
 // ═══════════════════════════════════════════

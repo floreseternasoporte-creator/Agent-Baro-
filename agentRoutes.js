@@ -131,6 +131,10 @@ router.post('/agent/push', async (req, res) => {
   }
 
   try {
+    // H3: el push sube la rama de tarea de la sesión, nunca main
+    // directo (salvo que el usuario pida main explícitamente en
+    // `branch`). La rama de tarea ya existe desde el primer diff.
+    const effectiveBranch = branch || session.taskBranch || session.branch;
     // El token viaja SOLO en memoria a commitAndPush, que lo usa
     // durante el push y deja el remoto limpio al terminar. Nunca
     // queda el remoto con credencial persistido en .git/config.
@@ -138,7 +142,7 @@ router.post('/agent/push', async (req, res) => {
     const result = await git.commitAndPush({
       dir: session.dir,
       message: message || `fix: update via Baro ${new Date().toISOString().slice(0, 10)}`,
-      branch: branch || session.branch,
+      branch: effectiveBranch,
       name: process.env.AGENT_GIT_NAME || 'Baro',
       email: process.env.AGENT_GIT_EMAIL || 'baro@users.noreply.github.com',
       token,
@@ -155,6 +159,57 @@ router.post('/agent/push', async (req, res) => {
     res.json(result);
   } catch (e) {
     session.addLog({ type: 'err', title: 'Error en push', detail: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Pull requests estilo Codex (H3) ──────────────────────
+// POST /api/agent/pr { sessionId, title?, body?, githubToken? }
+// Abre el PR de la rama de tarea contra su rama base. Sin token
+// NO finge haberlo creado: responde 400 con code 'no-token' y el
+// motivo honesto (la rama con los cambios ya existe).
+router.post('/agent/pr', async (req, res) => {
+  const { sessionId, title, body, githubToken } = req.body || {};
+  const session = getOwnedSession(sessionId, req.auth.uid);
+  if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
+  if (!session.repoFullName) return res.status(400).json({ error: 'No hay repositorio conectado en esta sesion' });
+
+  const parsed = git.parseRepoUrl(`https://github.com/${session.repoFullName}`);
+  if (!parsed) return res.status(400).json({ error: 'Repositorio conectado inválido' });
+
+  let head = session.taskBranch;
+  if (!head) {
+    try {
+      head = await git.getCurrentBranch(session.dir);
+    } catch {
+      head = null;
+    }
+  }
+  const base = session.baseBranch || session.branch || 'main';
+  if (!head || head === base) {
+    return res.status(400).json({ error: 'No hay rama de tarea con cambios para abrir el PR. Trabaja primero un turno con diffs y vuelve a intentarlo.' });
+  }
+
+  const token = githubToken || session.githubToken || process.env.GITHUB_TOKEN;
+  try {
+    const pr = await git.createPullRequest({
+      owner: parsed.owner,
+      repo: parsed.repo,
+      head,
+      base,
+      title: title || `Baro: cambios en ${head}`,
+      body: body || `Cambios propuestos por Baro en la rama \`${head}\` (base \`${base}\`).`,
+      token,
+    });
+    if (!pr.ok) {
+      const status = pr.code === 'no-token' ? 400 : 502;
+      session.addLog({ type: 'err', title: 'No se pudo abrir el PR', detail: pr.error });
+      return res.status(status).json({ error: pr.error, code: pr.code, head, base });
+    }
+    session.addLog({ type: 'ok', title: pr.alreadyExists ? `PR ya existente: #${pr.number}` : `PR abierto: #${pr.number}`, detail: pr.url });
+    res.json({ ok: true, alreadyExists: !!pr.alreadyExists, url: pr.url, number: pr.number, title: pr.title, head, base });
+  } catch (e) {
+    session.addLog({ type: 'err', title: 'Error abriendo el PR', detail: e.message });
     res.status(500).json({ error: e.message });
   }
 });

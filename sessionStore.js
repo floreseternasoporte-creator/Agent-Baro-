@@ -38,6 +38,12 @@ class Session {
     this.repoFullName = null;   // "usuario/repo"
     this.repoUrl = null;
     this.branch = 'main';
+    // H3: rama de tarea (baro/...) y rama base desde la que se creó.
+    // El agente trabaja SIEMPRE en la rama de tarea; main solo se
+    // toca vía PR. null = aún no se creó rama para esta sesión.
+    this.taskBranch = null;
+    this.baseBranch = null;
+    this.taskBranchAttempted = false;
     this.githubToken = null;    // token del usuario para este repo, si lo dio
     this.connectedAt = Date.now();
     this.lastUsedAt = Date.now();

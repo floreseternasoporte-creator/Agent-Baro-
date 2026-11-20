@@ -306,6 +306,56 @@ async function processDiffBlock({ diffBlock, session, send, signal, autoAppliedP
   return results;
 }
 
+/**
+ * Rama por tarea estilo Codex (H3): antes del primer diff del turno,
+ * el trabajo pasa a su propia rama `baro/<slug>-<ts>` y main queda
+ * intacto. Si la sesión ya está en una rama baro/* (o en otra rama
+ * que no sea main/master), se reutiliza. Si no se puede crear, el
+ * turno continúa en la rama actual y lo dice en el log — nunca
+ * rompe el trabajo por esto. La ref de la rama se publica (push
+ * sin commits) cuando hay token, para que una reconexión no falle
+ * por buscar una rama que solo existe en local.
+ */
+async function ensureTaskBranch(session, send, taskTitle) {
+  if (!session.repoFullName) return null;
+  if (session.taskBranch) return session.taskBranch;
+  if (session.taskBranchAttempted) return null;
+  let current = null;
+  try {
+    current = await git.getCurrentBranch(session.dir);
+  } catch {
+    return null;
+  }
+  const base = session.baseBranch || current || session.branch || 'main';
+  if (current && current !== 'main' && current !== 'master') {
+    session.taskBranch = current;
+    session.baseBranch = base;
+    return current;
+  }
+  session.taskBranchAttempted = true;
+  try {
+    const created = await git.createTaskBranch(session.dir, base, taskTitle);
+    session.baseBranch = created.base;
+    session.taskBranch = created.branch;
+    session.branch = created.branch;
+    session.taskBranchAttempted = false;
+    send('log', { type: 'info', title: `Rama de tarea creada: ${created.branch}`, detail: 'El trabajo de este turno va en su propia rama; main queda intacto hasta que abras el PR' });
+    const token = session.githubToken || process.env.GITHUB_TOKEN;
+    const parsed = git.parseRepoUrl(`https://github.com/${session.repoFullName}`);
+    if (token && parsed) {
+      try {
+        await git.pushBranch({ dir: session.dir, branch: created.branch, token, owner: parsed.owner, repo: parsed.repo });
+      } catch (e) {
+        send('log', { type: 'info', title: 'Rama creada solo en local (sin push inicial)', detail: e.message });
+      }
+    }
+    return created.branch;
+  } catch (e) {
+    send('log', { type: 'info', title: 'No se pudo crear la rama de tarea', detail: `${e.message} — el trabajo continúa en la rama actual` });
+    return null;
+  }
+}
+
 function directoryHasPythonTests(dir, depth = 0) {
   if (depth > 4) return false;
   let entries;
@@ -1374,6 +1424,7 @@ async function handleChatTurn(req, res) {
             appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: 'autoApply desactivado', alreadyApplied: false });
             continue;
           }
+          await ensureTaskBranch(session, send, message);
           out.diffResults.push(...await processDiffBlock({ diffBlock: translated.diff, session, send, signal: abortController.signal, autoAppliedPaths, appliedDiffs }));
           continue;
         }
@@ -1458,6 +1509,7 @@ async function handleChatTurn(req, res) {
       }
       if (autoApply && !isPlanMode && session.repoFullName) {
         const diffBlocks = git.extractDiffBlocks(result);
+        if (diffBlocks.length) await ensureTaskBranch(session, send, message);
         for (const diffBlock of diffBlocks) {
           const diffKey = diffBlock.trim();
           if (!diffKey || seenDiffs.has(diffKey)) continue;

@@ -345,6 +345,117 @@ function extractDiffBlocks(text) {
   return blocks;
 }
 
+/**
+ * Nombre de rama de tarea estilo Codex (H3): `baro/<slug>-<ts36>`.
+ * El slug sale del título de la tarea, sin acentos ni caracteres
+ * raros; el sufijo temporal evita colisiones. Puro y testeable.
+ */
+function taskBranchName(title) {
+  const slug = String(title || 'tarea')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'tarea';
+  // Contador por proceso: dos ramas creadas en el mismo milisegundo
+  // no deben colisionar (el timestamp solo no bastaba).
+  taskBranchName._counter = (taskBranchName._counter || 0) + 1;
+  return `baro/${slug}-${Date.now().toString(36)}${taskBranchName._counter.toString(36)}`;
+}
+
+async function getCurrentBranch(dir) {
+  const git = simpleGit(dir);
+  const status = await git.status();
+  return status.current || null;
+}
+
+/**
+ * Crea la rama de tarea de este turno (H3) a partir de `baseBranch`.
+ * Si el checkout de la base falla (p. ej. cambios sin commitear que
+ * chocan), crea la rama desde el HEAD actual en vez de romper el
+ * turno: lo importante es no escribir nunca sobre main/master.
+ * Devuelve { branch, base }.
+ */
+async function createTaskBranch(dir, baseBranch, title) {
+  const git = simpleGit(dir);
+  const base = (baseBranch || 'main').trim() || 'main';
+  const branch = taskBranchName(title);
+  try { await git.fetch('origin', base); } catch {}
+  try { await git.checkout(base); } catch {}
+  await git.checkout(['-b', branch]);
+  return { branch, base };
+}
+
+/**
+ * Sube una rama (sin commitear nada nuevo): se usa para publicar
+ * la ref de la rama de tarea recién creada y para el push normal
+ * de /agent/push. Token solo en memoria, remoto limpio después.
+ */
+async function pushBranch({ dir, branch, token, owner, repo }) {
+  const git = simpleGit(dir);
+  const useAuthed = !!(token && owner && repo);
+  if (useAuthed) {
+    await git.remote(['set-url', 'origin', authedRemote(owner, repo, token)]);
+  }
+  try {
+    await git.push('origin', branch, ['--set-upstream']);
+  } finally {
+    if (useAuthed) await setCleanRemote(git, owner, repo);
+  }
+  return { pushed: true, branch };
+}
+
+/**
+ * Abre un PR en GitHub (H3) con fetch directo a api.github.com,
+ * sin dependencias nuevas. Si ya existe un PR abierto para esta
+ * rama, lo devuelve en vez de duplicarlo. Sin token NO finge
+ * haber creado nada: devuelve { ok:false, code:'no-token' } con
+ * el motivo honesto (la rama con los cambios ya existe).
+ */
+async function createPullRequest({ owner, repo, head, base, title, body, token }) {
+  if (!owner || !repo || !head || !base) {
+    return { ok: false, code: 'bad-args', error: 'Faltan owner/repo/head/base para crear el PR' };
+  }
+  if (!token) {
+    return {
+      ok: false,
+      code: 'no-token',
+      error: 'No hay token de GitHub configurado. Añade GITHUB_TOKEN en el servidor o conecta tu cuenta para abrir el PR; la rama con los cambios ya existe y puedes abrirlo a mano.',
+    };
+  }
+  const headers = {
+    'User-Agent': 'Baro',
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  try {
+    const existingResp = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/pulls?head=${encodeURIComponent(`${owner}:${head}`)}&state=open`,
+      { headers }
+    );
+    if (existingResp.ok) {
+      const existing = await existingResp.json();
+      if (Array.isArray(existing) && existing.length) {
+        return { ok: true, alreadyExists: true, url: existing[0].html_url, number: existing[0].number, title: existing[0].title };
+      }
+    }
+  } catch {
+    // Si la comprobación falla, se intenta crear el PR igualmente.
+  }
+  const resp = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ title: title || `Baro: cambios en ${head}`, head, base, body: body || '' }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    return { ok: false, code: 'github-error', status: resp.status, error: (data && data.message) || `GitHub respondió ${resp.status}` };
+  }
+  return { ok: true, alreadyExists: false, url: data.html_url, number: data.number, title: data.title };
+}
+
 async function commitAndPush({ dir, message, branch, name, email, token, owner, repo }) {
   const git = simpleGit(dir);
   await git.addConfig('user.name', name || 'Baro');
@@ -372,7 +483,7 @@ async function commitAndPush({ dir, message, branch, name, email, token, owner, 
     if (useAuthed) await setCleanRemote(git, owner, repo);
   }
 
-  return { pushed: true, files: changed };
+  return { pushed: true, files: changed, branch };
 }
 
 /** Diff completo contra HEAD + lista de archivos cambiados (estilo Codex `/diff`). */
@@ -468,6 +579,11 @@ module.exports = {
   applyUnifiedDiff,
   extractDiffBlocks,
   commitAndPush,
+  taskBranchName,
+  getCurrentBranch,
+  createTaskBranch,
+  pushBranch,
+  createPullRequest,
   diffAgainstHead,
   gitStatusDiff,
   createCheckpoint,
