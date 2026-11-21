@@ -1081,15 +1081,14 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
       content: m.text,
     }));
   }
-  // Guarda el par del turno en la conversación. Si el turno se
-  // detiene o falla, queda al menos lo que se pidió (sin respuesta
-  // inventada).
-  const saveThreadPair = (assistantText) => {
-    if (!threadId) return;
-    const msgs = [{ role: 'me', text: message }];
-    if (assistantText) msgs.push({ role: 'ai', text: assistantText });
-    threadsStore.appendToThread(session.ownerUid, threadId, msgs);
-  };
+  // El mensaje del usuario se guarda AL EMPEZAR el turno: así la
+  // lista muestra el título y el preview reales de inmediato, y si
+  // el usuario vuelve a mitad del trabajo, la conversación ya trae
+  // lo que pidió (sin respuesta inventada: la respuesta se guarda
+  // solo cuando el turno termina).
+  if (threadId) {
+    threadsStore.appendToThread(session.ownerUid, threadId, [{ role: 'me', text: message }]);
+  }
 
   const planSteps = [
     { id: 'analizar', label: 'Analizar la petición', status: 'active' },
@@ -1672,7 +1671,9 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
     session.history = session.history || [];
     session.history.push({ role: 'user', content: message });
     session.history.push({ role: 'assistant', content: result });
-    saveThreadPair(result);
+    if (threadId) {
+      threadsStore.appendToThread(session.ownerUid, threadId, [{ role: 'ai', text: result }]);
+    }
 
     const diffBlocks = git.extractDiffBlocks(result);
     sendPlan(null, true);
@@ -1683,7 +1684,6 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
     send('done', donePayload);
     return { status: 'done', ...donePayload };
   } catch (e) {
-    saveThreadPair(null);
     if (e.name === 'AbortError') {
       send('log', { type: 'info', title: 'Detenido por el usuario' });
       send('done', { text: '', aborted: true });

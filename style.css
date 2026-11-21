@@ -2164,6 +2164,30 @@ body.side-open #sidebar{transform:translateX(0)}
   font-size:14px;color:var(--text3);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
+/* v10 — filas de conversación reales: la fila es un div con el
+   botón principal y las herramientas (renombrar/borrar). */
+.chat-row-main{
+  display:flex;align-items:center;gap:14px;flex:1;min-width:0;
+  padding:0;background:transparent;border:none;cursor:pointer;
+  text-align:left;font:inherit;color:inherit;
+}
+.chat-row-tools{display:flex;gap:2px;flex:none;align-items:center}
+.chat-row-tool{
+  width:34px;height:34px;display:grid;place-items:center;
+  background:transparent;border:none;color:var(--text3);
+  cursor:pointer;border-radius:50%;padding:0;
+}
+.chat-row-tool:active{background:var(--bg3)}
+.chat-row-tool.armed{color:#ff3b30}
+.chat-row-active{background:var(--bg3)}
+.chat-row-rename{
+  font:inherit;font-size:17px;font-weight:600;color:var(--text);
+  background:var(--bg3);border:.5px solid var(--hair-soft);
+  border-radius:8px;padding:2px 6px;width:100%;min-width:0;
+}
+/* v10 — tarjetas que exigen repo sin él, y punto de trabajo en curso */
+.qcard-needs-repo,.task-card-needs-repo{opacity:.55}
+.job-pulse{width:10px;height:10px;border-radius:50%;background:#fff;animation:pulse 1s infinite}
 .chats-bottom{margin-top:auto;display:flex;align-items:center;gap:12px;padding-top:12px;flex:none}
 .chats-search{
   flex:1;display:flex;align-items:center;gap:10px;height:52px;

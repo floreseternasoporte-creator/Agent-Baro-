@@ -17,6 +17,35 @@ const firebaseConfig = {
   measurementId: "G-E2JX3ZGG5K"
 };
 
+// Si el CDN de Firebase no cargó (sin red, bloqueo), antes el script
+// moría aquí con `firebase is not defined`, el login nunca aparecía
+// y la app parecía funcionar mientras cada acción fallaba (v10 BUG 2).
+// Ahora se deja un FB mínimo con el motivo claro y se muestra el
+// login con el error, para que el usuario sepa qué pasa.
+if (typeof firebase === 'undefined') {
+  window.FB = {
+    get currentUser() { return null; },
+    async getIdToken() { throw new Error('El inicio de sesión no cargó. Revisa tu conexión y recarga la página.'); },
+    saveUserData: async () => {},
+    saveLastRepo: async () => {},
+    loadUserData: async () => null,
+  };
+  const showFirebaseDown = () => {
+    const el = document.getElementById('auth-overlay');
+    if (el) el.classList.add('visible');
+    const err = document.getElementById('auth-error');
+    if (err) {
+      err.textContent = 'No se pudo cargar el inicio de sesión. Revisa tu conexión y recarga la página.';
+      err.style.display = '';
+    }
+    const btn = document.getElementById('auth-submit-btn');
+    if (btn) btn.disabled = true;
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showFirebaseDown);
+  else showFirebaseDown();
+  throw new Error('Firebase no cargó (sin conexión con el CDN).');
+}
+
 firebase.initializeApp(firebaseConfig);
 
 const _fbAuth = firebase.auth();

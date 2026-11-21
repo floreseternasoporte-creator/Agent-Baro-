@@ -42,6 +42,10 @@ const S = {
   applyMode: 'auto',     // 'auto' = aplica diffs solo · 'ask' = Preguntar (el usuario aplica)
   planSteps: [],         // pasos del plan del turno (evento SSE "plan")
   lastVerify: null,      // ultimo resultado de tests (evento SSE "verify")
+  currentThreadId: null, // conversación abierta (servidor, FASE 3)
+  currentJobId: null,    // trabajo en curso, si lo hay (H2)
+  threads: [],           // lista real de conversaciones del usuario
+  activeJobs: [],        // trabajos en curso o en cola (H2)
 };
 
 // Base de la API real. Mismo origen que sirve el frontend
@@ -121,27 +125,38 @@ const QUICK_TASKS = {
   ],
   code: [
     {
-      id: 'analyze', color: 'accent', title: 'Analizar repo', sub: 'Arquitectura y tecnologías',
+      id: 'analyze', color: 'accent', title: 'Analizar repo', sub: 'Arquitectura y tecnologías', needsRepo: true,
       icon: '<path d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z"/>',
       prompt: 'Analiza el repositorio completo: arquitectura, tecnologías usadas, patrones de diseño usados, dependencias clave y los 5 problemas más importantes con recomendaciones.',
     },
     {
-      id: 'bugs', color: 'green', title: 'Detectar bugs', sub: 'Con el cambio exacto',
+      id: 'bugs', color: 'green', title: 'Detectar bugs', sub: 'Con el cambio exacto', needsRepo: true,
       icon: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>',
       prompt: 'Detecta y corrige todos los bugs del proyecto. Para cada bug muestra: archivo, linea exacta, descripcion del problema y el cambio exacto para arreglarlo.',
     },
     {
-      id: 'security', color: 'amber', title: 'Revisar seguridad', sub: 'Vulnerabilidades',
+      id: 'security', color: 'amber', title: 'Revisar seguridad', sub: 'Vulnerabilidades', needsRepo: true,
       icon: '<path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>',
       prompt: 'Haz una revisión de seguridad completa. Para cada problema: archivo, linea, riesgo y el código exacto de la corrección.',
     },
     {
-      id: 'perf', color: 'purple', title: 'Rendimiento', sub: 'Optimizar velocidad',
+      id: 'perf', color: 'purple', title: 'Rendimiento', sub: 'Optimizar velocidad', needsRepo: true,
       icon: '<path d="M7 2v11h3v9l7-12h-4l4-8z"/>',
       prompt: 'Optimiza el rendimiento: lazy loading, N+1 queries, bundle size, caching, async/await mal usado. Muestra el codigo optimizado.',
     },
   ],
 };
+
+// Las tarjetas de código exigen un repositorio conectado: sin él,
+// el prompt iría al vacío. Tocarla sin repo abre la conexión.
+function doRepoQuick(prompt) {
+  if (!S.repoData) {
+    showToast('Primero conecta un repositorio');
+    openModal();
+    return;
+  }
+  doQuick(prompt);
+}
 
 // Estas dos no son "prompts para la IA", son acciones directas
 // de la app, asi que quedan separadas del set de arriba.
@@ -174,16 +189,25 @@ const SESSION_TASKS = [
 ];
 
 function renderQuickCards() {
+  // El prompt va como argumento JSON dentro del onclick: el atributo
+  // usa comillas SIMPLES (el JSON lleva dobles) y los apóstrofos del
+  // texto van como &#39; (el HTML los decodifica antes de que JS lo
+  // lea). Con comillas dobles el atributo se truncaba y las 14
+  // tarjetas quedaban muertas (v10 BUG 1).
   const mount = (containerId, list, fn = 'doQuick') => {
     const el = document.getElementById(containerId);
     if (!el) return;
-    el.innerHTML = list.map((t) => `
-      <button class="qcard" onclick="${fn}(${JSON.stringify(t.prompt)})">
+    el.innerHTML = list.map((t) => {
+      const needsRepo = t.needsRepo && !S.repoData;
+      const clickFn = t.needsRepo ? 'doRepoQuick' : fn;
+      const promptArg = JSON.stringify(t.prompt).replace(/'/g, '&#39;');
+      return `
+      <button class="qcard${needsRepo ? ' qcard-needs-repo' : ''}" onclick='${clickFn}(${promptArg})'>
         <div class="qcard-icon ${t.color}"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style="color:#fff">${t.icon}</svg></div>
         <div class="qcard-title">${esc(t.title)}</div>
-        <div class="qcard-sub">${esc(t.sub)}</div>
-      </button>
-    `).join('');
+        <div class="qcard-sub">${esc(t.sub)}${needsRepo ? ' · necesita un repositorio' : ''}</div>
+      </button>`;
+    }).join('');
   };
   mount('quick-grid-create', QUICK_TASKS.create, 'doQuickPrefill');
   mount('quick-grid-investigate', QUICK_TASKS.investigate, 'doQuickPrefill');
@@ -191,6 +215,8 @@ function renderQuickCards() {
 }
 
 function renderTaskScreen() {
+  // Trabajos en curso (H2): se refrescan en segundo plano.
+  refreshJobsSection();
   const quickList = [...QUICK_TASKS.create];
   const quickEl = document.getElementById('task-list-quick');
   if (quickEl) {
@@ -210,18 +236,27 @@ function renderTaskScreen() {
 
   const toolsEl = document.getElementById('task-list-tools');
   if (toolsEl) {
-    toolsEl.innerHTML = [...QUICK_TASKS.investigate, ...QUICK_TASKS.code].map((t) => `
-      <div class="task-card" onclick='${t.prompt.endsWith(': ') ? `doQuickPrefill(${JSON.stringify(t.prompt)})` : `doQuick(${JSON.stringify(t.prompt)});showScreen("chat")`}'>
+    // Mismo cuidado que renderQuickCards: atributo con comillas
+    // simples y apóstrofos como &#39;; las tarjetas de código
+    // exigen repo (doRepoQuick) y se atenúan sin él.
+    toolsEl.innerHTML = [...QUICK_TASKS.investigate, ...QUICK_TASKS.code].map((t) => {
+      const promptArg = JSON.stringify(t.prompt).replace(/'/g, '&#39;');
+      const needsRepo = t.needsRepo && !S.repoData;
+      const click = t.needsRepo
+        ? `doRepoQuick(${promptArg})`
+        : (t.prompt.endsWith(': ') ? `doQuickPrefill(${promptArg})` : `doQuick(${promptArg});showScreen("chat")`);
+      return `
+      <div class="task-card${needsRepo ? ' task-card-needs-repo' : ''}" onclick='${click}'>
         <div class="task-icon" style="background:var(--${t.color})">
           <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="20" height="20" style="color:#fff">${t.icon}</svg>
         </div>
         <div class="task-info">
           <div class="task-name">${esc(t.title)}</div>
-          <div class="task-desc">${esc(t.sub)}</div>
+          <div class="task-desc">${esc(t.sub)}${needsRepo ? ' · necesita un repositorio' : ''}</div>
         </div>
         <svg class="task-arrow" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   }
 
   const sessionEl = document.getElementById('task-list-session');
@@ -259,7 +294,7 @@ function showScreen(name) {
   if (name === 'settings') syncSettingsUI();
   if (name === 'files') renderFileList();
   if (name === 'tasks') renderTaskScreen();
-  if (name === 'chats') renderChatsList();
+  if (name === 'chats') { renderChatsList(); loadThreads(); }
   // v8: en móvil el chat arranca oculto (inicio = lista); al entrar,
   // el textarea necesita su altura real (autoGrow con scrollHeight 0
   // lo dejaba en 0px y el placeholder se veía recortado).
@@ -267,24 +302,182 @@ function showScreen(name) {
 }
 
 // ═══════════════════════════════════════════
-// BARO v8 — lista de chats + perfil (shell app iOS)
-// La app tiene una sola conversación (Baro); la lista muestra
-// su último mensaje como preview, como la lista de Grok.
+// BARO v10 — lista de conversaciones reales (FASE 3)
+// Las conversaciones viven en el servidor (por usuario): la lista
+// muestra título, preview y hora reales, no un preview inventado
+// del DOM. Cada fila se abre; el lápiz renombra en línea y la
+// papelera borra en dos toques. La fila de la conversación con un
+// trabajo en curso muestra "Trabajando…".
 // ═══════════════════════════════════════════
+function formatThreadTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Ayer';
+  return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+}
+
+async function loadThreads() {
+  let list = null;
+  try {
+    const resp = await authorizedApiFetch(`${API}/threads`);
+    if (resp.ok) list = (await resp.json()).threads;
+  } catch { /* sin sesión, la lista queda como estaba */ }
+  if (!Array.isArray(list)) return;
+  S.threads = list;
+  renderChatsList();
+}
+
 function renderChatsList() {
-  const prev = document.getElementById('chats-row-preview');
-  const time = document.getElementById('chats-row-time');
-  if (!prev) return;
-  const last = [...document.querySelectorAll('#msgs .msg')].pop();
-  if (!last) {
-    prev.textContent = 'Sin mensajes aún';
-    if (time) time.textContent = '';
+  const container = document.getElementById('chats-list');
+  if (!container) return;
+  const activeByThread = {};
+  for (const job of S.activeJobs || []) {
+    if (job.threadId) activeByThread[job.threadId] = true;
+  }
+  const markSvg = '<svg class="logo-svg" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true" focusable="false"><use href="#baro-mark"/></svg>';
+  if (!S.threads.length) {
+    container.innerHTML = `
+      <button class="chat-row" id="chats-row-baro" onclick="showScreen('chat')">
+        <span class="chat-row-mark">${markSvg}</span>
+        <span class="chat-row-txt">
+          <span class="chat-row-top"><span class="chat-row-name">Baro</span><span class="chat-row-time" id="chats-row-time"></span></span>
+          <span class="chat-row-preview" id="chats-row-preview">Sin mensajes aún</span>
+        </span>
+      </button>`;
     return;
   }
-  const body = last.querySelector('.mbody');
-  const text = (body?.innerText || body?.textContent || '').trim().replace(/\s+/g, ' ');
-  prev.textContent = text ? text.slice(0, 90) : 'Sin mensajes aún';
-  if (time) time.textContent = last.querySelector('.mtime')?.textContent || '';
+  container.innerHTML = S.threads.map((t) => {
+    const working = !!activeByThread[t.id];
+    const active = t.id === S.currentThreadId;
+    return `
+    <div class="chat-row${active ? ' chat-row-active' : ''}" data-thread="${esc(t.id)}">
+      <button class="chat-row-main" onclick="openThread('${esc(t.id)}')">
+        <span class="chat-row-mark">${markSvg}</span>
+        <span class="chat-row-txt">
+          <span class="chat-row-top"><span class="chat-row-name">${esc(t.title)}</span><span class="chat-row-time">${esc(formatThreadTime(t.updatedAt))}</span></span>
+          <span class="chat-row-preview">${working ? 'Trabajando…' : esc(t.preview || 'Sin mensajes aún')}</span>
+        </span>
+      </button>
+      <span class="chat-row-tools">
+        <button class="chat-row-tool" onclick="renameThreadInline('${esc(t.id)}', this)" aria-label="Cambiar nombre"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
+        <button class="chat-row-tool" onclick="deleteThread('${esc(t.id)}', this)" aria-label="Borrar conversación"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+      </span>
+    </div>`;
+  }).join('');
+}
+
+// Abre una conversación: pinta sus mensajes guardados y el
+// siguiente mensaje sigue en el mismo hilo.
+async function openThread(id, opts = {}) {
+  if (S.busy && !opts.force) { showToast('El agente esta trabajando...'); return; }
+  let thread = null;
+  try {
+    const resp = await authorizedApiFetch(`${API}/threads/${encodeURIComponent(id)}`);
+    if (resp.ok) thread = (await resp.json()).thread;
+  } catch {}
+  if (!thread) { showToast('No se pudo abrir la conversación'); return; }
+  S.currentThreadId = thread.id;
+  const msgs = document.getElementById('msgs');
+  msgs.innerHTML = '';
+  document.getElementById('empty').classList.add('gone');
+  showActivity(false);
+  resetComputerView();
+  hidePushBanner();
+  S.pendingEdits = [];
+  updateTasksBadge();
+  clearActivityLog();
+  resetPlanPanel();
+  _restoringChat = true;
+  for (const m of thread.messages || []) {
+    if (!m || !m.text) continue;
+    const div = addMsg(m.role === 'me' ? 'me' : 'ai', m.text);
+    const bodyEl = div.querySelector('.mbody');
+    if (bodyEl) bodyEl.innerHTML = `<p style="white-space:pre-wrap">${esc(m.text)}</p>`;
+    const timeEl = div.querySelector('.mtime');
+    if (timeEl && m.time) timeEl.textContent = m.time;
+    div.querySelector('.msg-actions')?.remove();
+  }
+  _restoringChat = false;
+  document.getElementById('context-bar')?.classList.remove('show');
+  try { localStorage.removeItem(chatStoreKey()); } catch {}
+  renderChatsList();
+  showScreen('chat');
+  scrollChatToBottom(false);
+}
+
+// Renombra en línea: el título se vuelve un campo editable
+// (Enter guarda, Escape cancela, al salir guarda).
+function renameThreadInline(id, btn) {
+  const row = btn.closest('.chat-row');
+  const nameEl = row?.querySelector('.chat-row-name');
+  if (!nameEl || nameEl.querySelector('input')) return;
+  const current = nameEl.textContent;
+  const input = document.createElement('input');
+  input.className = 'chat-row-rename';
+  input.value = current;
+  input.maxLength = 60;
+  input.setAttribute('aria-label', 'Nombre de la conversación');
+  nameEl.textContent = '';
+  nameEl.appendChild(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = async (save) => {
+    if (done) return;
+    done = true;
+    const title = input.value.trim();
+    if (save && title && title !== current) {
+      try {
+        const resp = await authorizedApiFetch(`${API}/threads/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title }),
+        });
+        if (resp.ok) { await loadThreads(); return; }
+      } catch {}
+      showToast('No se pudo cambiar el nombre');
+    }
+    nameEl.textContent = current;
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+    if (e.key === 'Escape') commit(false);
+  });
+  input.addEventListener('blur', () => commit(true));
+}
+
+// Borra en dos toques: el primero arma ("¿Borrar?"), el segundo
+// borra de verdad. Sin diálogos del sistema.
+async function deleteThread(id, btn) {
+  if (!btn.dataset.armed) {
+    btn.dataset.armed = '1';
+    btn.classList.add('armed');
+    btn.title = 'Toca otra vez para borrar';
+    setTimeout(() => { btn.removeAttribute('data-armed'); btn.classList.remove('armed'); }, 3000);
+    return;
+  }
+  btn.removeAttribute('data-armed');
+  btn.classList.remove('armed');
+  try {
+    const resp = await authorizedApiFetch(`${API}/threads/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!resp.ok) throw new Error();
+    if (S.currentThreadId === id) {
+      S.currentThreadId = null;
+      document.getElementById('msgs').innerHTML = '';
+      document.getElementById('empty').classList.remove('gone');
+    }
+    await loadThreads();
+    showToast('Conversación borrada');
+  } catch {
+    showToast('No se pudo borrar la conversación');
+  }
 }
 
 // Nombre/iniciales del usuario para el avatar (Firebase o invitado).
@@ -460,31 +653,52 @@ async function submitFeedback() {
   }
 }
 
+// Intentos de initSession: distinguen "aún no se ha intentado"
+// (Comprobando…) de "se intentó y no hay conexión" (Sin conexión).
+// Sin esto los badges se quedaban en "Comprobando…" para siempre
+// (v10 BUG 3). _initToastShown evita el spam de avisos.
+let _initAttempts = 0;
+let _initToastShown = false;
+
 function updateStatusBadges() {
   const el = (id) => document.getElementById(id);
+  const serverUp = !!S.serverConfig;
   const ollamaOk = !!S.serverConfig?.ollamaReady;
+  // La inteligencia trabaja aunque la IA local no esté (el agente
+  // usa sus proveedores en la nube): si el servidor respondió, el
+  // estado es Listo. Solo sin servidor hay "Sin conexión".
+  const aiState = serverUp ? 'Listo para trabajar' : (_initAttempts > 0 ? 'Sin conexión' : 'Comprobando…');
+  const aiShort = serverUp ? 'Listo' : (_initAttempts > 0 ? 'Sin conexión' : 'Comprobando…');
 
   el('ollama-ok-badge') && (el('ollama-ok-badge').style.display = ollamaOk ? '' : 'none');
-  el('ollama-warn-badge') && (el('ollama-warn-badge').style.display = ollamaOk ? 'none' : '');
+  const warnBadge = el('ollama-warn-badge');
+  if (warnBadge) {
+    warnBadge.style.display = ollamaOk ? 'none' : '';
+    warnBadge.textContent = !serverUp
+      ? (_initAttempts > 0 ? 'Sin conexión' : 'Iniciando')
+      : 'No disponible';
+  }
   // En pantalla nunca se muestran nombres de proveedor ni de modelo:
   // solo el estado (Listo / Comprobando…). Los datos reales siguen en
   // S.serverConfig para uso interno.
-  el('ollama-settings-sub') && (el('ollama-settings-sub').textContent = ollamaOk ? 'Listo' : 'Comprobando…');
+  el('ollama-settings-sub') && (el('ollama-settings-sub').textContent = serverUp
+    ? (ollamaOk ? 'Listo' : 'No disponible')
+    : (_initAttempts > 0 ? 'Sin conexión' : 'Comprobando…'));
   el('ai-model-label') && (el('ai-model-label').textContent = 'Inteligencia');
-  el('ai-model-sub') && (el('ai-model-sub').textContent = ollamaOk ? 'Listo para trabajar' : 'Comprobando…');
+  el('ai-model-sub') && (el('ai-model-sub').textContent = aiState);
 
   const ghOk = !!S.repoData;
   el('gh-settings-badge') && (el('gh-settings-badge').style.display = ghOk ? 'none' : '');
   el('gh-settings-badge-ok') && (el('gh-settings-badge-ok').style.display = ghOk ? '' : 'none');
   el('gh-settings-sub') && (el('gh-settings-sub').textContent = ghOk ? S.repoData.full_name : 'Conecta un repositorio');
   const modelBadge = el('ai-model-badge');
-  if (modelBadge) modelBadge.textContent = ollamaOk ? 'Listo' : 'Comprobando…';
+  if (modelBadge) modelBadge.textContent = aiShort;
   // Sidebar v7: mismo estado del repo y de la inteligencia, siempre visible.
   el('side-repo-name') && (el('side-repo-name').textContent = ghOk ? S.repoData.full_name : 'Sin repositorio');
   el('side-repo-sub') && (el('side-repo-sub').textContent = ghOk
     ? (S.branch ? `Rama ${S.branch} · conectado` : 'Conectado a GitHub')
     : 'Conecta un repo para trabajar sobre código real');
-  el('side-model') && (el('side-model').textContent = ollamaOk ? 'Listo para trabajar' : 'Comprobando…');
+  el('side-model') && (el('side-model').textContent = aiState);
   syncStatusBar();
 }
 
@@ -738,6 +952,8 @@ async function connectRepo(repo) {
 
   updateStatusBadges();
   renderFileList();
+  // Las tarjetas que exigen repo cambian de estado al conectar.
+  renderQuickCards();
 
   // Guardar ultimo repo en Firebase para auto-reconexion
   if (window.FB?.currentUser) {
@@ -1940,12 +2156,13 @@ function finalStream(div, text) {
 }
 
 // ═══════════════════════════════════════════
-// AI — via backend real (SSE)
-// El prompt, la busqueda de archivos relevantes y la lectura
-// de su contenido ahora ocurren en el servidor, contra el
-// clon real en disco — no aqui. Esta funcion solo abre el
-// stream, reenvia los logs de actividad al panel visual y
-// devuelve el texto final.
+// AI — via backend real (trabajos async, v10 H2)
+// POST /api/chat ya no devuelve el stream del turno: crea un
+// trabajo y responde 202 con su id. El turno sigue corriendo en
+// el servidor aunque se cierre la pestaña; el cliente se engancha
+// a sus eventos con attachToJob() y los reproduce (los ya
+// guardados primero, luego en vivo). El protocolo de eventos es
+// el mismo de siempre (plan/verify/log/computer/delta/done/error).
 // ═══════════════════════════════════════════
 async function callAI(msg, onStream) {
   await ensureSession();
@@ -1955,6 +2172,7 @@ async function callAI(msg, onStream) {
   const makeBody = () => JSON.stringify({
     sessionId: S.sessionId,
     message: msg,
+    threadId: S.currentThreadId,
     planMode: S.planModeEnabled,
     fileLimit: S.fileLimit,
     // El segmented Auto/Preguntar del composer manda de verdad:
@@ -1990,6 +2208,35 @@ async function callAI(msg, onStream) {
     }
   }
 
+  if (resp.status !== 202) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || `Error ${resp.status}`);
+  }
+  const { jobId } = await resp.json();
+  if (!jobId) throw new Error('El servidor no devolvió el trabajo.');
+  S.currentJobId = jobId;
+  return attachToJob(jobId, onStream, msg);
+}
+
+// Pide la cancelación del trabajo en el servidor (el turno se
+// detiene de verdad, no solo se cierra el stream local).
+async function cancelJob(jobId) {
+  if (!jobId) return;
+  try {
+    await authorizedApiFetch(`${API}/jobs/${jobId}/cancel`, { method: 'POST' });
+  } catch { /* si no llega, el turno termina solo; nada se rompe */ }
+}
+
+// Se engancha al stream de eventos de un trabajo: reproduce los
+// eventos ya guardados y sigue en vivo hasta el estado final.
+// Cerrar esta conexión NO cancela el trabajo (sigue en el
+// servidor); al volver, attachToJob reconstruye el texto desde
+// los deltas guardados. Devuelve el texto final del turno.
+async function attachToJob(jobId, onStream, msg) {
+  const resp = await authorizedApiFetch(`${API}/jobs/${jobId}/events`, {
+    signal: S.abortController?.signal,
+  });
+
   if (!resp.ok || !resp.body) {
     const err = await resp.json().catch(() => ({}));
     throw new Error(err.error || `Error ${resp.status}`);
@@ -1999,8 +2246,55 @@ async function callAI(msg, onStream) {
   const decoder = new TextDecoder();
   let buffer = '';
   let finalText = '';
+  let outcome = null;
 
-  while (true) {
+  const handleEvent = (eventName, payload) => {
+    if (eventName === 'plan') {
+      // Plan del turno (Codex-style): pasos con estado en vivo.
+      renderPlan(payload);
+    } else if (eventName === 'verify') {
+      // Resultado de la verificación con tests del turno.
+      renderVerify(payload);
+    } else if (eventName === 'log') {
+      // Actividad real del servidor (leyendo archivos reales,
+      // ejecutando, etc.) reflejada en el panel de actividad.
+      log(payload.type, payload.title, payload.detail || '');
+    } else if (eventName === 'computer') {
+      // Mismo origen que 'log' (eventos reales del servidor), pero
+      // renderizado como una ventana de navegador/terminal/editor
+      // en vivo en vez de una linea de texto.
+      renderComputerEvent(payload);
+    } else if (eventName === 'delta') {
+      // El servidor envia SOLO el fragmento nuevo ('delta') y el
+      // frontend lo acumula — O(n) de red en vez de O(n²).
+      if (payload.delta !== undefined) S.streamAcc += payload.delta;
+      else if (payload.text !== undefined) S.streamAcc = payload.text;
+      finalText = S.streamAcc;
+      if (onStream) onStream(S.streamAcc);
+    } else if (eventName === 'error') {
+      throw new Error(payload.error);
+    } else if (eventName === 'done') {
+      finalText = payload.text ?? finalText;
+      if (payload.verify) renderVerify(payload.verify);
+      if (payload.threadId) {
+        // El turno creó (o usó) una conversación: adoptarla para
+        // que el siguiente mensaje siga en el mismo hilo.
+        S.currentThreadId = payload.threadId;
+        loadThreads();
+      }
+      S.lastAutoAppliedPaths = Array.isArray(payload.autoAppliedPaths) ? payload.autoAppliedPaths : [];
+      S.lastAppliedDiffs = Array.isArray(payload.appliedDiffs) ? payload.appliedDiffs : [];
+      for (const path of S.lastAutoAppliedPaths) {
+        if (!S.pendingEdits.some((edit) => edit.path === path)) S.pendingEdits.push({ path });
+      }
+      updateTasksBadge();
+    } else if (eventName === '__status__') {
+      // Estado final del trabajo: aquí termina el stream.
+      outcome = payload;
+    }
+  };
+
+  while (!outcome) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
@@ -2016,45 +2310,17 @@ async function callAI(msg, onStream) {
       const eventName = eventLine.slice(7).trim();
       let payload;
       try { payload = JSON.parse(dataLine.slice(6)); } catch { continue; }
-
-      if (eventName === 'plan') {
-        // Plan del turno (Codex-style): pasos con estado en vivo.
-        renderPlan(payload);
-      } else if (eventName === 'verify') {
-        // Resultado de la verificación con tests del turno.
-        renderVerify(payload);
-      } else if (eventName === 'log') {
-        // Actividad real del servidor (leyendo archivos reales,
-        // ejecutando, etc.) reflejada en el panel de actividad.
-        log(payload.type, payload.title, payload.detail || '');
-      } else if (eventName === 'computer') {
-        // Mismo origen que 'log' (eventos reales del servidor), pero
-        // renderizado como una ventana de navegador/terminal/editor
-        // en vivo en vez de una linea de texto.
-        renderComputerEvent(payload);
-      } else if (eventName === 'delta') {
-        // Protocolo nuevo: el servidor envia SOLO el fragmento nuevo
-        // ('delta') y el frontend lo acumula — O(n) de red en vez de O(n²).
-        // Se mantiene compatibilidad con servidores viejos que mandaban
-        // el texto completo en 'text'.
-        if (payload.delta !== undefined) S.streamAcc += payload.delta;
-        else if (payload.text !== undefined) S.streamAcc = payload.text;
-        finalText = S.streamAcc;
-        if (onStream) onStream(S.streamAcc);
-      } else if (eventName === 'error') {
-        throw new Error(payload.error);
-      } else if (eventName === 'done') {
-        finalText = payload.text ?? finalText;
-        if (payload.verify) renderVerify(payload.verify);
-        S.lastAutoAppliedPaths = Array.isArray(payload.autoAppliedPaths) ? payload.autoAppliedPaths : [];
-        S.lastAppliedDiffs = Array.isArray(payload.appliedDiffs) ? payload.appliedDiffs : [];
-        for (const path of S.lastAutoAppliedPaths) {
-          if (!S.pendingEdits.some((edit) => edit.path === path)) S.pendingEdits.push({ path });
-        }
-        updateTasksBadge();
-      }
+      handleEvent(eventName, payload);
+      if (outcome) break;
     }
   }
+  try { reader.cancel(); } catch { /* ya cerrado */ }
+
+  if (outcome?.status === 'failed') {
+    throw new Error(outcome.error || 'El trabajo terminó con un error.');
+  }
+  // 'cancelled' o 'done': se devuelve lo acumulado (en cancelado
+  // es el texto parcial; send() lo muestra como detenido).
 
   const estTokens = Math.round((msg.length + finalText.length) / 4) + 400;
   updateContextBar(estTokens);
@@ -2095,6 +2361,9 @@ function autoAnalyze() {
 // STOP / SEND
 // ═══════════════════════════════════════════
 function stopGeneration() {
+  // Primero se cancela el trabajo en el servidor (el turno se
+  // detiene de verdad) y luego se corta el stream local.
+  if (S.currentJobId) cancelJob(S.currentJobId);
   if (S.abortController) { S.abortController.abort(); showToast('Detenido'); }
 }
 
@@ -2134,16 +2403,30 @@ async function send() {
   // envia deltas incrementales que el frontend va sumando.
   S.streamAcc = '';
   const streamEl = mkStream();
-  let result = '';
 
+  await runTurnWithStream(streamEl, callAI(msg, (text) => { patchStream(streamEl, text); }));
+
+  S.busy = false;
+  S.abortController = null;
+  S.currentJobId = null;
+  document.getElementById('sndbtn').disabled = !inp.value.trim();
+  // La conversación ya tiene título y preview reales en el servidor.
+  loadThreads();
+}
+
+// Final compartido de un turno con stream (lo usan send() y
+// resumeJob()): pinta el resultado o el error en la burbuja y
+// cierra el panel de actividad. Devuelve el texto final.
+async function runTurnWithStream(streamEl, turnPromise) {
+  let result = '';
   try {
-    result = await callAI(msg, (text) => { patchStream(streamEl, text); });
+    result = await turnPromise;
     finalStream(streamEl, result);
     updateLastLog('ok', 'Completado');
     finishActivity('Completado — actividad del turno');
     cvSetLive(false);
     detectEditsAndShowPushBanner(result);
-  } catch(e) {
+  } catch (e) {
     if (e.name === 'AbortError') {
       finalStream(streamEl, result || '_Generacion detenida._');
     } else {
@@ -2153,10 +2436,77 @@ async function send() {
     finishActivity('Terminado — actividad del turno');
     cvSetLive(false);
   }
+  return result;
+}
 
+// ── Trabajos en curso (H2) ─────────────────────────────────────
+// Lista los trabajos activos en la pantalla Tareas y deja volver
+// a verlos: al tocar uno, la app abre su conversación y se
+// re-engancha a su stream (los eventos guardados reconstruyen
+// el texto desde el principio).
+async function refreshJobsSection() {
+  const title = document.getElementById('jobs-section-title');
+  const el = document.getElementById('task-list-jobs');
+  if (!el) return;
+  let jobs = [];
+  try {
+    const resp = await authorizedApiFetch(`${API}/jobs`);
+    if (resp.ok) {
+      jobs = (await resp.json()).jobs.filter((j) => j.status === 'running' || j.status === 'queued');
+    }
+  } catch { /* sin sesión, la sección queda vacía */ }
+  S.activeJobs = jobs;
+  if (title) title.style.display = jobs.length ? '' : 'none';
+  el.innerHTML = jobs.map((j) => `
+    <div class="task-card" onclick="resumeJob('${esc(j.id)}')">
+      <div class="task-icon" style="background:var(--accent)"><span class="job-pulse" aria-hidden="true"></span></div>
+      <div class="task-info">
+        <div class="task-name">${esc(String(j.message || 'Trabajo').slice(0, 60))}</div>
+        <div class="task-desc">${j.status === 'queued' ? 'En cola — toca para verlo' : 'Trabajando — toca para verlo'}</div>
+      </div>
+      <svg class="task-arrow" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+    </div>`).join('');
+  renderChatsList();
+}
+
+async function resumeJob(jobId) {
+  if (S.busy) { showToast('El agente esta trabajando...'); return; }
+  let job = null;
+  try {
+    const resp = await authorizedApiFetch(`${API}/jobs`);
+    if (resp.ok) job = (await resp.json()).jobs.find((j) => j.id === jobId) || null;
+  } catch {}
+  if (!job) { showToast('No se encontró ese trabajo'); return; }
+  if (job.status !== 'running' && job.status !== 'queued') {
+    showToast('Ese trabajo ya terminó');
+    refreshJobsSection();
+    return;
+  }
+  S.busy = true;
+  document.getElementById('sndbtn').disabled = true;
+  S.currentJobId = jobId;
+  S.currentThreadId = job.threadId || S.currentThreadId;
+  S.abortController = new AbortController();
+  if (job.threadId) await openThread(job.threadId, { force: true });
+  // Si la conversación aún no trae el mensaje (trabajo creado
+  // antes de guardarse), se pinta para no ver la respuesta sola.
+  const lastMsg = [...document.querySelectorAll('#msgs .msg')].pop();
+  const lastText = (lastMsg?.querySelector('.mbody')?.innerText || '').trim();
+  if (lastText !== String(job.message || '').trim()) addMsg('me', job.message);
+  clearActivityLog();
+  resetComputerView();
+  resetPlanPanel();
+  showActivity(true, 'Analizando tarea...');
+  showScreen('chat');
+  S.streamAcc = '';
+  const streamEl = mkStream();
+  await runTurnWithStream(streamEl, attachToJob(jobId, (text) => { patchStream(streamEl, text); }, job.message));
   S.busy = false;
   S.abortController = null;
-  document.getElementById('sndbtn').disabled = !inp.value.trim();
+  S.currentJobId = null;
+  document.getElementById('sndbtn').disabled = false;
+  loadThreads();
+  refreshJobsSection();
 }
 
 function doQuick(text) {
@@ -2181,6 +2531,7 @@ function doQuickPrefill(text) {
 
 function clearChat() {
   if (S.busy) { showToast('El agente esta trabajando'); return; }
+  S.currentThreadId = null; // la próxima conversación es un hilo nuevo
   document.getElementById('msgs').innerHTML = '';
   document.getElementById('empty').classList.remove('gone');
   showActivity(false);
@@ -2811,13 +3162,25 @@ async function initSession() {
     if (!sessResp.ok) throw new Error('No se pudo iniciar sesion con el servidor');
     const sess = await sessResp.json();
     S.sessionId = sess.sessionId;
+    _initAttempts = 0;
+    _initToastShown = false;
     updateStatusBadges();
+    // Conversaciones reales del usuario (FASE 3).
+    loadThreads();
   } catch (e) {
     // Si el backend no responde (por ejemplo, primer arranque en
     // Railway todavia construyendo), no rompemos la app: se
-    // reintenta la proxima vez que el usuario intente algo real.
-    showToast('No se pudo conectar con el servidor del agente. Reintentando...');
-    setTimeout(initSession, 3000);
+    // reintenta en segundo plano con espera creciente (3s, 6s,
+    // 12s… hasta 30s) y UN solo aviso — antes el aviso salía
+    // cada 3 segundos para siempre (v10 BUG 2/3).
+    _initAttempts++;
+    S.serverConfig = null;
+    updateStatusBadges();
+    if (!_initToastShown) {
+      _initToastShown = true;
+      showToast('No se pudo conectar con el servidor del agente. Reintentando...');
+    }
+    setTimeout(initSession, Math.min(30000, 3000 * 2 ** (_initAttempts - 1)));
     return;
   }
 
