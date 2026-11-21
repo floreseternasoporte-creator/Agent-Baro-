@@ -657,25 +657,31 @@ async function submitFeedback() {
 // (Comprobando…) de "se intentó y no hay conexión" (Sin conexión).
 // Sin esto los badges se quedaban en "Comprobando…" para siempre
 // (v10 BUG 3). _initToastShown evita el spam de avisos.
+// OJO: sin Firebase el inicio de sesión ni siquiera existe como
+// intento (initSession nunca corre), así que `tried` también cubre
+// window._fbLoadFailed, que pone firebase-auth.js cuando el CDN no
+// cargó; si no, el badge volvía a quedarse en "Comprobando…"
+// para siempre en el navegador real.
 let _initAttempts = 0;
 let _initToastShown = false;
 
 function updateStatusBadges() {
   const el = (id) => document.getElementById(id);
   const serverUp = !!S.serverConfig;
+  const tried = _initAttempts > 0 || window._fbLoadFailed === true;
   const ollamaOk = !!S.serverConfig?.ollamaReady;
   // La inteligencia trabaja aunque la IA local no esté (el agente
   // usa sus proveedores en la nube): si el servidor respondió, el
   // estado es Listo. Solo sin servidor hay "Sin conexión".
-  const aiState = serverUp ? 'Listo para trabajar' : (_initAttempts > 0 ? 'Sin conexión' : 'Comprobando…');
-  const aiShort = serverUp ? 'Listo' : (_initAttempts > 0 ? 'Sin conexión' : 'Comprobando…');
+  const aiState = serverUp ? 'Listo para trabajar' : (tried ? 'Sin conexión' : 'Comprobando…');
+  const aiShort = serverUp ? 'Listo' : (tried ? 'Sin conexión' : 'Comprobando…');
 
   el('ollama-ok-badge') && (el('ollama-ok-badge').style.display = ollamaOk ? '' : 'none');
   const warnBadge = el('ollama-warn-badge');
   if (warnBadge) {
     warnBadge.style.display = ollamaOk ? 'none' : '';
     warnBadge.textContent = !serverUp
-      ? (_initAttempts > 0 ? 'Sin conexión' : 'Iniciando')
+      ? (tried ? 'Sin conexión' : 'Iniciando')
       : 'No disponible';
   }
   // En pantalla nunca se muestran nombres de proveedor ni de modelo:
@@ -683,7 +689,7 @@ function updateStatusBadges() {
   // S.serverConfig para uso interno.
   el('ollama-settings-sub') && (el('ollama-settings-sub').textContent = serverUp
     ? (ollamaOk ? 'Listo' : 'No disponible')
-    : (_initAttempts > 0 ? 'Sin conexión' : 'Comprobando…'));
+    : (tried ? 'Sin conexión' : 'Comprobando…'));
   el('ai-model-label') && (el('ai-model-label').textContent = 'Inteligencia');
   el('ai-model-sub') && (el('ai-model-sub').textContent = aiState);
 

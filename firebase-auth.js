@@ -23,6 +23,12 @@ const firebaseConfig = {
 // Ahora se deja un FB mínimo con el motivo claro y se muestra el
 // login con el error, para que el usuario sepa qué pasa.
 if (typeof firebase === 'undefined') {
+  // Señal para script.js: el inicio de sesión no existe siquiera
+  // como intento (initSession nunca corre sin Firebase), así que los
+  // badges de ajustes deben mostrar "Sin conexión" y no quedarse
+  // en "Comprobando…" para siempre. script.js lo lee en
+  // updateStatusBadges() al arrancar.
+  window._fbLoadFailed = true;
   window.FB = {
     get currentUser() { return null; },
     async getIdToken() { throw new Error('El inicio de sesión no cargó. Revisa tu conexión y recarga la página.'); },
