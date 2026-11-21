@@ -51,7 +51,14 @@ function createFirebaseAuthMiddleware(verifyIdToken = verifyFirebaseIdToken) {
       .catch((error) => {
         if (res.headersSent) return undefined;
         if (error && error.statusCode === 503) {
-          return res.status(503).json({ error: 'La validación de Firebase no está disponible.' });
+          // El motivo concreto viaja al cliente (y al chat, que lo
+          // muestra tal cual): "falta configurar el proyecto" no es
+          // lo mismo que "Google no respondió", y solo el primero se
+          // arregla poniendo la variable en el servidor.
+          return res.status(503).json({
+            error: error.message || 'La validación de Firebase no está disponible.',
+            code: error.code || 'firebase_auth_unavailable',
+          });
         }
         return res.status(401).json({ error: 'Token Firebase inválido o expirado.' });
       });

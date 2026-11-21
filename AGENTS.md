@@ -87,6 +87,17 @@ lista blanca, verifica con tests y hace push a GitHub.
   escribir código. `agentsMd.js: buildAgentsMdSkeleton` ya genera
   esas secciones. Setup con timeout 10 min, siempre por la lista
   blanca de `commandRunner.js`.
+- **Firebase (validación de sesiones):** toda la API exige un token
+  Firebase válido (`authMiddleware.js` + `firebaseTokenVerifier.js`,
+  que verifica la firma RS256 contra las claves públicas de Google
+  sin depender de `firebase-admin`). Variable obligatoria en el
+  despliegue (Railway): `FIREBASE_PROJECT_ID=ggggg-f2508`. Sin ella
+  TODA la API devuelve 503 con código `firebase_project_not_configured`
+  y el mensaje dice qué poner; si Google no responde, el 503 es
+  `firebase_keys_unreachable` (reintenta el fetch de claves una vez).
+  El servidor avisa al arrancar si falta la variable y
+  `/api/health` lo expone como `firebaseAuth: ready|not_configured`.
+  El chat muestra el mensaje del servidor tal cual (`**Error:** …`).
 - `workspaces/` — clones por sesión. Nunca se versiona.
 
 ## Comandos

@@ -17,6 +17,7 @@ const rateLimit = require('express-rate-limit');
 const { sweepExpired, WORKSPACES_ROOT } = require('./sessionStore');
 const { sweepStaleJobs, sweepExpiredJobs } = require('./jobsStore');
 const { createFirebaseAuthMiddleware } = require('./authMiddleware');
+const { isFirebaseAuthConfigured } = require('./firebaseTokenVerifier');
 
 const repoRoutes = require('./repoRoutes');
 const chatRoutes = require('./chatRoutes');
@@ -106,7 +107,16 @@ app.use('/api', feedbackRoutes);
 app.use('/api', toolsRoutes);
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'baro', time: new Date().toISOString() });
+  res.json({
+    ok: true,
+    service: 'baro',
+    time: new Date().toISOString(),
+    // Sin proyecto Firebase configurado, TODA la API devuelve 503
+    // (la validación de tokens no puede correr): que se vea aquí
+    // y en el log de arranque, antes de que un usuario lo descubra
+    // intentando chatear.
+    firebaseAuth: isFirebaseAuthConfigured() ? 'ready' : 'not_configured',
+  });
 });
 
 app.get('/api/config', async (_req, res) => {
@@ -217,6 +227,9 @@ sweepStaleJobs();
 
 app.listen(PORT, () => {
   console.log(`Baro escuchando en el puerto ${PORT}`);
+  if (!isFirebaseAuthConfigured()) {
+    console.warn('[baro] AVISO: FIREBASE_PROJECT_ID no está configurado. La validación de Firebase no puede correr y toda la API devolverá 503 "La validación de Firebase no está disponible". Pon FIREBASE_PROJECT_ID=ggggg-f2508 en las variables del despliegue (Railway) y vuelve a desplegar.');
+  }
 });
 
 // Limpieza de sesiones/workspaces viejos cada hora, para no

@@ -61,6 +61,35 @@ async function apiRequest(baseUrl, pathname, options = {}) {
   });
 }
 
+test('el middleware devuelve el motivo concreto del 503 con su código', async (t) => {
+  const app = express();
+  app.use(express.json());
+  app.use('/api', createFirebaseAuthMiddleware(async () => {
+    const err = new Error('El inicio de sesión no está configurado en el servidor.');
+    err.statusCode = 503;
+    err.code = 'firebase_project_not_configured';
+    throw err;
+  }));
+  app.get('/api/ping', (_req, res) => res.json({ ok: true }));
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => {
+    server.closeAllConnections?.();
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const res = await fetch(`http://127.0.0.1:${address.port}/api/ping`, {
+    headers: { Authorization: 'Bearer YQ.Yg.Yw' },
+  });
+  assert.equal(res.status, 503);
+  const body = await res.json();
+  assert.equal(body.code, 'firebase_project_not_configured');
+  assert.match(body.error, /no está configurado/);
+});
+
 test('mantiene /api/health público y exige identidad Firebase al resto de la API', async (t) => {
   const baseUrl = await startTestServer(t);
   const sessionCountBefore = listSessions().length;
