@@ -71,8 +71,8 @@ function readJobFile(id) {
 
 let lastCreatedAt = 0;
 
-/** @param {string} ownerUid @param {string} sessionId @param {string} message @param {string} [threadId] */
-function createJob(ownerUid, sessionId, message, threadId) {
+/** @param {string} ownerUid @param {string} sessionId @param {string} message @param {string} [threadId] @param {object} [input] */
+function createJob(ownerUid, sessionId, message, threadId, input) {
   // createdAt monótono: dos trabajos en el mismo milisegundo
   // ordenarían de forma inestable en la lista.
   const now = Math.max(Date.now(), lastCreatedAt + 1);
@@ -83,6 +83,9 @@ function createJob(ownerUid, sessionId, message, threadId) {
     sessionId: sessionId || null,
     threadId: threadId || null,
     message: String(message || '').slice(0, 8000),
+    // Opciones del turno (modelo, modo plan, multi-agente…): solo
+    // valores simples, nunca secretos.
+    input: input && typeof input === 'object' ? { ...input } : {},
     status: 'queued', // queued | running | done | failed | cancelled
     createdAt: now,
     updatedAt: now,

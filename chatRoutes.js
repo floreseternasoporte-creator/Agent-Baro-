@@ -11,6 +11,8 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { getOwnedSession } = require('./sessionStore');
+const jobsStore = require('./jobsStore');
+const threadsStore = require('./threadsStore');
 const git = require('./gitAgent');
 const groq = require('./groqClient');
 const ollama = require('./ollamaClient');
@@ -1018,73 +1020,76 @@ function summarizeDiffResults(results) {
   }).join('\n');
 }
 
-async function handleChatTurn(req, res) {
-  const {
+// Mensaje de error para el cliente: corto y sin rutas ni claves internas.
+function friendlyError(e) {
+  const msg = e && e.message ? String(e.message) : 'Algo salió mal.';
+  return msg.slice(0, 500);
+}
+
+// runChatTurn — el cuerpo del turno, separado del transporte (v10 H2).
+// Antes vivía en handleChatTurn y moría si se cerraba la conexión:
+// `req.on('close')` abortaba el turno. Ahora corre dentro de un
+// trabajo (jobsStore): `send` vuelca cada evento al trabajo —queda
+// persistido y se reenvía en vivo— y `signal` solo se aborta cuando
+// el usuario cancela el trabajo, nunca al cerrarse una conexión.
+// Devuelve { status: 'done'|'failed'|'cancelled', text, diffCount,
+// autoAppliedPaths, appliedDiffs, threadId, error?, aborted? }.
+async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
+  let {
     message,
     model,
     planMode,
     multiAgent,
     fileLimit,
     autoApply = true,
-  } = req.body || {};
+    threadId: requestedThreadId,
+  } = input || {};
   const isPlanMode = !!planMode;
   const isMultiAgent = multiAgent === true || multiAgent === 1 || multiAgent === 'true';
   const requestedFileLimit = Number(fileLimit);
   const effectiveFileLimit = Number.isFinite(requestedFileLimit)
     ? Math.min(300, Math.max(10, Math.trunc(requestedFileLimit)))
     : 10;
-  const session = req.agentSession;
-  if (!session) return res.status(404).json({ error: 'Sesion no encontrada. Recarga la app.' });
+  if (!session) return { status: 'failed', error: 'Sesion no encontrada. Recarga la app.' };
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders?.();
-
-  let responseClosed = false;
-  let heartbeat = null;
-  const stopHeartbeat = () => {
-    if (heartbeat) clearInterval(heartbeat);
-    heartbeat = null;
-  };
+  // El sumidero ya persiste (jobsStore.appendEvent); aquí solo se
+  // protege el turno de un sumidero roto.
   const send = (event, data) => {
-    if (responseClosed || res.writableEnded) return;
-    try {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    } catch {
-      responseClosed = true;
-      stopHeartbeat();
-    }
+    try { sendEvent(event, data); } catch { /* nunca romper el turno */ }
   };
-
-  const abortController = new AbortController();
-  req.on('close', () => {
-    responseClosed = true;
-    stopHeartbeat();
-    abortController.abort();
-  });
-  res.on('close', () => {
-    responseClosed = true;
-    stopHeartbeat();
-  });
 
   if (typeof message !== 'string' || !message.trim()) {
     send('log', { type: 'err', title: 'Mensaje inválido', detail: 'Falta el texto del mensaje' });
     send('error', { error: 'Falta el mensaje: envía un texto no vacío en el campo "message".' });
-    res.end();
-    return;
+    return { status: 'failed', error: 'Falta el mensaje: envía un texto no vacío en el campo "message".' };
   }
+  message = message.trim();
 
-  // Heartbeat SSE: mantiene vivos los proxies/conexiones durante
-  // herramientas largas (investigación, video, computadora).
-  heartbeat = setInterval(() => {
-    if (responseClosed || res.writableEnded) {
-      stopHeartbeat();
-      return;
-    }
-    try { res.write(': hb\n\n'); } catch { stopHeartbeat(); }
-  }, 15_000);
-  heartbeat.unref?.();
+  // Hilos (FASE 3): el turno trabaja sobre la conversación indicada.
+  // Al abrir una conversación, su historial sustituye al de la sesión
+  // (cambiar de conversación no mezcla contextos); si no hay
+  // conversación, se crea una para que el turno quede guardado.
+  let threadId = typeof requestedThreadId === 'string' && requestedThreadId ? requestedThreadId : null;
+  let thread = threadId ? threadsStore.getThread(session.ownerUid, threadId) : null;
+  if (!thread) {
+    thread = threadsStore.createThread(session.ownerUid);
+    threadId = thread ? thread.id : null;
+  }
+  if (thread) {
+    session.history = thread.messages.slice(-14).map((m) => ({
+      role: m.role === 'me' ? 'user' : 'assistant',
+      content: m.text,
+    }));
+  }
+  // Guarda el par del turno en la conversación. Si el turno se
+  // detiene o falla, queda al menos lo que se pidió (sin respuesta
+  // inventada).
+  const saveThreadPair = (assistantText) => {
+    if (!threadId) return;
+    const msgs = [{ role: 'me', text: message }];
+    if (assistantText) msgs.push({ role: 'ai', text: assistantText });
+    threadsStore.appendToThread(session.ownerUid, threadId, msgs);
+  };
 
   const planSteps = [
     { id: 'analizar', label: 'Analizar la petición', status: 'active' },
@@ -1247,7 +1252,7 @@ async function handleChatTurn(req, res) {
     // Contexto largo estilo Astra: si el historial creció demasiado,
     // se resume la parte vieja en un bloque compacto en vez de
     // truncarla a ciegas. No rompe el turno si falla.
-    await maybeCompactHistory(session, abortController.signal);
+    await maybeCompactHistory(session, signal);
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -1268,7 +1273,7 @@ async function handleChatTurn(req, res) {
       model,
       messages,
       tools: BARO_TOOLS,
-      signal: abortController.signal,
+      signal: signal,
       onDelta: (delta) => send('delta', { delta }),
       onProvider: () => send('log', { type: 'info', title: 'Respondiendo…' }),
     });
@@ -1330,7 +1335,7 @@ async function handleChatTurn(req, res) {
       // nunca encontraba el código aunque la IA lo hubiera dado.)
       const preToolSource = `${visibleResult || ''}\n${message}`;
       for (const i of preComputerIdx) {
-        preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, abortController.signal, preToolSource);
+        preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, signal, preToolSource);
       }
       if (preRestIdx.length) {
         // Orden importa cuando el mensaje trae "Crear script" y luego
@@ -1343,11 +1348,11 @@ async function handleChatTurn(req, res) {
         }
         if (needsOrder) {
           for (const i of preRestIdx) {
-            preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, abortController.signal, preToolSource);
+            preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, signal, preToolSource);
           }
         } else {
           const rest = await Promise.all(
-            preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session, abortController.signal, preToolSource))
+            preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session, signal, preToolSource))
           );
           preRestIdx.forEach((origI, k) => { preToolTexts[origI] = rest[k]; });
         }
@@ -1439,7 +1444,7 @@ async function handleChatTurn(req, res) {
             continue;
           }
           await ensureTaskBranch(session, send, message);
-          out.diffResults.push(...await processDiffBlock({ diffBlock: translated.diff, session, send, signal: abortController.signal, autoAppliedPaths, appliedDiffs }));
+          out.diffResults.push(...await processDiffBlock({ diffBlock: translated.diff, session, send, signal: signal, autoAppliedPaths, appliedDiffs }));
           continue;
         }
         const command = translated.command;
@@ -1452,7 +1457,7 @@ async function handleChatTurn(req, res) {
           continue;
         }
         if (command.tool === 'computer') {
-          const text = await runToolCommand(command, send, session, abortController.signal, modelText);
+          const text = await runToolCommand(command, send, session, signal, modelText);
           if (text) out.toolResults.push(text);
           continue;
         }
@@ -1470,7 +1475,7 @@ async function handleChatTurn(req, res) {
           }
           continue;
         }
-        const text = await runToolCommand(command, send, session, abortController.signal, modelText);
+        const text = await runToolCommand(command, send, session, signal, modelText);
         if (text) out.toolResults.push(text);
       }
       return out;
@@ -1528,7 +1533,7 @@ async function handleChatTurn(req, res) {
           const diffKey = diffBlock.trim();
           if (!diffKey || seenDiffs.has(diffKey)) continue;
           seenDiffs.add(diffKey);
-          diffResults.push(...await processDiffBlock({ diffBlock, session, send, signal: abortController.signal, autoAppliedPaths, appliedDiffs }));
+          diffResults.push(...await processDiffBlock({ diffBlock, session, send, signal: signal, autoAppliedPaths, appliedDiffs }));
         }
       }
 
@@ -1578,14 +1583,14 @@ async function handleChatTurn(req, res) {
         roundToolTexts[i] = `### Acción no ejecutada por modo plan\nEsta acción genera o modifica contenido y quedó bloqueada.`;
       }
       for (const i of computerIdx) {
-        roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session, abortController.signal, result);
+        roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session, signal, result);
       }
       if (restIdx.length) {
         if (isMultiAgent && restIdx.length > 1) {
           send('log', { type: 'info', title: `Modo multi-agente: ${restIdx.length} acciones en paralelo` });
         }
         const rest = await Promise.all(
-          restIdx.map((i) => runToolCommand(requestedTools[i], send, session, abortController.signal, result))
+          restIdx.map((i) => runToolCommand(requestedTools[i], send, session, signal, result))
         );
         restIdx.forEach((origI, k) => { roundToolTexts[origI] = rest[k]; });
       }
@@ -1649,7 +1654,7 @@ async function handleChatTurn(req, res) {
         model,
         messages: conversation,
         tools: BARO_TOOLS,
-        signal: abortController.signal,
+        signal: signal,
         onDelta: (delta) => send('delta', { delta }),
         onProvider: () => send('log', { type: 'info', title: 'Continuando…' }),
       });
@@ -1667,48 +1672,208 @@ async function handleChatTurn(req, res) {
     session.history = session.history || [];
     session.history.push({ role: 'user', content: message });
     session.history.push({ role: 'assistant', content: result });
+    saveThreadPair(result);
 
     const diffBlocks = git.extractDiffBlocks(result);
     sendPlan(null, true);
     send('log', { type: 'ok', title: 'Completado', detail: diffBlocks.length ? `${diffBlocks.length} diff(s) propuesto(s)` : undefined });
     // diffCount cuenta también los diffs aplicados por tool nativa
     // (apply_diff no deja bloque ```diff en el texto visible).
-    send('done', { text: result, diffCount: Math.max(diffBlocks.length, appliedDiffs.length), autoAppliedPaths, appliedDiffs });
-    stopHeartbeat();
-    res.end();
+    const donePayload = { text: result, diffCount: Math.max(diffBlocks.length, appliedDiffs.length), autoAppliedPaths, appliedDiffs, threadId };
+    send('done', donePayload);
+    return { status: 'done', ...donePayload };
   } catch (e) {
+    saveThreadPair(null);
     if (e.name === 'AbortError') {
       send('log', { type: 'info', title: 'Detenido por el usuario' });
       send('done', { text: '', aborted: true });
-    } else {
-      send('log', { type: 'err', title: 'Error', detail: e.message });
-      send('error', { error: e.message });
+      return { status: job && job.cancelRequested ? 'cancelled' : 'failed', aborted: true };
     }
-    stopHeartbeat();
-    res.end();
+    send('log', { type: 'err', title: 'Error', detail: e.message });
+    send('error', { error: e.message });
+    return { status: 'failed', error: e.message };
   }
 }
 
+// runJob — corre un trabajo en la cadena de turnos de su sesión
+// (un turno por sesión, en orden, como antes). El trabajo arranca
+// en `queued` y pasa a `running` aquí; si la sesión ya no existe,
+// falla con el motivo real en vez de quedarse colgado.
+async function runJob(job) {
+  // Cancelado antes de arrancar: no se ejecuta el turno.
+  if (job.cancelRequested) {
+    jobsStore.setStatus(job, 'cancelled');
+    return;
+  }
+  const session = getOwnedSession(job.sessionId, job.ownerUid);
+  if (!session) {
+    jobsStore.setStatus(job, 'failed', { error: 'La sesión ya no existe. Recarga la app.' });
+    return;
+  }
+  const controller = new AbortController();
+  jobsStore.attachAbortController(job, controller);
+  jobsStore.setStatus(job, 'running');
+  const send = (event, data) => jobsStore.appendEvent(job, event, data);
+  let outcome;
+  try {
+    outcome = await runChatTurn({
+      session,
+      input: { message: job.message, ...(job.input || {}) },
+      send,
+      signal: controller.signal,
+      job,
+    });
+  } catch (e) {
+    outcome = { status: 'failed', error: friendlyError(e) };
+    try { send('error', { error: outcome.error }); } catch { /* sumidero roto */ }
+  }
+  jobsStore.detachAbortController(job);
+  if (!outcome || typeof outcome.status !== 'string') outcome = { status: 'failed', error: 'El turno terminó sin resultado.' };
+  if (outcome.status === 'done') {
+    jobsStore.setStatus(job, 'done', {
+      result: {
+        text: outcome.text || '',
+        diffCount: outcome.diffCount || 0,
+        autoAppliedPaths: outcome.autoAppliedPaths || [],
+        appliedDiffs: outcome.appliedDiffs || [],
+        threadId: outcome.threadId || null,
+      },
+    });
+  } else if (outcome.status === 'cancelled') {
+    jobsStore.setStatus(job, 'cancelled');
+  } else {
+    jobsStore.setStatus(job, 'failed', { error: outcome.error || 'Algo salió mal.' });
+  }
+}
+
+// POST /api/chat — crea el trabajo y responde 202 con su id.
+// Antes devolvía el SSE del turno y moría si se cerraba la
+// conexión; ahora el turno vive en el trabajo y el cliente se
+// engancha con GET /api/jobs/:id/events (puede cerrar la pestaña
+// y volver: el trabajo sigue y los eventos quedan guardados).
 router.post('/chat', async (req, res) => {
   const session = getOwnedSession(String(req.body?.sessionId || ''), req.auth.uid);
   if (!session) return res.status(404).json({ error: 'Sesion no encontrada. Recarga la app.' });
-  req.agentSession = session;
+  const message = String(req.body?.message || '').trim();
+  if (!message) return res.status(400).json({ error: 'Falta el mensaje: envía un texto no vacío en el campo "message".' });
+  const job = jobsStore.createJob(req.auth.uid, session.id, message, req.body?.threadId || null, {
+    model: req.body?.model,
+    planMode: req.body?.planMode === true,
+    multiAgent: req.body?.multiAgent === true,
+    fileLimit: Number(req.body?.fileLimit) || undefined,
+    autoApply: req.body?.autoApply !== false,
+  });
   const lockKey = `${session.ownerUid}:${session.id}`;
   const previous = chatTurnChains.get(lockKey) || Promise.resolve();
-  let releaseCurrent;
-  const currentGate = new Promise((resolve) => { releaseCurrent = resolve; });
-  const queuedTurn = previous.catch(() => {}).then(() => currentGate);
-  chatTurnChains.set(lockKey, queuedTurn);
+  const current = previous.catch(() => {}).then(() => runJob(job));
+  chatTurnChains.set(lockKey, current);
+  current.catch(() => {}).finally(() => {
+    if (chatTurnChains.get(lockKey) === current) chatTurnChains.delete(lockKey);
+  });
+  return res.status(202).json({ jobId: job.id });
+});
 
-  await previous.catch(() => {});
-  try {
-    await handleChatTurn(req, res);
-  } finally {
-    releaseCurrent();
-    if (chatTurnChains.get(lockKey) === queuedTurn) {
-      chatTurnChains.delete(lockKey);
-    }
+// GET /api/jobs — trabajos del usuario, más recientes primero.
+router.get('/jobs', (req, res) => {
+  const status = typeof req.query.status === 'string' && req.query.status ? req.query.status : undefined;
+  res.json({ jobs: jobsStore.listJobs(req.auth.uid, { status, limit: 20 }) });
+});
+
+// GET /api/jobs/:id/events — SSE con los eventos del trabajo:
+// primero reproduce los ya guardados y luego sigue en vivo.
+// Cerrar esta conexión NO cancela el trabajo (esa es la gracia
+// del H2): para cancelarlo está POST /api/jobs/:id/cancel.
+router.get('/jobs/:id/events', (req, res) => {
+  const job = jobsStore.getJob(req.params.id, req.auth.uid);
+  if (!job) return res.status(404).json({ error: 'Trabajo no encontrado.' });
+  res.setTimeout(0);
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  const write = (event, data) => {
+    try { res.write(`event: ${event}\ndata: ${JSON.stringify(data ?? null)}\n\n`); } catch { /* cliente ido */ }
+  };
+  const heartbeat = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* cliente ido */ } }, 15000);
+  heartbeat.unref?.();
+  let ended = false;
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    clearInterval(heartbeat);
+    try { res.end(); } catch { /* ya cerrado */ }
+  };
+  // Suscribirse ANTES de leer el snapshot: los eventos que lleguen
+  // entre medias quedan en el búfer y se vuelcan después del
+  // snapshot, así no se pierde ninguno.
+  const buffered = [];
+  let live = false;
+  const off = jobsStore.subscribe(job.id, (event, data) => {
+    if (!live) { buffered.push([event, data]); return; }
+    if (event === '__status__') { write('__status__', data); off(); end(); return; }
+    write(event, data);
+  });
+  req.on('close', () => { off(); clearInterval(heartbeat); });
+  for (const stored of job.events) write(stored.event, stored.data);
+  const bufferedStatus = buffered.find(([event]) => event === '__status__');
+  for (const [event, data] of buffered) {
+    if (event === '__status__') continue;
+    write(event, data);
   }
+  buffered.length = 0;
+  live = true;
+  if (jobsStore.isTerminal(job.status)) {
+    write('__status__', { status: job.status, result: job.result, error: job.error });
+    off();
+    end();
+    return;
+  }
+  if (bufferedStatus) {
+    write('__status__', bufferedStatus[1]);
+    off();
+    end();
+  }
+});
+
+// POST /api/jobs/:id/cancel — pide la cancelación del trabajo.
+// Si aún estaba en cola, no arranca; si corría, el turno se
+// detiene y el trabajo queda `cancelled`.
+router.post('/jobs/:id/cancel', (req, res) => {
+  const job = jobsStore.requestCancel(req.params.id, req.auth.uid);
+  if (!job) return res.status(404).json({ error: 'Trabajo no encontrado.' });
+  res.json({ job: jobsStore.jobSummary(job) });
+});
+
+// ─── Conversaciones (FASE 3) ──────────────────────────────────
+// GET /api/threads — lista real de conversaciones del usuario.
+// GET /api/threads/:id — una conversación con sus mensajes.
+// POST /api/threads — crea una conversación vacía.
+// PATCH /api/threads/:id — renombra ({ title }).
+// DELETE /api/threads/:id — borra la conversación.
+router.get('/threads', (req, res) => {
+  res.json({ threads: threadsStore.listThreads(req.auth.uid) });
+});
+
+router.get('/threads/:id', (req, res) => {
+  const thread = threadsStore.getThread(req.auth.uid, req.params.id);
+  if (!thread) return res.status(404).json({ error: 'Conversación no encontrada.' });
+  res.json({ thread });
+});
+
+router.post('/threads', (req, res) => {
+  const thread = threadsStore.createThread(req.auth.uid, req.body?.title);
+  if (!thread) return res.status(400).json({ error: 'No se pudo crear la conversación.' });
+  res.status(201).json({ thread: threadsStore.threadSummary(thread) });
+});
+
+router.patch('/threads/:id', (req, res) => {
+  const thread = threadsStore.renameThread(req.auth.uid, req.params.id, req.body?.title);
+  if (!thread) return res.status(404).json({ error: 'Conversación no encontrada.' });
+  res.json({ thread: threadsStore.threadSummary(thread) });
+});
+
+router.delete('/threads/:id', (req, res) => {
+  if (!threadsStore.deleteThread(req.auth.uid, req.params.id)) {
+    return res.status(404).json({ error: 'Conversación no encontrada.' });
+  }
+  res.json({ ok: true });
 });
 
 module.exports = router;

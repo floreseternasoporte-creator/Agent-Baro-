@@ -15,6 +15,7 @@ const fs = require('fs');
 const rateLimit = require('express-rate-limit');
 
 const { sweepExpired, WORKSPACES_ROOT } = require('./sessionStore');
+const { sweepStaleJobs, sweepExpiredJobs } = require('./jobsStore');
 const { createFirebaseAuthMiddleware } = require('./authMiddleware');
 
 const repoRoutes = require('./repoRoutes');
@@ -209,6 +210,11 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Error interno del servidor' });
 });
 
+// Trabajos a medias del arranque anterior: no pueden reanudarse
+// (su turno vivía en memoria), se marcan fallidos con el motivo
+// real (v10 H2).
+sweepStaleJobs();
+
 app.listen(PORT, () => {
   console.log(`Baro escuchando en el puerto ${PORT}`);
 });
@@ -216,6 +222,7 @@ app.listen(PORT, () => {
 // Limpieza de sesiones/workspaces viejos cada hora, para no
 // llenar el disco de Railway con clones abandonados.
 setInterval(() => {
+  sweepExpiredJobs();
   sweepExpired((session) => {
     fs.rm(session.dir, { recursive: true, force: true }, () => {});
     // Cerrar también el navegador del modo computadora de esa sesión.
