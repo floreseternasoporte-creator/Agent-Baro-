@@ -1613,8 +1613,8 @@ function cvTerminal(payload) {
   const term = document.getElementById('cv-term') || (() => { cvSetBody('<div class="cv-term" id="cv-term"></div>'); return document.getElementById('cv-term'); })();
 
   if (payload.action === 'run') {
-    cvSetAddress(`terminal — ${payload.command}`, true);
-    term.insertAdjacentHTML('beforeend', `<div class="cv-term-line cv-term-cmd">${esc(payload.command)}</div>`);
+    cvSetAddress('terminal', true);
+    term.insertAdjacentHTML('beforeend', `<div class="cv-term-line cv-term-cmd">Ejecutando…</div>`);
   } else if (payload.action === 'output') {
     cvSetAddress(document.getElementById('cv-addr-text')?.textContent || 'terminal', false);
     term.insertAdjacentHTML('beforeend', `<div class="cv-term-line cv-term-out${payload.ok === false ? ' err' : ''}">${esc(payload.text || '')}</div>`);
