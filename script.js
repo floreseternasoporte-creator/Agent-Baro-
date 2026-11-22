@@ -1834,6 +1834,24 @@ function renderImageCard(raw) {
   </div>`;
 }
 
+// Líneas de protocolo interno que el modelo a veces emite en su texto
+// ("Ejecuta: ...", "Buscar: ...", "Crear script: ..."): son
+// instrucciones para el sistema, no parte de la respuesta — nunca se
+// muestran al usuario. Se quitan solo fuera de bloques de código
+// cercados, para no tocar ejemplos que el usuario pidió ver.
+function stripProtocolLines(text) {
+  const PROTOCOL = /^\s*#{0,3}\s*(ejecuta|buscar|wikipedia|crear script|generar video|editar imagen|generar imagen|crear documento|crear presentación|crear hoja|investigar|revisar código|buscar en internet)\s*:/i;
+  const lines = String(text || '').split('\n');
+  let inFence = false;
+  const kept = [];
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) inFence = !inFence;
+    if (!inFence && PROTOCOL.test(line)) continue;
+    kept.push(line);
+  }
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function md(text) {
   // Antes de tocar markdown normal, extraemos los bloques que
   // toolsClient/chatRoutes generan para busqueda web, Wikipedia,
@@ -2078,7 +2096,7 @@ function addMsg(role, text) {
         <span class="mname">Baro</span>
         <span class="mtime">${now()}</span>
       </div>
-      <div class="mbubble"><div class="mbody">${md(text)}</div></div>
+      <div class="mbubble"><div class="mbody">${md(stripProtocolLines(text))}</div></div>
       <div class="msg-actions">
         <button class="ma-btn" onclick="copyMsg(this)">${copySvg()} Copiar</button>
         <button class="ma-btn" onclick="regen(this)">
@@ -2134,7 +2152,7 @@ function patchStream(div, text, force) {
   const nowMs = Date.now();
   if (!force && nowMs - _lastPatchMs < 120) return;
   _lastPatchMs = nowMs;
-  body.innerHTML = md(text) + '<span class="scursor"></span>';
+  body.innerHTML = md(stripProtocolLines(text)) + '<span class="scursor"></span>';
   if (isNearBottom()) scrollChatToBottom(false);
 }
 
@@ -2145,7 +2163,7 @@ function finalStream(div, text) {
   div.querySelector('.gen-status')?.remove();
   const body = div.querySelector('.mbody');
   if (!body) return;
-  body.innerHTML = md(text);
+  body.innerHTML = md(stripProtocolLines(text));
   // Add action buttons
   const actions = document.createElement('div');
   actions.className = 'msg-actions';
@@ -2746,7 +2764,7 @@ function restoreChatHistory() {
     if (!it || !it.text) continue;
     const div = addMsg(it.role === 'me' ? 'me' : 'ai', it.text);
     const bodyEl = div.querySelector('.mbody');
-    if (bodyEl) bodyEl.innerHTML = `<p style="white-space:pre-wrap">${esc(it.text)}</p>`;
+    if (bodyEl) bodyEl.innerHTML = `<p style="white-space:pre-wrap">${esc(it.role === 'ai' ? stripProtocolLines(it.text) : it.text)}</p>`;
     const timeEl = div.querySelector('.mtime');
     if (timeEl && it.time) timeEl.textContent = it.time;
     div.querySelector('.msg-actions')?.remove();

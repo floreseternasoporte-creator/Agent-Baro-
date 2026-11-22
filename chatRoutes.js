@@ -1555,7 +1555,11 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
         pendingToolCalls = [];
       }
 
-      if (!commands.length && !diffResults.length && !requestedTools.length) break;
+      // Los resultados de la vía nativa también cuentan: sin esto, un
+      // turno que solo emite tool_calls (sin texto) rompía el bucle
+      // antes de devolver sus resultados al modelo y el usuario
+      // recibía una respuesta vacía.
+      if (!commands.length && !diffResults.length && !requestedTools.length && !toolResults.length && !commandResults.length) break;
 
       // ── Verificación automática estilo Astra: si este turno aplicó
       // cambios y el repo tiene script de test, se corre una vez y el
