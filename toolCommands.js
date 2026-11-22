@@ -24,6 +24,12 @@
 //   Usar computadora: busca en google el precio del iPhone 17 y dímelo
 //   Revisar código: seguridad y regresiones (revisión READ-ONLY estilo
 //     Codex /review; el foco tras los dos puntos es opcional)
+//   Leer archivo: src/server.js (o "Leer archivo: src/a.js :: 10-40")
+//   Buscar en archivos: TODO (o "Buscar en archivos: TODO :: src")
+//   Listar archivos: **/*.js
+//   Editar archivo: src/a.js :: const a = 1; => const a = 10;
+//     (el texto viejo debe aparecer una sola vez; el cambio pasa
+//     por revisión antes de aplicarse, como los diffs)
 // ═══════════════════════════════════════════════════════
 
 // "Título :: detalle" -> { title, brief }. El :: es opcional.
@@ -63,6 +69,51 @@ function extractToolCommands(text) {
       const focus = match[1] || '';
       const key = `codereview\u0000${focus}`;
       if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'code-review', focus }); }
+      continue;
+    }
+
+    // C17 (Lote 2): herramientas nativas de archivo. "Leer archivo:
+    // <ruta> :: <inicio>-<fin>" lee solo ese rango (líneas 1-based).
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Leer archivo:\s*(.+?)\s*$/i))) {
+      const { title: filePath, brief: range } = splitDocArgs(match[1]);
+      let offset = 0;
+      let limit = 600;
+      const rangeMatch = (range || '').match(/^(\d+)\s*-\s*(\d+)\s*$/);
+      if (rangeMatch) {
+        const start = Math.max(1, parseInt(rangeMatch[1], 10));
+        const end = Math.max(start, parseInt(rangeMatch[2], 10));
+        offset = start - 1;
+        limit = end - start + 1;
+      }
+      const key = `readfile\u0000${filePath}\u0000${offset}\u0000${limit}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'read-file', path: filePath, offset, limit }); }
+      continue;
+    }
+
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Buscar en archivos:\s*(.+?)\s*$/i))) {
+      const { title: pattern, brief: subdir } = splitDocArgs(match[1]);
+      const key = `searchfiles\u0000${pattern}\u0000${subdir}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'search-files', pattern, path: subdir }); }
+      continue;
+    }
+
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Listar archivos:\s*(.+?)\s*$/i))) {
+      const pattern = match[1];
+      const key = `listfiles\u0000${pattern}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'list-files', pattern }); }
+      continue;
+    }
+
+    // Editar archivo: <ruta> :: <viejo> => <nuevo>. El texto viejo
+    // debe aparecer una sola vez; runToolCommand construye el diff y
+    // lo pasa por la vía de revisión de apply_diff (C17).
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Editar archivo:\s*(.+?)\s*$/i))) {
+      const { title: filePath, brief: rest } = splitDocArgs(match[1]);
+      const arrow = String(rest || '').split(/\s*=>\s*/);
+      const oldText = (arrow[0] || '').trim();
+      const newText = arrow.slice(1).join(' => ').trim();
+      const key = `editfile\u0000${filePath}\u0000${oldText}\u0000${newText}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'edit-file', path: filePath, oldText, newText }); }
       continue;
     }
 

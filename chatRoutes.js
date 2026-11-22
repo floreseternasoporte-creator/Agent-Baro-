@@ -19,6 +19,7 @@ const ollama = require('./ollamaClient');
 const { runCommand, extractAutomaticCommands, isSafeWorkspaceArgument } = require('./commandRunner');
 const { extractToolCommands } = require('./toolCommands');
 const { BARO_TOOLS, toolCallToCommand } = require('./toolsCatalog');
+const fileTools = require('./fileTools');
 const tools = require('./toolsClient');
 const { runComputerTask } = require('./computerTask');
 const { loadAgentsInstructions } = require('./agentsMd');
@@ -33,7 +34,7 @@ const router = express.Router();
 const MAX_AUTOMATIC_ROUNDS = 12;
 const MAX_COMMANDS_PER_ROUND = 5;
 const MAX_COMMAND_CONTEXT_BYTES = 30_000;
-const PLAN_MODE_READ_ONLY_TOOLS = new Set(['search', 'wikipedia', 'deep-research', 'code-review']);
+const PLAN_MODE_READ_ONLY_TOOLS = new Set(['search', 'wikipedia', 'deep-research', 'code-review', 'read-file', 'search-files', 'list-files']);
 
 // Mutex simple en memoria: encadena los turnos de una misma
 // sesión para que dos POST /chat simultáneos no se pisen el
@@ -742,7 +743,7 @@ async function reviewCodeReadOnly({ session, focus, generateTextFn }) {
   ].filter(Boolean).join('\n');
 }
 
-async function runToolCommand(command, send, session, signal, sourceText = '') {
+async function runToolCommand(command, send, session, signal, sourceText = '', turnCtx = null) {
   const onStep = (step) => {
     switch (step.type) {
       case 'search_start':
@@ -987,6 +988,48 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
         generateText: (prompt) => generateText(prompt, signal),
       });
       return `### Modo computadora: "${command.task}"\n\n${result.ok ? '✅' : '⚠️'} ${result.summary}`;
+    }
+    // ── C17 (Lote 2): herramientas nativas de archivo ──
+    if (command.tool === 'read-file') {
+      const r = await fileTools.readFileLines(session.dir, command.path, command.offset, command.limit);
+      send('log', { type: 'ok', title: `Leído: ${r.path}`, detail: `líneas ${r.startLine}–${r.endLine} de ${r.totalLines}` });
+      send('computer', { mode: 'files', action: 'read', path: r.path });
+      session.addLog?.({ type: 'ok', title: `Leído: ${r.path}`, detail: `líneas ${r.startLine}–${r.endLine} de ${r.totalLines}` });
+      return `### ${r.path} (líneas ${r.startLine}–${r.endLine} de ${r.totalLines}${r.truncated ? ', recortado' : ''})\n\n\`\`\`\n${r.content}\n\`\`\``;
+    }
+    if (command.tool === 'search-files') {
+      const r = await fileTools.searchFiles(session.dir, command.pattern, { path: command.path || '' });
+      send('log', {
+        type: r.matches.length ? 'ok' : 'info',
+        title: r.matches.length ? `Encontré ${r.matches.length} coincidencia(s)` : 'No encontré coincidencias',
+        detail: `"${command.pattern}"`,
+      });
+      if (!r.matches.length) {
+        return `### Búsqueda en archivos: "${command.pattern}"\nNo encontré coincidencias${command.path ? ` en "${command.path}"` : ''}.`;
+      }
+      const lines = r.matches.map((m) => `- ${m.path}:${m.line}: ${m.text}`).join('\n');
+      return `### Búsqueda en archivos: "${command.pattern}" (${r.matches.length} coincidencia(s)${r.truncated ? ', recortado' : ''})\n${lines}`;
+    }
+    if (command.tool === 'list-files') {
+      const r = await fileTools.listFilesByGlob(session.dir, command.pattern);
+      send('log', { type: 'info', title: `Archivos: ${r.total} coinciden con "${command.pattern}"` });
+      if (!r.files.length) return `### Archivos: "${command.pattern}"\nNo hay archivos que coincidan.`;
+      return `### Archivos: "${command.pattern}" (${r.total}${r.truncated ? ', recortado' : ''})\n${r.files.map((f) => `- ${f}`).join('\n')}`;
+    }
+    if (command.tool === 'edit-file') {
+      // La edición NO escribe directo: construye el diff y lo pasa
+      // por la vía de revisión de apply_diff (turnCtx.applyEditDiff).
+      let diffText;
+      try {
+        diffText = await fileTools.buildEditDiff(session.dir, command.path, command.oldText, command.newText);
+      } catch (e) {
+        return `### No se pudo editar ${command.path}\n${e.message}`;
+      }
+      if (!turnCtx || typeof turnCtx.applyEditDiff !== 'function') {
+        return `### No se pudo editar ${command.path}\nEl cambio necesita el flujo de revisión del turno.`;
+      }
+      const results = await turnCtx.applyEditDiff(diffText);
+      return `### Cambio en ${command.path}\n${summarizeDiffResults(results)}`;
     }
     if (command.tool === 'deep-research') {
       // Investigación profunda estilo Astra: varias búsquedas desde
@@ -1309,6 +1352,48 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
     // en la conversación para que la IA lo comente, no lo re-ejecute.
     const userToolCommands = extractToolCommands(message);
     const seenToolCommands = new Set(userToolCommands.map((c) => JSON.stringify(c)));
+
+    // Registro de diffs del turno (deduplicación + registro para el
+    // frontend). Se declara ANTES del pre-dispatch porque los
+    // comandos directos del usuario ("Editar archivo:") también
+    // pueden pedir un cambio y usan la misma vía de revisión.
+    const seenDiffs = new Set();
+    let autoAppliedPaths = [];
+    // Registro de CADA bloque de diff que el backend ya proceso (aplicado
+    // o no) durante este turno, junto con su texto crudo. El frontend lo
+    // usa para no repintar un boton "Aplicar" activo sobre un diff que el
+    // propio servidor ya aplico via autoApply — pulsarlo de nuevo siempre
+    // fallaba ("el diff no coincide", porque el archivo ya cambio), que
+    // era la fuente mas comun de "error al aplicar cambios" reportada.
+    const appliedDiffs = [];
+
+    // ── Aplicación de un diff por la vía de revisión (C17) ──
+    // Misma lógica que tenía el branch 'diff' de
+    // dispatchNativeToolCalls: plan-mode, proyecto, autoApply, rama
+    // de tarea, processDiffBlock. La usan la tool nativa edit_file,
+    // la línea "Editar archivo:" y el branch 'diff' de abajo: un
+    // solo lugar, un solo comportamiento.
+    const applyEditDiff = async (diffText) => {
+      const diffKey = String(diffText || '').trim();
+      if (!diffKey || seenDiffs.has(diffKey)) return [];
+      seenDiffs.add(diffKey);
+      if (isPlanMode) {
+        send('log', { type: 'info', title: 'Modo plan: cambio no aplicado todavía', detail: 'En modo plan no cambio archivos; sal del modo plan para aplicar.' });
+        appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: 'Modo plan activo: sin cambios todavía', alreadyApplied: false });
+        return [`### Cambio NO aplicado por modo plan\nEl cambio queda solo como propuesta para revisión; no se escribió ningún archivo.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``];
+      }
+      if (!session.repoFullName) {
+        return ['### Cambio sin proyecto conectado\nPara aplicar cambios necesito un proyecto conectado en esta sesión.'];
+      }
+      if (!autoApply) {
+        appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: 'Aplicación automática desactivada', alreadyApplied: false });
+        return [`### Cambio propuesto (aplicación automática desactivada)\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``];
+      }
+      await ensureTaskBranch(session, send, message);
+      return await processDiffBlock({ diffBlock: diffText, session, send, signal, autoAppliedPaths, appliedDiffs });
+    };
+    const turnCtx = { applyEditDiff };
+
     if (userToolCommands.length) {
       sendPlan('actuar');
       // Multitarea estilo Astra: las herramientas independientes
@@ -1342,7 +1427,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
       // nunca encontraba el código aunque la IA lo hubiera dado.)
       const preToolSource = `${visibleResult || ''}\n${message}`;
       for (const i of preComputerIdx) {
-        preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, signal, preToolSource);
+        preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, signal, preToolSource, turnCtx);
       }
       if (preRestIdx.length) {
         // Orden importa cuando el mensaje trae "Crear script" y luego
@@ -1355,11 +1440,11 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
         }
         if (needsOrder) {
           for (const i of preRestIdx) {
-            preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, signal, preToolSource);
+            preToolTexts[i] = await runToolCommand(userToolCommands[i], send, session, signal, preToolSource, turnCtx);
           }
         } else {
           const rest = await Promise.all(
-            preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session, signal, preToolSource))
+            preRestIdx.map((i) => runToolCommand(userToolCommands[i], send, session, signal, preToolSource, turnCtx))
           );
           preRestIdx.forEach((origI, k) => { preToolTexts[origI] = rest[k]; });
         }
@@ -1382,18 +1467,9 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
       }
     }
 
-    const seenDiffs = new Set();
-    let autoAppliedPaths = [];
     // Verificación automática: una vez por turno como máximo.
     let autoTestDone = false;
     const verifyResults = [];
-    // Registro de CADA bloque de diff que el backend ya proceso (aplicado
-    // o no) durante este turno, junto con su texto crudo. El frontend lo
-    // usa para no repintar un boton "Aplicar" activo sobre un diff que el
-    // propio servidor ya aplico via autoApply — pulsarlo de nuevo siempre
-    // fallaba ("el diff no coincide", porque el archivo ya cambio), que
-    // era la fuente mas comun de "error al aplicar cambios" reportada.
-    const appliedDiffs = [];
 
     // Ejecutor de comandos automáticos, usado igual por la vía de
     // texto ("Ejecuta:") y por la tool nativa run_command.
@@ -1432,26 +1508,20 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
           continue;
         }
         if (translated.kind === 'diff') {
-          const diffKey = String(translated.diff || '').trim();
-          if (!diffKey || seenDiffs.has(diffKey)) continue;
-          seenDiffs.add(diffKey);
-          if (isPlanMode) {
-            send('log', { type: 'info', title: 'Modo plan: cambio no aplicado todavía', detail: 'En modo plan no cambio archivos; sal del modo plan para aplicar.' });
-            out.diffResults.push(`### Cambio NO aplicado por modo plan\nEl cambio queda solo como propuesta para revisión; no se escribió ningún archivo.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
-            appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: 'Modo plan activo: sin cambios todavía', alreadyApplied: false });
+          out.diffResults.push(...await applyEditDiff(translated.diff));
+          continue;
+        }
+        if (translated.kind === 'edit') {
+          // C17: edit_file nativa — construye el diff y lo pasa por
+          // la misma revisión que apply_diff (nunca escribe directo).
+          let diffText;
+          try {
+            diffText = await fileTools.buildEditDiff(session.dir, translated.path, translated.oldText, translated.newText);
+          } catch (e) {
+            out.toolResults.push(`### No se pudo editar ${translated.path}\n${e.message}`);
             continue;
           }
-          if (!session.repoFullName) {
-            out.diffResults.push('### Cambio sin proyecto conectado\nPara aplicar cambios necesito un proyecto conectado en esta sesión.');
-            continue;
-          }
-          if (!autoApply) {
-            out.diffResults.push(`### Cambio propuesto (aplicación automática desactivada)\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
-            appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: 'Aplicación automática desactivada', alreadyApplied: false });
-            continue;
-          }
-          await ensureTaskBranch(session, send, message);
-          out.diffResults.push(...await processDiffBlock({ diffBlock: translated.diff, session, send, signal: signal, autoAppliedPaths, appliedDiffs }));
+          out.diffResults.push(...await applyEditDiff(diffText));
           continue;
         }
         const command = translated.command;
@@ -1464,7 +1534,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
           continue;
         }
         if (command.tool === 'computer') {
-          const text = await runToolCommand(command, send, session, signal, modelText);
+          const text = await runToolCommand(command, send, session, signal, modelText, turnCtx);
           if (text) out.toolResults.push(text);
           continue;
         }
@@ -1482,7 +1552,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
           }
           continue;
         }
-        const text = await runToolCommand(command, send, session, signal, modelText);
+        const text = await runToolCommand(command, send, session, signal, modelText, turnCtx);
         if (text) out.toolResults.push(text);
       }
       return out;
@@ -1593,14 +1663,14 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
         roundToolTexts[i] = `### Acción no ejecutada por modo plan\nEsta acción crea o modifica contenido y quedó bloqueada.`;
       }
       for (const i of computerIdx) {
-        roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session, signal, result);
+        roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session, signal, result, turnCtx);
       }
       if (restIdx.length) {
         if (isMultiAgent && restIdx.length > 1) {
           send('log', { type: 'info', title: `Haciendo ${restIdx.length} cosas a la vez` });
         }
         const rest = await Promise.all(
-          restIdx.map((i) => runToolCommand(requestedTools[i], send, session, signal, result))
+          restIdx.map((i) => runToolCommand(requestedTools[i], send, session, signal, result, turnCtx))
         );
         restIdx.forEach((origI, k) => { roundToolTexts[origI] = rest[k]; });
       }

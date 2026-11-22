@@ -232,6 +232,71 @@ const BARO_TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'read_file',
+      description: 'Lee un archivo del repo (texto) por líneas. Úsala cuando necesites ver el contenido exacto antes de opinar, revisar o editar.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Ruta del archivo en el repo.' },
+          offset: { type: 'number', description: 'Línea desde la que empezar (0 = desde el principio). Opcional.' },
+          limit: { type: 'number', description: 'Cuántas líneas leer (máximo 4000). Opcional.' },
+        },
+        required: ['path'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_files',
+      description: 'Busca un texto (o patrón) en los archivos del repo y devuelve archivo, línea y fragmento de cada coincidencia.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pattern: { type: 'string', description: 'Texto o patrón a buscar.' },
+          path: { type: 'string', description: 'Carpeta donde buscar (opcional; por defecto todo el repo).' },
+        },
+        required: ['pattern'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_files',
+      description: 'Lista los archivos del repo que coinciden con un patrón: "*.js" solo el nivel superior, "**/*.js" en cualquier carpeta, "src/*.js" en esa carpeta.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pattern: { type: 'string', description: 'Patrón de archivos, con * y **.' },
+        },
+        required: ['pattern'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'edit_file',
+      description: 'Cambia un trozo exacto de un archivo del repo. El texto viejo debe aparecer una sola vez en el archivo; si aparece varias veces, incluye más contexto. El cambio pasa por revisión antes de aplicarse.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Ruta del archivo en el repo.' },
+          oldText: { type: 'string', description: 'El texto exacto a reemplazar.' },
+          newText: { type: 'string', description: 'El texto nuevo.' },
+        },
+        required: ['path', 'oldText', 'newText'],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // Nombre de tool nativa -> objeto de comando interno (el mismo que
@@ -254,6 +319,14 @@ const TOOL_TO_COMMAND = {
   save_memory: (a) => ({ tool: 'memory', text: a.text }),
   save_note: (a) => ({ tool: 'session-note', text: a.text }),
   use_computer: (a) => ({ tool: 'computer', task: a.task }),
+  read_file: (a) => ({
+    tool: 'read-file',
+    path: a.path,
+    offset: Math.max(0, Math.trunc(Number(a.offset) || 0)),
+    limit: Math.min(4000, Math.max(1, Math.trunc(Number(a.limit) || 600))),
+  }),
+  search_files: (a) => ({ tool: 'search-files', pattern: a.pattern, path: a.path || '' }),
+  list_files: (a) => ({ tool: 'list-files', pattern: a.pattern }),
 };
 
 // Campos obligatorios por tool (además del schema, que el proveedor
@@ -269,6 +342,10 @@ const REQUIRED_ARGS = {
   create_script: ['name', 'code'],
   run_command: ['commandLine'],
   apply_diff: ['diff'],
+  read_file: ['path'],
+  search_files: ['pattern'],
+  list_files: ['pattern'],
+  edit_file: ['path', 'oldText', 'newText'],
   save_memory: ['text'],
   save_note: ['text'],
   use_computer: ['task'],
@@ -314,6 +391,16 @@ function toolCallToCommand(toolCall) {
     }
   }
   if (name === 'apply_diff') return { kind: 'diff', diff: String(args.diff) };
+  if (name === 'edit_file') {
+    // La edición no escribe directo: produce un diff que el turno
+    // revisa y aplica por la misma vía que apply_diff (C17).
+    return {
+      kind: 'edit',
+      path: String(args.path).trim(),
+      oldText: String(args.oldText),
+      newText: String(args.newText),
+    };
+  }
   return { kind: 'command', command: TOOL_TO_COMMAND[name](args) };
 }
 
