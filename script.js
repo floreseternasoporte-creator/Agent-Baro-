@@ -1125,15 +1125,15 @@ function showPushBanner(files) {
 }
 
 function openPushModal() {
-  document.getElementById('push-commit-msg').value = `fix: update via Baro ${new Date().toISOString().slice(0,10)}`;
+  document.getElementById('push-commit-msg').value = `Cambios con Baro ${new Date().toISOString().slice(0,10)}`;
   document.getElementById('push-branch').value = S.branch;
   document.getElementById('push-result').style.display = 'none';
   document.getElementById('push-confirm-btn').disabled = false;
-  document.getElementById('push-confirm-btn').textContent = 'Push';
+  document.getElementById('push-confirm-btn').textContent = 'Subir';
 
   const list = document.getElementById('push-files-list');
   if (S.pendingEdits.length) {
-    list.innerHTML = `<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">${S.pendingEdits.length} archivos para commit</div>` +
+    list.innerHTML = `<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">${S.pendingEdits.length} archivos con cambios</div>` +
       S.pendingEdits.map(e => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
         <div style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0"></div>
         <span style="font-family:var(--mono);color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.path)}</span>
@@ -1147,10 +1147,10 @@ function closePushModal() { document.getElementById('push-modal').classList.remo
 
 async function confirmPush() {
   if (!S.sessionId) { showToast('Sesion no lista, intenta de nuevo'); return; }
-  if (!S.ghToken && !S.serverConfig?.githubPreconfigured) { showToast('Configura tu GitHub Token'); return; }
+  if (!S.ghToken && !S.serverConfig?.githubPreconfigured) { showToast('Conecta tu cuenta de GitHub primero'); return; }
   if (!S.repoData) { showToast('No hay repo conectado'); return; }
 
-  const msg = document.getElementById('push-commit-msg').value.trim() || 'update via Baro';
+  const msg = document.getElementById('push-commit-msg').value.trim() || 'Cambios con Baro';
   const branch = document.getElementById('push-branch').value.trim() || S.branch;
   const btn = document.getElementById('push-confirm-btn');
   const result = document.getElementById('push-result');
@@ -1180,7 +1180,7 @@ async function confirmPush() {
     if (!data.pushed) {
       result.innerHTML = `<div style="background:var(--ab);border:1px solid var(--gd);border-radius:var(--r);padding:12px;font-size:13px;color:var(--amber)">${esc(data.reason || 'No habia cambios reales para subir')}</div>`;
       btn.disabled = false;
-      btn.textContent = 'Push';
+      btn.textContent = 'Subir';
       return;
     }
 
@@ -1222,13 +1222,13 @@ async function openPullRequest() {
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || `Error ${resp.status}`);
-    result.innerHTML = `<div style="background:var(--gb);border:1px solid var(--gd);border-radius:var(--r);padding:12px;font-size:13px;color:var(--green);font-weight:600">${data.alreadyExists ? 'PR ya existente' : 'PR abierto'}: <a href="${esc(data.url)}" target="_blank" rel="noopener" style="color:var(--green)">#${data.number} — ver en GitHub</a></div>`;
-    btn.textContent = 'Abrir PR';
+    result.innerHTML = `<div style="background:var(--gb);border:1px solid var(--gd);border-radius:var(--r);padding:12px;font-size:13px;color:var(--green);font-weight:600">${data.alreadyExists ? 'Revisión ya pedida' : 'Revisión pedida'}: <a href="${esc(data.url)}" target="_blank" rel="noopener" style="color:var(--green)">#${data.number} — ver en GitHub</a></div>`;
+    btn.textContent = 'Pedir revisión';
     window.open(data.url, '_blank', 'noopener');
   } catch (e) {
     result.innerHTML = `<div style="background:var(--rb);border:1px solid var(--rd);border-radius:var(--r);padding:12px;font-size:13px;color:var(--red)">${esc(e.message)}</div>`;
     btn.disabled = false;
-    btn.textContent = 'Abrir PR';
+    btn.textContent = 'Pedir revisión';
   }
 }
 
@@ -1459,14 +1459,14 @@ function cvDesktop(payload) {
     if (taskEl) taskEl.innerHTML = `🖥️ <b>Tarea:</b> ${esc(payload.task || '')}`;
     cvSetAddress('modo computadora — en vivo', true);
     log(payload.vision
-      ? `👁️ El agente está <b>viendo</b> la pantalla con <b>${esc(payload.visionModel || 'visión')}</b>.`
+      ? `👁️ El agente está <b>viendo</b> la pantalla.`
       : `⚙️ Visión no disponible: el agente trabaja con la estructura de la página.`);
   } else if (payload.action === 'observe') {
     setShot(payload.screenshot);
     cvSetAddress(payload.url ? String(payload.url).replace(/^https?:\/\//, '').slice(0, 60) : 'navegador del agente', true);
-    log(`<span class="cv-desk-n">Paso ${payload.step}</span> 👁️ Observando${payload.title ? `: <i>${esc(payload.title)}</i>` : ''} <span class="cv-desk-dim">(${payload.elements || 0} elementos)</span>`);
+    log(`<span class="cv-desk-n">Paso ${payload.step}</span> 👁️ Observando${payload.title ? `: <i>${esc(payload.title)}</i>` : ''}`);
   } else if (payload.action === 'decide') {
-    const actLabel = { click: '👆 clic', type: '⌨️ escribir', press: '🔘 tecla', scroll: '↕️ scroll', navigate: '🌐 ir a', wait: '⏳ esperar', done: '✅ terminar', fail: '❌ abandonar' }[payload.act] || payload.act;
+    const actLabel = { click: '👆 clic', type: '⌨️ escribir', press: '🔘 tecla', scroll: '↕️ scroll', navigate: '🌐 ir a', wait: '⏳ esperar', done: '✅ terminar', fail: '❌ abandonar' }[payload.act] || 'acción';
     log(`<span class="cv-desk-n">🧠</span> ${actLabel}${payload.detail ? ` — ${esc(payload.detail)}` : ''}${payload.reasoning ? `<div class="cv-desk-why">${esc(payload.reasoning)}</div>` : ''}`);
   } else if (payload.action === 'act') {
     log(`<span class="cv-desk-n">⚡</span> ${esc(payload.detail || '')} <span class="cv-desk-dim">→ ${esc(payload.result || '')}</span>`);
@@ -1521,7 +1521,7 @@ function cvDocs(payload) {
   if (_cvMode !== 'docs') { _cvMode = 'docs'; cvSetBody('<div id="cv-docs-list"></div>'); }
   const list = document.getElementById('cv-docs-list') || (() => { cvSetBody('<div id="cv-docs-list"></div>'); return document.getElementById('cv-docs-list'); })();
   if (payload.action === 'start') {
-    cvSetAddress('document studio — IA', true);
+    cvSetAddress('creando documento', true);
     list.insertAdjacentHTML('beforeend', `
       <div class="cv-doc-gen">
         <div class="cv-doc-icon">${kindIcon}</div>
@@ -1646,7 +1646,7 @@ function cvFiles(payload) {
   } else if (payload.action === 'write' || payload.action === 'write_failed') {
     const ok = payload.action === 'write';
     cvSetAddress(payload.path, false);
-    wrap.innerHTML = `<div class="cv-file-tab">${fileSvg}<span>${esc(payload.path || '')}</span><span class="cv-file-status">${ok ? `guardado · ${payload.bytes ?? 0} bytes` : 'no aplicado'}</span></div>
+    wrap.innerHTML = `<div class="cv-file-tab">${fileSvg}<span>${esc(payload.path || '')}</span><span class="cv-file-status">${ok ? 'guardado' : 'no aplicado'}</span></div>
       ${!ok && payload.text ? `<div class="cv-file-code">${esc(payload.text)}</div>` : ''}`;
   } else if (payload.action === 'error') {
     cvSetAddress(payload.path, false);
@@ -1661,12 +1661,10 @@ function updateContextBar(tokens) {
   const bar = document.getElementById('context-bar');
   const fill = document.getElementById('ctx-fill');
   const pctEl = document.getElementById('ctx-pct');
-  const tokEl = document.getElementById('ctx-tokens');
 
   if (tokens > 0) bar?.classList.add('show');
   if (fill) { fill.style.width = pct + '%'; fill.className = 'ctx-fill' + (pct > 90 ? ' full' : pct > 70 ? ' warn' : ''); }
   if (pctEl) pctEl.textContent = pct + '%';
-  if (tokEl) tokEl.textContent = tokens.toLocaleString() + ' tokens';
   syncStatusBar();
 }
 
@@ -1785,7 +1783,6 @@ function renderVideoCard(raw) {
   const titleMatch = raw.match(/^### Video generado: "(.+)"/);
   const prompt = titleMatch ? titleMatch[1] : 'Video generado';
   const totalMatch = raw.match(/Duración total: (\d+)s en (\d+) clip/);
-  const remainingMatch = raw.match(/Videos restantes hoy: (\d+)/);
   const clips = [...raw.matchAll(/- Clip (\d+) \((\d+)s\): (\S+)/g)]
     .map(([, index, seconds, url]) => ({ index, seconds, url }));
 
@@ -1806,7 +1803,6 @@ function renderVideoCard(raw) {
     ${clips.length > 1 ? `<div class="media-clip-strip">${chips}</div>` : ''}
     <div class="media-card-footer">
       <span>${totalMatch ? `${totalMatch[2]} clip(s) encadenados` : ''}</span>
-      ${remainingMatch ? `<span>${remainingMatch[1]} video(s) restantes hoy</span>` : ''}
     </div>
   </div>`;
 }
@@ -1993,7 +1989,7 @@ async function applyDiff(id, btn) {
         btn.classList.remove('reject');
         btn.classList.add('done');
       }
-      showToast(failure.reason || 'El diff no coincide con el archivo actual');
+      showToast(failure.reason || 'El cambio no coincide con el archivo actual');
     } else {
       const anyAlready = applied.some((a) => a.alreadyApplied);
       btn.innerHTML = checkSvg() + (anyAlready ? ' Ya aplicado' : ' Aplicado');
@@ -2006,7 +2002,7 @@ async function applyDiff(id, btn) {
   } catch (e) {
     btn.innerHTML = originalLabel;
     btn.disabled = false;
-    showToast('Error aplicando el diff: ' + e.message);
+    showToast('Error aplicando el cambio: ' + e.message);
   }
 }
 
@@ -2026,7 +2022,7 @@ function scrollToSource(link, n) {
 function rejectDiff(btn) {
   const block = btn.closest('.cblock');
   if (block) { block.style.opacity = '0.3'; block.style.pointerEvents = 'none'; }
-  showToast('Diff descartado');
+  showToast('Cambio descartado');
 }
 
 // ═══════════════════════════════════════════
@@ -2618,8 +2614,7 @@ function renderVerify(v) {
   if (panel) panel.classList.add('show');
   chip.style.display = '';
   chip.className = 'verify-chip ' + (v.ok ? 'ok' : 'err');
-  const bits = [`Tests ${v.ok ? 'superados' : 'con fallos'}`];
-  if (v.runner) bits.push(String(v.runner));
+  const bits = [`Comprobación ${v.ok ? 'superada' : 'con fallos'}`];
   if (v.summary) bits.push(String(v.summary));
   chip.innerHTML = `${v.ok ? checkSvg() : xSvg()} ${esc(bits.join(' · '))}`;
 }
@@ -2668,11 +2663,11 @@ async function openDiffModal() {
     if (filesEl) {
       filesEl.innerHTML = files.length
         ? `<div class="diff-files-title">${files.length} archivo(s) con cambios</div>` + files.map((f) => `<div class="diff-file-row"><span class="diff-file-dot"></span><span>${esc(typeof f === 'string' ? f : (f.path || ''))}</span></div>`).join('')
-        : '<div class="diff-files-title">Sin cambios en el workspace</div>';
+        : '<div class="diff-files-title">Sin cambios por revisar</div>';
     }
     body.textContent = data.diff || 'Sin cambios.';
   } catch (e) {
-    body.textContent = 'No se pudo cargar el diff: ' + e.message;
+    body.textContent = 'No se pudo cargar el cambio: ' + e.message;
   }
 }
 function closeDiffModal() { document.getElementById('diff-modal')?.classList.remove('open'); }
@@ -2689,16 +2684,16 @@ async function doCreateAgentsMd() {
     });
     const data = await resp.json().catch(() => ({}));
     if (data.exists) {
-      showToast('Este repo ya tiene AGENTS.md');
+      showToast('Este proyecto ya tiene sus reglas');
     } else if (!resp.ok || data.ok === false) {
       throw new Error(data.error || `Error ${resp.status}`);
     } else {
       if (!S.pendingEdits.some((e) => e.path === 'AGENTS.md')) S.pendingEdits.push({ path: 'AGENTS.md' });
       updateTasksBadge();
-      showToast('AGENTS.md creado en el repo ✓');
+      showToast('Reglas del proyecto creadas ✓');
     }
   } catch (e) {
-    showToast('No se pudo crear AGENTS.md: ' + e.message);
+    showToast('No se pudieron crear las reglas del proyecto: ' + e.message);
   }
 }
 

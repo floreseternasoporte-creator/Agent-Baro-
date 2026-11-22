@@ -646,13 +646,13 @@
   <div class="mbox">
     <div class="m-handle"></div>
     <div class="mhead">
-      <span class="mtitle">Push a GitHub</span>
+      <span class="mtitle">Subir a GitHub</span>
       <button class="mx" onclick="closePushModal()"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
     </div>
     <div class="mbdy">
       <div class="fg" style="margin-bottom:14px">
-        <label class="fl">Commit message</label>
-        <input class="fi" type="text" id="push-commit-msg" placeholder="fix: descripcion del cambio">
+        <label class="fl">Mensaje del cambio</label>
+        <input class="fi" type="text" id="push-commit-msg" placeholder="Descripción del cambio">
       </div>
       <div class="fg" style="margin-bottom:14px">
         <label class="fl">Rama</label>
@@ -663,8 +663,8 @@
     </div>
     <div class="mfoot">
       <button class="btn btn-g" onclick="closePushModal()" style="flex:0.5">Cancelar</button>
-      <button class="btn btn-g" id="push-pr-btn" onclick="openPullRequest()">Abrir PR</button>
-      <button class="btn btn-p" id="push-confirm-btn" onclick="confirmPush()">Push</button>
+      <button class="btn btn-g" id="push-pr-btn" onclick="openPullRequest()">Pedir revisión</button>
+      <button class="btn btn-p" id="push-confirm-btn" onclick="confirmPush()">Subir</button>
     </div>
   </div>
 </div>
