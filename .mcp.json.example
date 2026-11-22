@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "ejemplo-http": {
+      "url": "http://127.0.0.1:8080/mcp",
+      "headers": {}
+    },
+    "ejemplo-stdio": {
+      "command": "node",
+      "args": ["./mi-servidor-mcp.cjs"],
+      "env": {}
+    }
+  }
+}

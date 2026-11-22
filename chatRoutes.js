@@ -22,6 +22,7 @@ const { BARO_TOOLS, toolCallToCommand } = require('./toolsCatalog');
 const fileTools = require('./fileTools');
 const { runSubagent, normalizeKind } = require('./subagent');
 const skills = require('./skills');
+const mcp = require('./mcp');
 const tools = require('./toolsClient');
 const { runComputerTask } = require('./computerTask');
 const { loadAgentsInstructions } = require('./agentsMd');
@@ -1363,6 +1364,27 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
       systemPrompt += `\n\n## GUÍA ACTIVA: ${skill.name}\n${skill.body}`;
     }
 
+    // C3 (Lote 2): MCP — si el workspace trae .mcp.json, conectar
+    // sus servidores y ofrecer sus tools como nativas (mcp_*). Un
+    // servidor caído no tumba el turno; sin GROQ_API_KEY las tools
+    // MCP solo existen en la vía nativa (el texto no las conoce).
+    let mcpTools = [];
+    try {
+      const mcpConfig = mcp.loadMcpConfig(session.dir);
+      if (mcpConfig) {
+        const registry = await mcp.getOrConnectMcp(session, mcpConfig);
+        mcpTools = registry.definitions;
+        if (registry.errors.length) {
+          send('log', { type: 'info', title: 'Alguna conexión externa no respondió', detail: 'Sigo con el resto de herramientas.' });
+        }
+      }
+    } catch (e) {
+      send('log', { type: 'info', title: 'No se pudo leer la configuración de conexiones externas', detail: e.message });
+    }
+    if (mcpTools.length) {
+      systemPrompt += `\n\n## HERRAMIENTAS EXTERNAS CONECTADAS\nTambién tienes estas herramientas externas (nombres que empiezan por mcp_): úsalas con sus argumentos JSON como cualquier otra herramienta nativa.\n${mcpTools.map((t) => `- ${t.function.name}: ${t.function.description}`).join('\n')}`;
+    }
+
     // Contexto largo estilo Astra: si el historial creció demasiado,
     // se resume la parte vieja en un bloque compacto en vez de
     // truncarla a ciegas. No rompe el turno si falla.
@@ -1386,7 +1408,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
     const firstTurn = await streamWithFailoverTools({
       model,
       messages,
-      tools: BARO_TOOLS,
+      tools: [...BARO_TOOLS, ...mcpTools],
       signal: signal,
       onDelta: (delta) => send('delta', { delta }),
       onProvider: () => send('log', { type: 'info', title: 'Respondiendo…' }),
@@ -1564,6 +1586,26 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
     const dispatchNativeToolCalls = async (toolCalls, modelText) => {
       const out = { commandResults: [], toolResults: [], diffResults: [] };
       for (const tc of toolCalls || []) {
+        // C3 (Lote 2): herramientas externas MCP (mcp_*), antes del
+        // traductor nativo (que las rechazaría como desconocidas).
+        // Bloqueadas en modo plan (pueden cambiar cosas fuera del
+        // repo) y con cabecera en lenguaje normal: el nombre interno
+        // mcp_* nunca asoma en la vista del usuario.
+        if (tc.name && typeof tc.name === 'string' && tc.name.startsWith('mcp_') && session.mcp?.registry?.tools?.has(tc.name)) {
+          const entry = session.mcp.registry.tools.get(tc.name);
+          if (isPlanMode) {
+            send('log', { type: 'info', title: 'Modo plan: acción no ejecutada', detail: 'En modo plan solo miro y busco, no creo ni cambio nada.' });
+            out.toolResults.push('### Acción no ejecutada por modo plan\nLas herramientas externas pueden cambiar cosas; en modo plan no se usan.');
+            continue;
+          }
+          try {
+            const text = await mcp.callMcpTool(session.mcp.registry, tc.name, tc.arguments || {});
+            out.toolResults.push(`### Resultado de la herramienta "${entry.name}":\n${text}`);
+          } catch (e) {
+            out.toolResults.push(`### No se pudo usar la herramienta externa\n${e.message}`);
+          }
+          continue;
+        }
         const translated = toolCallToCommand(tc);
         if (translated.kind === 'invalid') {
           send('log', { type: 'err', title: 'No se pudo interpretar una acción', detail: 'Revisa la acción e inténtalo de nuevo.' });
@@ -1796,7 +1838,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
       const nextTurn = await streamWithFailoverTools({
         model,
         messages: conversation,
-        tools: BARO_TOOLS,
+        tools: [...BARO_TOOLS, ...mcpTools],
         signal: signal,
         onDelta: (delta) => send('delta', { delta }),
         onProvider: () => send('log', { type: 'info', title: 'Continuando…' }),
