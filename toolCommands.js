@@ -30,6 +30,9 @@
 //   Editar archivo: src/a.js :: const a = 1; => const a = 10;
 //     (el texto viejo debe aparecer una sola vez; el cambio pasa
 //     por revisión antes de aplicarse, como los diffs)
+//   Delegar: revisa el archivo src/server.js y resume los riesgos
+//     (o "Delegar: explora la carpeta src :: review": el otro turno
+//     solo lee y devuelve un resumen; nunca escribe)
 // ═══════════════════════════════════════════════════════
 
 // "Título :: detalle" -> { title, brief }. El :: es opcional.
@@ -114,6 +117,17 @@ function extractToolCommands(text) {
       const newText = arrow.slice(1).join(' => ').trim();
       const key = `editfile\u0000${filePath}\u0000${oldText}\u0000${newText}`;
       if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'edit-file', path: filePath, oldText, newText }); }
+      continue;
+    }
+
+    // C1 (Lote 2): delegar una subtarea a otro turno que solo lee y
+    // devuelve un resumen. "Delegar: <tarea> :: <kind>" con kind
+    // explore|review|general (por defecto explore).
+    if ((match = rawLine.match(/^\s*(?:[-*]\s*)?Delegar:\s*(.+?)\s*$/i))) {
+      const { title: task, brief: kindRaw } = splitDocArgs(match[1]);
+      const kind = ['explore', 'review', 'general'].includes((kindRaw || '').trim()) ? kindRaw.trim() : 'explore';
+      const key = `delegate\u0000${task}\u0000${kind}`;
+      if (!seen.has(key)) { seen.add(key); commands.push({ tool: 'delegate', task, kind }); }
       continue;
     }
 

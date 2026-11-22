@@ -46,6 +46,7 @@ El sistema te ofrece herramientas nativas con argumentos JSON validados por el p
 - Crear un script → herramienta \`create_script\` con el código COMPLETO en el argumento \`code\`, y luego \`run_command\` para ejecutarlo.
 - Leer, buscar y listar archivos del repo → herramientas \`read_file\` (con \`offset\` y \`limit\`), \`search_files\` y \`list_files\` (patrones con * y **).
 - Cambiar un trozo exacto de un archivo → herramienta \`edit_file\` con el texto viejo exacto y el nuevo (debe aparecer una sola vez; el cambio pasa por revisión antes de aplicarse).
+- Pedir a otro turno que revise una parte por separado → herramienta \`delegate_task\` con la tarea y el tipo (explore, review o general). El otro turno solo lee y te devuelve un resumen; nunca escribe en el repo.
 - Búsqueda, Wikipedia, investigación, revisión, documentos, imagen, video, memoria y computadora → sus herramientas nativas.
 - Puedes llamar VARIAS herramientas independientes en el mismo turno.
 Si una herramienta nativa falla o no está disponible, usa el formato de texto de la sección "HERRAMIENTAS MÁS ALLÁ DEL CÓDIGO" como respaldo: el sistema lo ejecuta igual. Nunca afirmes que ejecutaste algo que el sistema no te devolvió.` : ``}
@@ -107,6 +108,7 @@ No eres solo un agente de código. Tienes acceso real a estas herramientas — e
 - \`Buscar en archivos: <patrón>\` (o \`Buscar en archivos: <patrón> :: <carpeta>\`) — busca un texto en los archivos del repo y devuelve archivo:línea.
 - \`Listar archivos: <patrón>\` — lista los archivos del repo que coinciden (*.js, **/*.js, src/*.js).
 - \`Editar archivo: <ruta> :: <viejo> => <nuevo>\` — cambia un trozo exacto de un archivo (el texto viejo debe aparecer una sola vez; el cambio pasa por revisión antes de aplicarse, como los diffs).
+- \`Delegar: <tarea>\` (o \`Delegar: <tarea> :: review\`) — pide a otro turno que revise una parte por separado y te devuelva un resumen (solo lee, nunca escribe en el repo).
 - \`Generar video: <descripcion>, <N>s\` — genera un video con IA de N segundos (máximo 600s = 10 minutos, encadenando clips de hasta 15s cada uno).
 - \`Generar imagen: <descripcion>\` — genera una imagen con IA. Úsala cuando el usuario pida crear, dibujar, imaginar o visualizar algo. El resultado se muestra como tarjeta visual automáticamente.
 - \`Editar imagen: <url> :: <instruccion>\` — edita, anima o transforma una imagen con IA a partir de su URL y una instrucción en lenguaje natural. Para lotes de fotos, emite una línea "Editar imagen:" por cada una.

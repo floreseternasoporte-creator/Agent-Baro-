@@ -297,6 +297,22 @@ const BARO_TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'delegate_task',
+      description: 'Pide a otro turno que revise una parte por separado y te devuelva un resumen: explorar archivos, revisar código o analizar algo. El otro turno solo lee, nunca escribe en el repo. Úsala cuando una parte necesite atención propia mientras tú sigues con el resto.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task: { type: 'string', description: 'La subtarea a revisar, en lenguaje normal.' },
+          kind: { type: 'string', enum: ['explore', 'review', 'general'], description: 'Qué tipo de revisión: explorar, revisar código o analizar. Opcional.' },
+        },
+        required: ['task'],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // Nombre de tool nativa -> objeto de comando interno (el mismo que
@@ -327,6 +343,7 @@ const TOOL_TO_COMMAND = {
   }),
   search_files: (a) => ({ tool: 'search-files', pattern: a.pattern, path: a.path || '' }),
   list_files: (a) => ({ tool: 'list-files', pattern: a.pattern }),
+  delegate_task: (a) => ({ tool: 'delegate', task: a.task, kind: a.kind || 'explore' }),
 };
 
 // Campos obligatorios por tool (además del schema, que el proveedor
@@ -346,6 +363,7 @@ const REQUIRED_ARGS = {
   search_files: ['pattern'],
   list_files: ['pattern'],
   edit_file: ['path', 'oldText', 'newText'],
+  delegate_task: ['task'],
   save_memory: ['text'],
   save_note: ['text'],
   use_computer: ['task'],
@@ -389,6 +407,9 @@ function toolCallToCommand(toolCall) {
     if (!nonEmptyString(value)) {
       return { kind: 'invalid', name, error: `Falta el argumento obligatorio "${field}"` };
     }
+  }
+  if (name === 'delegate_task' && args.kind !== undefined && !['explore', 'review', 'general'].includes(args.kind)) {
+    return { kind: 'invalid', name, error: `kind inválido: ${String(args.kind)} (explore|review|general)` };
   }
   if (name === 'apply_diff') return { kind: 'diff', diff: String(args.diff) };
   if (name === 'edit_file') {

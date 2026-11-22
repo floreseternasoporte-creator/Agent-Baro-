@@ -17,8 +17,8 @@ const groq = require('../groqClient');
 const pollinations = require('../pollinationsClient');
 const ollama = require('../ollamaClient');
 
-test('el catálogo tiene 18 tools con schema OpenAI válido', () => {
-  assert.equal(BARO_TOOLS.length, 18);
+test('el catálogo tiene 19 tools con schema OpenAI válido', () => {
+  assert.equal(BARO_TOOLS.length, 19);
   const names = new Set();
   for (const tool of BARO_TOOLS) {
     assert.equal(tool.type, 'function');
@@ -36,7 +36,7 @@ test('el catálogo tiene 18 tools con schema OpenAI válido', () => {
       assert.ok(Object.prototype.hasOwnProperty.call(fn.parameters.properties, req), `${fn.name}: required "${req}" sin definir en properties`);
     }
   }
-  for (const expected of ['search_web', 'run_command', 'apply_diff', 'create_script', 'use_computer', 'save_memory', 'read_file', 'search_files', 'list_files', 'edit_file']) {
+  for (const expected of ['search_web', 'run_command', 'apply_diff', 'create_script', 'use_computer', 'save_memory', 'read_file', 'search_files', 'list_files', 'edit_file', 'delegate_task']) {
     assert.ok(names.has(expected), `falta la tool ${expected}`);
   }
 });
@@ -91,6 +91,37 @@ test('toolCallToCommand traduce las tools de archivo (C17)', () => {
   assert.equal(toolCallToCommand({ name: 'read_file', arguments: {} }).kind, 'invalid');
   assert.equal(toolCallToCommand({ name: 'search_files', arguments: { pattern: '  ' } }).kind, 'invalid');
   assert.equal(toolCallToCommand({ name: 'edit_file', arguments: { path: 'a.js', oldText: 'x' } }).kind, 'invalid');
+});
+
+// C1 (Lote 2): delegate_task traduce al comando 'delegate' y la
+// línea "Delegar:" produce el mismo objeto; kind inválido se rechaza.
+test('toolCallToCommand traduce delegate_task (C1)', () => {
+  assert.deepEqual(
+    toolCallToCommand({ name: 'delegate_task', arguments: { task: 'Revisa src/a.js', kind: 'review' } }),
+    { kind: 'command', command: { tool: 'delegate', task: 'Revisa src/a.js', kind: 'review' } }
+  );
+  assert.deepEqual(
+    toolCallToCommand({ name: 'delegate_task', arguments: { task: 'Explora src' } }),
+    { kind: 'command', command: { tool: 'delegate', task: 'Explora src', kind: 'explore' } }
+  );
+  assert.equal(toolCallToCommand({ name: 'delegate_task', arguments: {} }).kind, 'invalid');
+  assert.equal(toolCallToCommand({ name: 'delegate_task', arguments: { task: 'x', kind: 'borrar' } }).kind, 'invalid');
+});
+
+test('extractToolCommands entiende la línea Delegar: (C1)', () => {
+  const { extractToolCommands } = require('../toolCommands');
+  assert.deepEqual(
+    extractToolCommands('Delegar: revisa src/a.js y resume los riesgos :: review'),
+    [{ tool: 'delegate', task: 'revisa src/a.js y resume los riesgos', kind: 'review' }]
+  );
+  assert.deepEqual(
+    extractToolCommands('Delegar: explora la carpeta src'),
+    [{ tool: 'delegate', task: 'explora la carpeta src', kind: 'explore' }]
+  );
+  assert.deepEqual(
+    extractToolCommands('Delegar: mira esto :: inventado'),
+    [{ tool: 'delegate', task: 'mira esto', kind: 'explore' }]
+  );
 });
 
 test('extractToolCommands entiende las líneas de archivo (C17)', () => {

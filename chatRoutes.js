@@ -20,6 +20,7 @@ const { runCommand, extractAutomaticCommands, isSafeWorkspaceArgument } = requir
 const { extractToolCommands } = require('./toolCommands');
 const { BARO_TOOLS, toolCallToCommand } = require('./toolsCatalog');
 const fileTools = require('./fileTools');
+const { runSubagent, normalizeKind } = require('./subagent');
 const tools = require('./toolsClient');
 const { runComputerTask } = require('./computerTask');
 const { loadAgentsInstructions } = require('./agentsMd');
@@ -34,7 +35,7 @@ const router = express.Router();
 const MAX_AUTOMATIC_ROUNDS = 12;
 const MAX_COMMANDS_PER_ROUND = 5;
 const MAX_COMMAND_CONTEXT_BYTES = 30_000;
-const PLAN_MODE_READ_ONLY_TOOLS = new Set(['search', 'wikipedia', 'deep-research', 'code-review', 'read-file', 'search-files', 'list-files']);
+const PLAN_MODE_READ_ONLY_TOOLS = new Set(['search', 'wikipedia', 'deep-research', 'code-review', 'read-file', 'search-files', 'list-files', 'delegate']);
 
 // Mutex simple en memoria: encadena los turnos de una misma
 // sesión para que dos POST /chat simultáneos no se pisen el
@@ -1030,6 +1031,30 @@ async function runToolCommand(command, send, session, signal, sourceText = '', t
       }
       const results = await turnCtx.applyEditDiff(diffText);
       return `### Cambio en ${command.path}\n${summarizeDiffResults(results)}`;
+    }
+    if (command.tool === 'delegate') {
+      // C1 (Lote 2): delegar una subtarea a un subagente con su
+      // propio turno (solo lee, nunca escribe). Corre dentro de
+      // este turno, así que sobrevive a la desconexión (H2) y se
+      // cancela con él: el abort del padre se propaga, no se traga.
+      const kind = normalizeKind(command.kind);
+      const kindLabel = { explore: 'explorar esa parte', review: 'revisar esa parte', general: 'analizar esa parte' }[kind];
+      let res;
+      try {
+        res = await runSubagent({
+          session,
+          task: command.task,
+          kind,
+          signal,
+          send,
+          streamToolsFn: (opts) => streamWithFailoverTools(opts),
+        });
+      } catch (e) {
+        if (e && e.name === 'AbortError') throw e;
+        return `### No se pudo ${kindLabel}\n${e.message}`;
+      }
+      if (!res.ok) return `### No se pudo ${kindLabel}\n${res.summary}`;
+      return `### Resultado de ${kindLabel}:\n${res.summary}`;
     }
     if (command.tool === 'deep-research') {
       // Investigación profunda estilo Astra: varias búsquedas desde
