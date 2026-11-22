@@ -155,7 +155,8 @@ No generes ningun diff hasta recibir confirmacion.`;
 async function streamChat({ model, messages, signal, onDelta }) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    const err = new Error('Falta GROQ_API_KEY. Agregala en las variables de entorno del servidor.');
+    console.error('[baro] falta GROQ_API_KEY en las variables de entorno del servidor');
+    const err = new Error('El servicio de chat no está configurado en el servidor.');
     err.status = 503;
     throw err;
   }
@@ -232,7 +233,8 @@ async function streamChat({ model, messages, signal, onDelta }) {
 async function streamChatWithTools({ model, messages, tools, signal, onDelta }) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    const err = new Error('Falta GROQ_API_KEY. Agregala en las variables de entorno del servidor.');
+    console.error('[baro] falta GROQ_API_KEY en las variables de entorno del servidor');
+    const err = new Error('El servicio de chat no está configurado en el servidor.');
     err.status = 503;
     throw err;
   }

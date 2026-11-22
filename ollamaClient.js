@@ -44,9 +44,9 @@ async function streamChat({ model, messages, signal, onDelta }) {
       }),
     });
   } catch (e) {
+    if (e.code === 'ECONNREFUSED') console.error('[baro] no se pudo conectar con el servicio local en', OLLAMA_BASE);
     const err = new Error(
-      'No se pudo conectar con Ollama. Asegurate de que el servicio esta corriendo. ' +
-      (e.code === 'ECONNREFUSED' ? '(ECONNREFUSED en ' + OLLAMA_BASE + ')' : e.message)
+      'No se pudo conectar con el servicio local. Asegúrate de que está corriendo.'
     );
     err.status = 503;
     throw err;
@@ -121,9 +121,9 @@ async function streamChatWithTools({ model, messages, tools, signal, onDelta }) 
       }),
     });
   } catch (e) {
+    if (e.code === 'ECONNREFUSED') console.error('[baro] no se pudo conectar con el servicio local en', OLLAMA_BASE);
     const err = new Error(
-      'No se pudo conectar con Ollama. Asegurate de que el servicio esta corriendo. ' +
-      (e.code === 'ECONNREFUSED' ? '(ECONNREFUSED en ' + OLLAMA_BASE + ')' : e.message)
+      'No se pudo conectar con el servicio local. Asegúrate de que está corriendo.'
     );
     err.status = 503;
     throw err;

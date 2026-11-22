@@ -157,26 +157,26 @@ async function runEnvSetup(session, send, { force = false } = {}) {
       const health = {
         status: 'done', ok: true, at: startedAt,
         setup: [], test: null,
-        detail: 'Sin setup ni tests detectables en este repo (sin package.json, requirements.txt, go.mod ni Cargo.toml).',
+        detail: 'No encontré preparación ni pruebas automáticas en este proyecto.',
         source: detected.source, languages: detected.languages,
       };
       session.envHealth = health;
       return health;
     }
-    log({ type: 'info', title: 'Preparando el entorno del repo…', detail: `setup: ${detected.setupCommands.join(' && ') || 'ninguno'} · tests: ${detected.testCommand || 'ninguno'} (${detected.source})` });
+    log({ type: 'info', title: 'Preparando el entorno del proyecto…', detail: 'Instalando lo necesario y comprobando las pruebas.' });
     const setupResults = [];
     let setupOk = true;
     for (const commandLine of detected.setupCommands) {
       const parsed = parseCommandLine(commandLine);
       if (!parsed) {
-        setupResults.push({ command: commandLine, ok: false, summary: 'Comando de setup no interpretable' });
+        setupResults.push({ command: commandLine, ok: false, summary: 'Comando de preparación no interpretable' });
         setupOk = false;
         break;
       }
       const res = await runCommand(parsed.binary, parsed.args, session.dir, SETUP_TIMEOUT_MS);
       const summary = summarize(res, commandLine);
       setupResults.push({ command: commandLine, ok: !!res.ok, summary });
-      log({ type: res.ok ? 'ok' : 'err', title: res.ok ? `Setup OK: ${commandLine}` : `Setup falló: ${commandLine}`, detail: summary });
+      log({ type: res.ok ? 'ok' : 'err', title: res.ok ? 'Preparación lista' : 'La preparación falló', detail: summary });
       if (!res.ok) { setupOk = false; break; }
     }
     let testResult = null;
@@ -185,7 +185,7 @@ async function runEnvSetup(session, send, { force = false } = {}) {
       if (parsed) {
         const res = await runCommand(parsed.binary, parsed.args, session.dir, TEST_TIMEOUT_MS);
         testResult = { command: detected.testCommand, ok: !!res.ok, summary: summarize(res, detected.testCommand) };
-        log({ type: res.ok ? 'ok' : 'err', title: res.ok ? `Healthcheck: tests en verde (${detected.testCommand})` : `Healthcheck: tests en rojo (${detected.testCommand})`, detail: testResult.summary });
+        log({ type: res.ok ? 'ok' : 'err', title: res.ok ? 'Pruebas en verde' : 'Pruebas en rojo', detail: testResult.summary });
       }
     }
     const health = {
@@ -197,10 +197,10 @@ async function runEnvSetup(session, send, { force = false } = {}) {
       source: detected.source,
       languages: detected.languages,
       detail: !setupOk
-        ? 'El setup del entorno falló: revisa el log antes de pedir cambios de código.'
+        ? 'La preparación del entorno falló: revisa el registro antes de pedir cambios de código.'
         : testResult && !testResult.ok
-          ? 'El entorno se instaló pero los tests no pasan en vacío: el repo llega con tests en rojo.'
-          : 'Entorno listo: setup y tests verificados.',
+          ? 'El entorno se instaló pero las pruebas no pasan: el proyecto llega con pruebas en rojo.'
+          : 'Entorno listo: preparación y pruebas verificadas.',
     };
     session.envHealth = health;
     return health;

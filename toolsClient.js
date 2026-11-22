@@ -85,7 +85,8 @@ const TAVILY_URL = 'https://api.tavily.com/search';
 async function webSearch({ query, topic = 'general', maxResults = 5, onStep, signal }) {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) {
-    const err = new Error('Falta TAVILY_API_KEY. Consigue una gratis en tavily.com y agrégala en las variables de entorno del servidor.');
+    console.error('[baro] falta TAVILY_API_KEY en las variables de entorno del servidor');
+    const err = new Error('La búsqueda web no está configurada en el servidor.');
     err.status = 503;
     throw err;
   }
@@ -107,8 +108,8 @@ async function webSearch({ query, topic = 'general', maxResults = 5, onStep, sig
   }, signal);
 
   if (!resp.ok) {
-    let message = `Error ${resp.status} de Tavily`;
-    try { message = (await resp.json()).error || message; } catch {}
+    let message = 'La búsqueda web no respondió. Inténtalo de nuevo.';
+    try { const remote = (await resp.json()).error; if (remote) console.error('[baro] error de búsqueda web:', remote); } catch {}
     const err = new Error(message);
     err.status = resp.status;
     throw err;
@@ -152,7 +153,7 @@ async function wikipediaLookup({ query, lang = 'es', onStep, signal }) {
 
   const searchUrl = `https://${safeLang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=1&origin=*`;
   const searchResp = await fetchWithTimeout(searchUrl, { headers: { 'User-Agent': 'Baro/2.0' } }, signal);
-  if (!searchResp.ok) throw new Error(`Error ${searchResp.status} buscando en Wikipedia`);
+  if (!searchResp.ok) throw new Error('No se pudo buscar en la enciclopedia. Inténtalo de nuevo.');
   const searchData = await searchResp.json();
   const hit = searchData.query?.search?.[0];
 
@@ -166,7 +167,7 @@ async function wikipediaLookup({ query, lang = 'es', onStep, signal }) {
   const title = encodeURIComponent(hit.title.replace(/ /g, '_'));
   const summaryUrl = `https://${safeLang}.wikipedia.org/api/rest_v1/page/summary/${title}`;
   const summaryResp = await fetchWithTimeout(summaryUrl, { headers: { 'User-Agent': 'Baro/2.0' } }, signal);
-  if (!summaryResp.ok) throw new Error(`Error ${summaryResp.status} obteniendo resumen de Wikipedia`);
+  if (!summaryResp.ok) throw new Error('No se pudo leer el artículo de la enciclopedia. Inténtalo de nuevo.');
   const summary = await summaryResp.json();
 
   const result = {
@@ -250,9 +251,8 @@ async function submitSeedanceClip({ apiKey, prompt, durationSec, referenceImageU
   }, signal);
 
   if (!resp.ok) {
-    let message = `Error ${resp.status} de Seedance/BytePlus`;
-    try { message = (await resp.json()).error?.message || message; } catch {}
-    const err = new Error(message);
+    try { const remote = (await resp.json()).error?.message; if (remote) console.error('[baro] error del servicio de video:', remote); } catch {}
+    const err = new Error('El servicio de video no respondió. Inténtalo de nuevo.');
     err.status = resp.status;
     throw err;
   }
@@ -269,7 +269,7 @@ async function pollSeedanceTask({ apiKey, taskId, onStep, clipIndex, signal }) {
     const resp = await fetchWithTimeout(`${BYTEPLUS_BASE}/contents/generations/tasks/${taskId}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     }, signal);
-    if (!resp.ok) throw new Error(`Error ${resp.status} consultando estado del video`);
+    if (!resp.ok) throw new Error('No se pudo consultar el estado del video. Inténtalo de nuevo.');
     const data = await resp.json();
 
     if (data.status === 'succeeded') {
@@ -277,7 +277,8 @@ async function pollSeedanceTask({ apiKey, taskId, onStep, clipIndex, signal }) {
       return data.content?.video_url;
     }
     if (data.status === 'failed') {
-      throw new Error(data.error?.message || 'La generación de video falló en el proveedor.');
+      if (data.error?.message) console.error('[baro] error del servicio de video:', data.error.message);
+      throw new Error('La generación de video falló. Inténtalo de nuevo.');
     }
 
     onStep?.({ type: 'video_clip_progress', clipIndex, status: data.status || 'processing' });
@@ -296,7 +297,8 @@ async function pollSeedanceTask({ apiKey, taskId, onStep, clipIndex, signal }) {
 async function generateVideo({ prompt, durationSec = 15, referenceImageUrl = null, onStep, signal }) {
   const apiKey = process.env.BYTEPLUS_API_KEY;
   if (!apiKey) {
-    const err = new Error('Falta BYTEPLUS_API_KEY. Consigue una key de Volcengine/BytePlus ModelArk (servicio de pago, no hay tier gratis real para video con IA) y agrégala en las variables de entorno del servidor.');
+    console.error('[baro] falta BYTEPLUS_API_KEY en las variables de entorno del servidor');
+    const err = new Error('La generación de video no está configurada en el servidor.');
     err.status = 503;
     throw err;
   }
@@ -372,9 +374,9 @@ async function editImage({ imageUrl, instruction, onStep, signal }) {
   // la petición (200) antes de devolver la URL al usuario.
   try {
     const head = await fetchWithTimeout(outputImage, { method: 'HEAD' }, signal);
-    if (!head.ok) throw new Error(`Pollinations devolvió HTTP ${head.status}`);
+    if (!head.ok) throw new Error('El servicio de imágenes no respondió.');
   } catch (e) {
-    const err = new Error(`No se pudo editar la imagen: ${e.message}`);
+    const err = new Error('No se pudo editar la imagen. Inténtalo de nuevo.');
     err.status = 503;
     throw err;
   }
@@ -468,9 +470,10 @@ async function generateImage({ prompt, width, height, onStep, signal }) {
 async function deepResearch({ topic, generateText, onStep, maxAngles = 5, signal }) {
   const clean = String(topic || '').trim();
   if (!clean) throw new Error('Falta el tema a investigar.');
-  if (typeof generateText !== 'function') throw new Error('deepResearch necesita generateText (IA).');
+  if (typeof generateText !== 'function') throw new Error('La investigación profunda no está disponible ahora mismo.');
   if (!process.env.TAVILY_API_KEY) {
-    const err = new Error('Falta TAVILY_API_KEY. Consigue una gratis en tavily.com y agrégala en las variables de entorno del servidor.');
+    console.error('[baro] falta TAVILY_API_KEY en las variables de entorno del servidor');
+    const err = new Error('La investigación profunda no está configurada en el servidor.');
     err.status = 503;
     throw err;
   }
@@ -704,7 +707,7 @@ async function generateDocument({ kind, title, brief, sessionId, sessionDir, gen
   if (!def) throw new Error(`Tipo de documento desconocido: ${kind}`);
   const cleanTitle = String(title || 'Sin título').trim();
   if (!cleanTitle) throw new Error('Falta el título del documento.');
-  if (typeof generateText !== 'function') throw new Error('generateDocument necesita generateText (IA).');
+  if (typeof generateText !== 'function') throw new Error('La creación de documentos no está disponible ahora mismo.');
 
   onStep?.({ type: 'doc_start', kind, title: cleanTitle });
   onStep?.({ type: 'doc_content', detail: 'redactando contenido con IA' });

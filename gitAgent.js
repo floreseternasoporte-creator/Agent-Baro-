@@ -237,7 +237,7 @@ async function applyUnifiedDiff(dir, diffText) {
     return [{
       path: null,
       applied: false,
-      reason: `El bloque no contiene un diff unified válido: ${error.message}`,
+      reason: 'El cambio no tiene un formato válido. Revisa el formato e inténtalo de nuevo.',
     }];
   }
   patches = patches.filter((patch) => patch.oldFileName || patch.newFileName);
@@ -247,7 +247,7 @@ async function applyUnifiedDiff(dir, diffText) {
     return [{
       path: null,
       applied: false,
-      reason: 'El bloque no contiene un diff unified válido. Usa las líneas ---/+++/@@ y no incluyas texto fuera del bloque.',
+      reason: 'El cambio no tiene un formato válido. Revisa el formato e inténtalo de nuevo.',
     }];
   }
 
@@ -255,7 +255,7 @@ async function applyUnifiedDiff(dir, diffText) {
     const patch = patches[patchIndex];
     const targetPath = patchTargetPath(patch);
     if (!targetPath) {
-      results.push({ path: null, applied: false, reason: 'No se pudo determinar el archivo del diff' });
+      results.push({ path: null, applied: false, reason: 'No se pudo determinar el archivo del cambio' });
       continue;
     }
 
@@ -263,9 +263,9 @@ async function applyUnifiedDiff(dir, diffText) {
     try {
       abs = safeResolve(dir, targetPath);
     } catch {
-      // Un path fuera del workspace rechaza SOLO este parche;
+      // Un path fuera del proyecto rechaza SOLO este parche;
       // nunca debe tumbar el turno completo del chat.
-      results.push({ path: targetPath, applied: false, reason: 'Ruta fuera del workspace no permitida' });
+      results.push({ path: targetPath, applied: false, reason: 'Ruta fuera del proyecto no permitida' });
       continue;
     }
     let original = '';
