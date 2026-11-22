@@ -21,6 +21,7 @@ const { extractToolCommands } = require('./toolCommands');
 const { BARO_TOOLS, toolCallToCommand } = require('./toolsCatalog');
 const fileTools = require('./fileTools');
 const { runSubagent, normalizeKind } = require('./subagent');
+const skills = require('./skills');
 const tools = require('./toolsClient');
 const { runComputerTask } = require('./computerTask');
 const { loadAgentsInstructions } = require('./agentsMd');
@@ -1167,6 +1168,27 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
     threadsStore.appendToThread(session.ownerUid, threadId, [{ role: 'me', text: message }]);
   }
 
+  // C2 (Lote 2): skills — guías de trabajo en .baro/skills/.
+  // "/nombre" activa una guía por nombre; si el mensaje viene solo
+  // con el nombre, la guía trae su tarea por defecto. Va DESPUÉS de
+  // guardar el mensaje en el hilo, para que el hilo conserve lo que
+  // el usuario escribió tal cual.
+  const allSkills = skills.loadSkills([
+    skills.defaultSkillsDir(),
+    skills.globalSkillsDir(),
+    skills.sessionSkillsDir(session.dir),
+  ]);
+  let activeSkills = [];
+  const skillInvocation = skills.parseSkillInvocation(message);
+  if (skillInvocation) {
+    const invoked = skills.findSkill(allSkills, skillInvocation.name);
+    if (invoked) {
+      activeSkills = [invoked];
+      message = skillInvocation.rest || invoked.defaultTask || message;
+      send('log', { type: 'info', title: `Siguiendo tu guía de ${invoked.label}` });
+    }
+  }
+
   const planSteps = [
     { id: 'analizar', label: 'Analizar la petición', status: 'active' },
     { id: 'actuar', label: 'Ejecutar y editar', status: 'pending' },
@@ -1323,6 +1345,22 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
     }
     if (agentsInstructions.text) {
       systemPrompt += `\n\n## INSTRUCCIONES DEL PROYECTO (AGENTS.md)\nArchivos cargados: ${agentsInstructions.files.join(', ')}\n\n${agentsInstructions.text}`;
+    }
+
+    // C2: las guías disponibles se anuncian en el prompt; la activa
+    // (por /nombre o por relevancia con el mensaje) se inyecta
+    // completa. La relevancia solo se calcula si no hubo invocación.
+    if (!activeSkills.length) {
+      activeSkills = skills.matchSkills(allSkills, message);
+      if (activeSkills.length) {
+        send('log', { type: 'info', title: `Siguiendo tu guía de ${activeSkills.map((s) => s.label).join(' y ')}` });
+      }
+    }
+    if (allSkills.length) {
+      systemPrompt += `\n\n## GUÍAS DE TRABAJO DISPONIBLES\n${skills.skillDescriptions(allSkills)}\nCuando el usuario pida algo que encaje con una de estas guías, sigue sus pasos.`;
+    }
+    for (const skill of activeSkills) {
+      systemPrompt += `\n\n## GUÍA ACTIVA: ${skill.name}\n${skill.body}`;
     }
 
     // Contexto largo estilo Astra: si el historial creció demasiado,
