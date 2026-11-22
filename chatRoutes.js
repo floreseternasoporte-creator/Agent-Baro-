@@ -242,7 +242,7 @@ async function reviewDiffWithAI(diffBlock, generateTextFn) {
     return {
       approved: false,
       unclear: true,
-      reason: 'Auto-review sin veredicto claro: no aplicado automáticamente',
+      reason: 'Revisión sin veredicto claro: no aplicado automáticamente',
     };
   }
   return { approved: m[1].toUpperCase().startsWith('S'), reason };
@@ -257,33 +257,33 @@ async function reviewDiffWithAI(diffBlock, generateTextFn) {
  */
 async function processDiffBlock({ diffBlock, session, send, signal, autoAppliedPaths, appliedDiffs }) {
   const results = [];
-  send('log', { type: 'run', title: 'Revisando cambio antes de aplicarlo…' });
-  let review = { approved: false, unclear: true, reason: 'Auto-review sin veredicto claro: no aplicado automáticamente' };
+  send('log', { type: 'run', title: 'Revisando el cambio antes de aplicarlo…' });
+  let review = { approved: false, unclear: true, reason: 'Revisión sin veredicto claro: no aplicado automáticamente' };
   try {
     review = await reviewDiffWithAI(diffBlock, (p) => generateText(p, signal));
   } catch (e) {
     review = {
       approved: false,
       unclear: true,
-      reason: `Auto-review sin veredicto claro: no aplicado automáticamente (revisor no disponible: ${e.message})`,
+      reason: `Revisión sin veredicto claro: no aplicado automáticamente (revisor no disponible: ${e.message})`,
     };
   }
   if (!review.approved) {
     if (review.unclear) {
       send('log', {
         type: 'info',
-        title: 'Auto-review sin veredicto claro: no aplicado automáticamente',
+        title: 'Revisión sin veredicto claro: no aplicado automáticamente',
         detail: review.reason,
       });
-      session.addLog({ type: 'info', title: 'Diff no auto-aplicado por auto-review incierto', detail: review.reason });
-      results.push(`### Diff NO auto-aplicado por revisión incierta\n${review.reason}. El diff queda disponible como propuesta normal para aplicación manual; no afirmes que fue aplicado.\n\`\`\`diff\n${diffBlock.trim().slice(0, 2000)}\n\`\`\``);
+      session.addLog({ type: 'info', title: 'Cambio no aplicado por revisión sin veredicto claro', detail: review.reason });
+      results.push(`### Cambio NO aplicado por revisión sin veredicto claro\n${review.reason}. El cambio queda disponible como propuesta para aplicarlo cuando quieras; no afirmes que fue aplicado.\n\`\`\`diff\n${diffBlock.trim().slice(0, 2000)}\n\`\`\``);
       appliedDiffs.push({ diff: diffBlock.trim(), applied: false, paths: [], reason: review.reason, alreadyApplied: false });
       return results;
     }
-    const reason = `Rechazado por revisión automática: ${review.reason}`;
-    send('log', { type: 'err', title: 'Cambio rechazado por el revisor', detail: review.reason });
-    session.addLog({ type: 'err', title: 'Diff rechazado por auto-review', detail: review.reason });
-    results.push(`### Diff RECHAZADO por el revisor (NO aplicado)\n${reason}\nCorrige el diff y vuelve a intentarlo.\n\`\`\`diff\n${diffBlock.trim().slice(0, 2000)}\n\`\`\``);
+    const reason = `Rechazado en la revisión: ${review.reason}`;
+    send('log', { type: 'err', title: 'Cambio rechazado en la revisión', detail: review.reason });
+    session.addLog({ type: 'err', title: 'Cambio rechazado en la revisión', detail: review.reason });
+    results.push(`### Cambio RECHAZADO en la revisión (NO aplicado)\n${reason}\nCorrige el cambio y vuelve a intentarlo.\n\`\`\`diff\n${diffBlock.trim().slice(0, 2000)}\n\`\`\``);
     appliedDiffs.push({ diff: diffBlock.trim(), applied: false, paths: [], reason, alreadyApplied: false });
     return results;
   }
@@ -298,8 +298,8 @@ async function processDiffBlock({ diffBlock, session, send, signal, autoAppliedP
   });
   for (const item of applied) {
     const event = item.applied
-      ? { type: 'ok', title: `Cambio aplicado automáticamente: ${item.path}`, detail: `${item.bytes} bytes escritos y listos para verificar` }
-      : { type: item.alreadyApplied ? 'info' : 'err', title: item.alreadyApplied ? `Cambio ya aplicado: ${item.path}` : `Cambio no aplicado: ${item.path || 'diff'}`, detail: item.reason };
+      ? { type: 'ok', title: `Cambio aplicado: ${item.path}`, detail: 'Archivo guardado y listo para comprobar' }
+      : { type: item.alreadyApplied ? 'info' : 'err', title: item.alreadyApplied ? `Cambio ya aplicado: ${item.path}` : `Cambio no aplicado: ${item.path || '(sin archivo)'}`, detail: item.reason };
     send('log', event);
     send('computer', { mode: 'files', action: item.applied ? 'write' : 'write_failed', path: item.path, bytes: item.bytes, text: item.reason });
     session.addLog(event);
@@ -341,19 +341,19 @@ async function ensureTaskBranch(session, send, taskTitle) {
     session.taskBranch = created.branch;
     session.branch = created.branch;
     session.taskBranchAttempted = false;
-    send('log', { type: 'info', title: `Rama de tarea creada: ${created.branch}`, detail: 'El trabajo de este turno va en su propia rama; main queda intacto hasta que abras el PR' });
+    send('log', { type: 'info', title: 'Trabajo guardado por separado', detail: 'Tus cambios de este turno quedan aparte hasta que decidas subirlos' });
     const token = session.githubToken || process.env.GITHUB_TOKEN;
     const parsed = git.parseRepoUrl(`https://github.com/${session.repoFullName}`);
     if (token && parsed) {
       try {
         await git.pushBranch({ dir: session.dir, branch: created.branch, token, owner: parsed.owner, repo: parsed.repo });
       } catch (e) {
-        send('log', { type: 'info', title: 'Rama creada solo en local (sin push inicial)', detail: e.message });
+        send('log', { type: 'info', title: 'Cambios guardados solo en este equipo por ahora' });
       }
     }
     return created.branch;
   } catch (e) {
-    send('log', { type: 'info', title: 'No se pudo crear la rama de tarea', detail: `${e.message} — el trabajo continúa en la rama actual` });
+    send('log', { type: 'info', title: 'No se pudo separar el trabajo', detail: 'Sigo con tus cambios en su lugar actual' });
     return null;
   }
 }
@@ -435,18 +435,18 @@ async function runAutoTests(session, send) {
     send('log', {
       type: 'info',
       title: 'Sin verificación automática disponible',
-      detail: 'No se detectó script test de npm, configuración/tests de pytest, go.mod ni Cargo.toml.',
+      detail: 'No encontré pruebas automáticas en este proyecto.',
     });
     session.addLog({
       type: 'info',
-      title: 'Auto-test no disponible',
-      detail: 'Sin runner detectable (npm/pytest/go/cargo)',
+      title: 'Sin pruebas automáticas',
+      detail: 'No se detectaron pruebas en este proyecto',
     });
     return null;
   }
 
   try {
-    send('log', { type: 'run', title: `Verificación automática: ejecutando ${runner.label}…` });
+    send('log', { type: 'run', title: 'Comprobando que todo funciona…' });
     const res = await runCommand(runner.binary, runner.args, session.dir, 120000);
     const out = truncateCommandOutput(res.stdout || res.stderr || res.error || '(sin salida)');
     const summary = out.slice(0, 300);
@@ -455,18 +455,18 @@ async function runAutoTests(session, send) {
       title: res.ok ? 'Verificación: tests pasaron' : 'Verificación: tests fallaron',
       detail: summary,
     });
-    send('verify', { ok: !!res.ok, runner: runner.label, summary });
+    send('verify', { ok: !!res.ok, summary });
     session.addLog({
       type: res.ok ? 'ok' : 'err',
-      title: `Auto-test ${runner.label}`,
+      title: 'Comprobación automática',
       detail: summary,
     });
-    return `### Verificación automática (${runner.label}): ${res.ok ? '✅ PASARON' : '❌ FALLARON'}\n\`\`\`\n${out.slice(0, 3000)}\n\`\`\`${res.ok ? '' : '\nCorrige los fallos con otro diff exacto y vuelve a verificar.'}`;
+    return `### Verificación automática: ${res.ok ? '✅ PASARON' : '❌ FALLARON'}\n\`\`\`\n${out.slice(0, 3000)}\n\`\`\`${res.ok ? '' : '\nCorrige los fallos con otro cambio exacto y vuelve a verificar.'}`;
   } catch (e) {
     const summary = String(e.message || e).slice(0, 300);
     send('log', { type: 'err', title: 'Verificación automática falló al ejecutarse', detail: summary });
-    send('verify', { ok: false, runner: runner.label, summary });
-    return `### Verificación automática (${runner.label}): ❌ NO SE PUDO EJECUTAR\n${summary}`;
+    send('verify', { ok: false, summary });
+    return `### Verificación automática: ❌ NO SE PUDO EJECUTAR\n${summary}`;
   }
 }
 
@@ -735,7 +735,7 @@ async function reviewCodeReadOnly({ session, focus, generateTextFn }) {
     .replace(/```diff[\s\S]*?```/gi, '[bloque diff omitido: la revisión es de solo lectura]')
     .trim();
   return [
-    `**Alcance:** ${statusLines.length} archivo(s) con cambios contra HEAD.`,
+    `**Alcance:** ${statusLines.length} archivo(s) con cambios por revisar.`,
     focus ? `**Foco:** ${focus}` : '',
     '',
     cleanReview,
@@ -771,17 +771,19 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
         else send('computer', { mode: 'browser', action: 'search_done', count: 0 });
         break;
       case 'video_start':
-        send('log', { type: 'run', title: `Generando video (${step.targetSeconds}s)`, detail: `${step.remainingToday} video(s) restantes hoy` });
+        send('log', { type: 'run', title: `Generando video (${step.targetSeconds}s)` });
         send('computer', { mode: 'terminal', action: 'run', command: `generar-video --duracion ${step.targetSeconds}s` });
         break;
       case 'video_clip_start':
         send('log', { type: 'run', title: `Clip ${step.clipIndex}: generando ${step.clipDuration}s` });
         send('computer', { mode: 'terminal', action: 'output', text: `[clip ${step.clipIndex}] generando ${step.clipDuration}s…`, ok: true });
         break;
-      case 'video_clip_progress':
-        send('log', { type: 'info', title: `Clip ${step.clipIndex}: ${step.status}` });
-        send('computer', { mode: 'terminal', action: 'output', text: `[clip ${step.clipIndex}] estado: ${step.status}`, ok: true });
+      case 'video_clip_progress': {
+        const statusEs = { queued: 'en cola', processing: 'procesando', succeeded: 'listo', failed: 'falló' }[step.status] || 'procesando';
+        send('log', { type: 'info', title: `Clip ${step.clipIndex}: ${statusEs}` });
+        send('computer', { mode: 'terminal', action: 'output', text: `[clip ${step.clipIndex}] estado: ${statusEs}`, ok: true });
         break;
+      }
       case 'video_clip_ready':
         send('log', { type: 'ok', title: `Clip ${step.clipIndex} listo`, detail: step.url });
         send('computer', { mode: 'terminal', action: 'output', text: `[clip ${step.clipIndex}] listo → ${step.url}`, ok: true });
@@ -838,7 +840,7 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
       return null;
     }
     if (command.tool === 'code-review') {
-      send('log', { type: 'run', title: 'Revisando código (solo lectura)…', detail: command.focus || 'cambios contra HEAD' });
+      send('log', { type: 'run', title: 'Revisando código (solo lectura)…', detail: command.focus || 'tus últimos cambios' });
       send('computer', { mode: 'terminal', action: 'run', command: 'code-review --read-only' });
       const review = await reviewCodeReadOnly({
         session,
@@ -862,7 +864,7 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
     if (command.tool === 'video') {
       const result = await tools.generateVideo({ prompt: command.prompt, durationSec: command.durationSec, onStep, signal });
       const clipList = result.clips.map((c) => `- Clip ${c.index} (${c.seconds}s): ${c.url}`).join('\n');
-      return `### Video generado: "${command.prompt}"\nDuración total: ${result.totalSeconds}s en ${result.clips.length} clip(s)\n${clipList}\nVideos restantes hoy: ${result.remainingToday}`;
+      return `### Video generado: "${command.prompt}"\nDuración total: ${result.totalSeconds}s en ${result.clips.length} clip(s)\n${clipList}`;
     }
     if (command.tool === 'image') {
       const result = await tools.editImage({ imageUrl: command.imageUrl, instruction: command.instruction, onStep, signal });
@@ -945,11 +947,11 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
       fs.writeFileSync(fullPath, code, 'utf8');
       const bytes = fs.statSync(fullPath).size;
       const rel = `scripts/${name}`;
-      send('log', { type: 'ok', title: `Script creado: ${name}`, detail: `${code.split('\n').length} lineas · ${Math.round(bytes / 1024)} KB` });
+      send('log', { type: 'ok', title: `Script creado: ${name}`, detail: `${code.split('\n').length} líneas · ${bytes < 1024 ? `${bytes} bytes` : `${Math.round(bytes / 1024)} KB`}` });
       send('computer', { mode: 'files', action: 'write', path: rel, bytes });
       session.addLog?.({ type: 'ok', title: `Script creado: ${name}`, detail: rel });
       const downloadUrl = `/api/files/download?sessionId=${encodeURIComponent(session.id)}&file=${encodeURIComponent(rel)}`;
-      return `### Script creado: \`${name}\`\n${command.brief ? `_${command.brief}_\n` : ''}\n[Descargar ${name}](${downloadUrl}) — tambien quedo guardado en el workspace y listo para ejecutar.`;
+      return `### Script creado: \`${name}\`\n${command.brief ? `_${command.brief}_\n` : ''}\n[Descargar ${name}](${downloadUrl}) — también quedó guardado y listo para ejecutar.`;
     }
     if (command.tool === 'run') {
       // Ejecuta: determinista (del usuario o del modelo): corre por la
@@ -958,17 +960,17 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
       // general guarda los scripts en scripts/.
       const parsed = extractAutomaticCommands(`Ejecuta: ${command.commandLine}`);
       if (!parsed.length) {
-        return `### Ejecuta\nNo se pudo interpretar el comando: "${command.commandLine}". Formato: \`Ejecuta: python3 scripts/archivo.py\`.`;
+        return `### Ejecutar\nNo se pudo interpretar el comando: "${command.commandLine}". Formato: \`Ejecuta: <comando>\`.`;
       }
       const blocks = [];
       for (const cmd of parsed) {
-        send('log', { type: 'run', title: `Ejecutando: ${cmd.display}` });
+        send('log', { type: 'run', title: 'Ejecutando…' });
         send('computer', { mode: 'terminal', action: 'run', command: cmd.display });
         const r = await runCommand(cmd.binary, cmd.args, session.dir);
         const out = truncateCommandOutput(r.stdout || r.stderr || r.error || '');
-        send('log', { type: r.ok ? 'ok' : 'err', title: r.ok ? `Completado: ${cmd.display}` : `Falló: ${cmd.display}`, detail: out });
+        send('log', { type: r.ok ? 'ok' : 'err', title: r.ok ? 'Completado' : 'Falló', detail: out });
         send('computer', { mode: 'terminal', action: 'output', text: out || (r.ok ? '(sin salida)' : 'error'), ok: r.ok });
-        session.addLog?.({ type: r.ok ? 'ok' : 'err', title: `Ejecuta: ${cmd.display}`, detail: out });
+        session.addLog?.({ type: r.ok ? 'ok' : 'err', title: 'Ejecutar', detail: out });
         blocks.push(commandResultForModel(cmd, r));
       }
       return blocks.join('\n\n');
@@ -1002,8 +1004,8 @@ async function runToolCommand(command, send, session, signal, sourceText = '') {
       return `### Investigación profunda: "${command.topic}"\n\n${result.report}\n\n### Fuentes\n${sourceList}`;
     }
   } catch (e) {
-    send('log', { type: 'err', title: `Error en herramienta (${command.tool})`, detail: e.message });
-    return `### Error ejecutando herramienta "${command.tool}"\n${e.message}`;
+    send('log', { type: 'err', title: 'No se pudo completar esa acción', detail: e.message });
+    return `### Error ejecutando la acción\n${e.message}`;
   }
   return '';
 }
@@ -1012,7 +1014,7 @@ function summarizeDiffResults(results) {
   return results.map((result) => {
     if (typeof result === 'string') return result; // bloque de rechazo del revisor, ya formateado
     const state = result.applied
-      ? `aplicado automáticamente (${result.bytes} bytes)`
+      ? 'aplicado'
       : result.alreadyApplied
       ? 'ya estaba aplicado'
       : `no aplicado: ${result.reason}`;
@@ -1020,10 +1022,17 @@ function summarizeDiffResults(results) {
   }).join('\n');
 }
 
-// Mensaje de error para el cliente: corto y sin rutas ni claves internas.
+// Mensaje de error para el cliente: corto y en lenguaje normal, sin
+// nombres de claves, proveedores, rutas ni códigos internos. El detalle
+// técnico queda en el log del servidor para quien lo administra.
 function friendlyError(e) {
-  const msg = e && e.message ? String(e.message) : 'Algo salió mal.';
-  return msg.slice(0, 500);
+  const msg = e && e.message ? String(e.message) : '';
+  if (msg) console.error('[baro] error del turno:', msg);
+  if (/API_KEY|_KEY|clave/i.test(msg)) return 'Una función no está configurada en el servidor.';
+  if (/ECONNREFUSED|127\.0\.0\.1|localhost|11434/i.test(msg)) return 'El servicio local no responde. Inténtalo de nuevo en un momento.';
+  if (/HTTP \d+|status \d+|\b503\b|\b429\b|\b500\b/i.test(msg)) return 'El servicio no respondió. Inténtalo de nuevo en un momento.';
+  if (msg && msg.length < 200 && !/[A-Z_]{4,}/.test(msg)) return msg.slice(0, 200);
+  return 'Algo salió mal al generar la respuesta. Inténtalo de nuevo.';
 }
 
 // runChatTurn — el cuerpo del turno, separado del transporte (v10 H2).
@@ -1060,8 +1069,8 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
 
   if (typeof message !== 'string' || !message.trim()) {
     send('log', { type: 'err', title: 'Mensaje inválido', detail: 'Falta el texto del mensaje' });
-    send('error', { error: 'Falta el mensaje: envía un texto no vacío en el campo "message".' });
-    return { status: 'failed', error: 'Falta el mensaje: envía un texto no vacío en el campo "message".' };
+    send('error', { error: 'Falta el mensaje: escribe algo antes de enviar.' });
+    return { status: 'failed', error: 'Falta el mensaje: escribe algo antes de enviar.' };
   }
   message = message.trim();
 
@@ -1116,8 +1125,8 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
     if (isPlanMode) {
       send('log', {
         type: 'info',
-        title: 'Modo plan activo: no se aplicarán diffs ni se ejecutarán comandos',
-        detail: 'Solo lectura, búsqueda y revisión; el backend bloquea cualquier escritura.',
+        title: 'Modo plan activo: solo preparo el plan, sin cambiar nada',
+        detail: 'Reviso y te propongo; no toco tus archivos hasta que lo apruebes.',
       });
     }
     let enrichedMessage = message;
@@ -1189,7 +1198,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
            enrichedMessage = `${message}\n\n## Perfil estructural del repositorio\n${profile}\n\n## Manifiestos y documentación principal (contenido real)\n${manifestContext || '(no se encontraron manifiestos principales)'}\n\n## Archivos del repositorio (contenido real leido de disco)\n${ctx}\n\n## Instruccion critica\nUsa el codigo de arriba. Este contenido es la version mas reciente leida directamente del disco y tiene prioridad sobre cualquier archivo, diff o suposicion de mensajes anteriores. Genera diffs unified-format exactos y quirurgicos solo contra esta version. Los cambios seguros se aplican y se verifican automáticamente; no le pidas al usuario que copie, aplique o ejecute nada.`;
         }
       } else {
-        send('log', { type: 'info', title: 'Contexto general del repo', detail: `${allFiles.length} archivos` });
+        send('log', { type: 'info', title: 'Resumen del proyecto', detail: `${allFiles.length} archivos` });
         enrichedMessage = `${message}\n\n## Estructura del repositorio\n\`\`\`\n${allFiles.slice(0, 100).join('\n')}\n\`\`\`\n\nSi necesitas ver un archivo especifico, dime su nombre o mencionalo con @.`;
       }
     }
@@ -1202,12 +1211,12 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
       if (agentsInstructions.text) {
         send('log', {
           type: 'info',
-          title: 'AGENTS.md cargado',
-          detail: agentsInstructions.files.join(', '),
+          title: 'Reglas del proyecto cargadas',
+          detail: 'Se aplican las reglas de tu proyecto',
         });
       }
     } catch (e) {
-      send('log', { type: 'info', title: 'No se pudo cargar AGENTS.md', detail: e.message });
+      send('log', { type: 'info', title: 'No se pudieron cargar las reglas del proyecto', detail: e.message });
     }
 
     // H6: si el entorno del repo ya se preparó (o falló), el turno
@@ -1259,7 +1268,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
       { role: 'user', content: enrichedMessage },
     ];
 
-    send('log', { type: 'run', title: 'Generando respuesta...', detail: 'buscando proveedor disponible' });
+    send('log', { type: 'run', title: 'Generando respuesta...' });
 
     // NOTA DE RENDIMIENTO: antes cada evento 'delta' llevaba el TEXTO
     // COMPLETO acumulado (O(n²) de red por respuesta). Ahora solo viaja
@@ -1279,7 +1288,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
     let result = firstTurn.text;
     let pendingToolCalls = Array.isArray(firstTurn.toolCalls) ? firstTurn.toolCalls : [];
     if (firstTurn.toolsSupported === false) {
-      send('log', { type: 'info', title: 'Acciones directas no disponibles aquí', detail: 'Usando el formato de texto como respaldo' });
+      send('log', { type: 'info', title: 'Voy a responder con texto' });
     } else if (pendingToolCalls.length) {
       send('log', { type: 'info', title: 'Ejecutando acciones…' });
     }
@@ -1319,11 +1328,10 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
         else preRestIdx.push(i);
       });
       for (const i of preBlockedIdx) {
-        const toolName = userToolCommands[i].tool;
         send('log', {
           type: 'info',
           title: 'Modo plan: acción no ejecutada',
-          detail: 'Solo se permiten herramientas de lectura y búsqueda',
+          detail: 'En modo plan solo miro y busco, no creo ni cambio nada.',
         });
         preToolTexts[i] = `### Acción no ejecutada por modo plan\nEsta acción genera o modifica contenido. En modo plan solo uso lectura, búsqueda y revisión; no se ejecutó nada.`;
       }
@@ -1343,7 +1351,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
         // paralelo.
         const needsOrder = preRestIdx.some((i) => ['script', 'run'].includes(userToolCommands[i].tool));
         if (!needsOrder && isMultiAgent && preRestIdx.length > 1) {
-          send('log', { type: 'info', title: `Modo multi-agente: ${preRestIdx.length} acciones en paralelo` });
+          send('log', { type: 'info', title: `Haciendo ${preRestIdx.length} cosas a la vez` });
         }
         if (needsOrder) {
           for (const i of preRestIdx) {
@@ -1390,7 +1398,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
     // Ejecutor de comandos automáticos, usado igual por la vía de
     // texto ("Ejecuta:") y por la tool nativa run_command.
     const executeAutomaticCommand = async (command) => {
-      const title = `Ejecutando automáticamente: ${command.display}`;
+      const title = 'Ejecutando…';
       send('log', { type: 'run', title });
       send('computer', { mode: 'terminal', action: 'run', command: command.display });
       session.addLog({ type: 'run', title });
@@ -1399,7 +1407,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
       const output = truncateCommandOutput(commandResult.stdout || commandResult.stderr || commandResult.error);
       const logEntry = {
         type: commandResult.ok ? 'ok' : 'err',
-        title: commandResult.ok ? `Completado: ${command.display}` : `Falló: ${command.display}`,
+        title: commandResult.ok ? 'Completado' : 'Falló',
         detail: output,
       };
       send('log', logEntry);
@@ -1428,18 +1436,18 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
           if (!diffKey || seenDiffs.has(diffKey)) continue;
           seenDiffs.add(diffKey);
           if (isPlanMode) {
-            send('log', { type: 'info', title: 'Modo plan: diff no aplicado automáticamente', detail: 'El backend bloquea la escritura hasta salir del modo plan' });
-            out.diffResults.push(`### Diff NO aplicado por modo plan\nEl diff queda solo como propuesta para revisión manual; el backend no escribió ningún archivo.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
-            appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: 'Modo plan activo: aplicación bloqueada por el backend', alreadyApplied: false });
+            send('log', { type: 'info', title: 'Modo plan: cambio no aplicado todavía', detail: 'En modo plan no cambio archivos; sal del modo plan para aplicar.' });
+            out.diffResults.push(`### Cambio NO aplicado por modo plan\nEl cambio queda solo como propuesta para revisión; no se escribió ningún archivo.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
+            appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: 'Modo plan activo: sin cambios todavía', alreadyApplied: false });
             continue;
           }
           if (!session.repoFullName) {
-            out.diffResults.push('### Diff sin repositorio conectado\nLa herramienta apply_diff necesita un repositorio clonado en esta sesión.');
+            out.diffResults.push('### Cambio sin proyecto conectado\nPara aplicar cambios necesito un proyecto conectado en esta sesión.');
             continue;
           }
           if (!autoApply) {
-            out.diffResults.push(`### Diff propuesto (auto-apply desactivado)\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
-            appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: 'autoApply desactivado', alreadyApplied: false });
+            out.diffResults.push(`### Cambio propuesto (aplicación automática desactivada)\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
+            appliedDiffs.push({ diff: diffKey, applied: false, paths: [], reason: 'Aplicación automática desactivada', alreadyApplied: false });
             continue;
           }
           await ensureTaskBranch(session, send, message);
@@ -1451,8 +1459,8 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
         if (seenToolCommands.has(key)) continue;
         seenToolCommands.add(key);
         if (isPlanMode && !PLAN_MODE_READ_ONLY_TOOLS.has(command.tool)) {
-          send('log', { type: 'info', title: 'Modo plan: acción no ejecutada', detail: 'Solo se permiten herramientas de lectura y búsqueda' });
-          out.toolResults.push(`### Herramienta no ejecutada por modo plan\nLa herramienta "${command.tool}" genera o modifica contenido. En modo plan Baro solo usa lectura, búsqueda y revisión de código; no se ejecutó ninguna acción.`);
+          send('log', { type: 'info', title: 'Modo plan: acción no ejecutada', detail: 'En modo plan solo miro y busco, no creo ni cambio nada.' });
+          out.toolResults.push(`### Acción no ejecutada por modo plan\nEsta acción crea o modifica contenido. En modo plan solo uso lectura, búsqueda y revisión; no se ejecutó ninguna acción.`);
           continue;
         }
         if (command.tool === 'computer') {
@@ -1463,7 +1471,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
         if (command.tool === 'run') {
           const parsed = extractAutomaticCommands(`Ejecuta: ${command.commandLine}`);
           if (!parsed.length) {
-            out.commandResults.push(`### Ejecuta\nNo se pudo interpretar el comando: "${command.commandLine}".`);
+            out.commandResults.push(`### Ejecutar\nNo se pudo interpretar el comando: "${command.commandLine}".`);
             continue;
           }
           for (const cmd of parsed.slice(0, MAX_COMMANDS_PER_ROUND)) {
@@ -1512,15 +1520,15 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
           seenDiffs.add(diffKey);
           send('log', {
             type: 'info',
-            title: 'Modo plan: diff no aplicado automáticamente',
-            detail: 'El backend bloquea la escritura hasta salir del modo plan',
+            title: 'Modo plan: cambio no aplicado todavía',
+            detail: 'En modo plan no cambio archivos; sal del modo plan para aplicar.',
           });
-          diffResults.push(`### Diff NO aplicado por modo plan\nEl diff queda solo como propuesta para revisión manual; el backend no escribió ningún archivo.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
+          diffResults.push(`### Cambio NO aplicado por modo plan\nEl cambio queda solo como propuesta para revisión; no se escribió ningún archivo.\n\`\`\`diff\n${diffKey.slice(0, 2000)}\n\`\`\``);
           appliedDiffs.push({
             diff: diffKey,
             applied: false,
             paths: [],
-            reason: 'Modo plan activo: aplicación bloqueada por el backend',
+            reason: 'Modo plan activo: sin cambios todavía',
             alreadyApplied: false,
           });
         }
@@ -1573,20 +1581,19 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
         else restIdx.push(i);
       });
       for (const i of blockedToolIdx) {
-        const toolName = requestedTools[i].tool;
         send('log', {
           type: 'info',
           title: 'Modo plan: acción no ejecutada',
-          detail: 'Solo se permiten herramientas de lectura y búsqueda',
+          detail: 'En modo plan solo miro y busco, no creo ni cambio nada.',
         });
-        roundToolTexts[i] = `### Acción no ejecutada por modo plan\nEsta acción genera o modifica contenido y quedó bloqueada.`;
+        roundToolTexts[i] = `### Acción no ejecutada por modo plan\nEsta acción crea o modifica contenido y quedó bloqueada.`;
       }
       for (const i of computerIdx) {
         roundToolTexts[i] = await runToolCommand(requestedTools[i], send, session, signal, result);
       }
       if (restIdx.length) {
         if (isMultiAgent && restIdx.length > 1) {
-          send('log', { type: 'info', title: `Modo multi-agente: ${restIdx.length} acciones en paralelo` });
+          send('log', { type: 'info', title: `Haciendo ${restIdx.length} cosas a la vez` });
         }
         const rest = await Promise.all(
           restIdx.map((i) => runToolCommand(requestedTools[i], send, session, signal, result))
@@ -1602,17 +1609,17 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
         send('log', {
           type: 'info',
           title: `Modo plan: ${commands.length} comando(s) no ejecutado(s)`,
-          detail: 'El backend bloquea Ejecuta: en modo plan',
+          detail: 'En modo plan no ejecuto comandos',
         });
         commandResults.push([
           '## Comandos NO ejecutados por modo plan',
-          ...commands.map((command) => `- ${command.display}: bloqueado por el backend (modo plan)`),
+          ...commands.map((command) => `- ${command.display}: no ejecutado en modo plan`),
         ].join('\n'));
         executableCommands = [];
       }
 
       if (isMultiAgent && executableCommands.length > 1) {
-        send('log', { type: 'info', title: `Modo multi-agente: ${executableCommands.length} acciones en paralelo` });
+        send('log', { type: 'info', title: `Haciendo ${executableCommands.length} cosas a la vez` });
         commandResults.push(...await Promise.all(executableCommands.map(executeAutomaticCommand)));
       } else {
         for (const command of executableCommands) {
@@ -1677,7 +1684,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
 
     const diffBlocks = git.extractDiffBlocks(result);
     sendPlan(null, true);
-    send('log', { type: 'ok', title: 'Completado', detail: diffBlocks.length ? `${diffBlocks.length} diff(s) propuesto(s)` : undefined });
+    send('log', { type: 'ok', title: 'Completado', detail: diffBlocks.length ? `${diffBlocks.length} cambio(s) propuesto(s)` : undefined });
     // diffCount cuenta también los diffs aplicados por tool nativa
     // (apply_diff no deja bloque ```diff en el texto visible).
     const donePayload = { text: result, diffCount: Math.max(diffBlocks.length, appliedDiffs.length), autoAppliedPaths, appliedDiffs, threadId };
@@ -1689,9 +1696,9 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
       send('done', { text: '', aborted: true });
       return { status: job && job.cancelRequested ? 'cancelled' : 'failed', aborted: true };
     }
-    send('log', { type: 'err', title: 'Error', detail: e.message });
-    send('error', { error: e.message });
-    return { status: 'failed', error: e.message };
+    send('log', { type: 'err', title: 'Error', detail: friendlyError(e) });
+    send('error', { error: friendlyError(e) });
+    return { status: 'failed', error: friendlyError(e) };
   }
 }
 
