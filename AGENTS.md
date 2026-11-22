@@ -87,6 +87,47 @@ lista blanca, verifica con tests y hace push a GitHub.
   escribir código. `agentsMd.js: buildAgentsMdSkeleton` ya genera
   esas secciones. Setup con timeout 10 min, siempre por la lista
   blanca de `commandRunner.js`.
+  **v11 (Lote 2 Claude Code, serie de commits locales v11):**
+  **C17 herramientas nativas de archivo:** `fileTools.js` (leer por
+  líneas, buscar por patrón, listar por glob, diff de reemplazo
+  exacto con texto único) + 4 tools en el catálogo (`read_file`,
+  `search_files`, `list_files`, `edit_file`, 19 en total) con sus
+  líneas de texto (`Leer archivo:`, `Buscar en archivos:`, `Listar
+  archivos:`, `Editar archivo:`). `edit_file` devuelve kind `edit`
+  y pasa por la misma revisión que `apply_diff` (`applyEditDiff` en
+  `chatRoutes.js`: plan-mode, proyecto, autoApply, rama de tarea,
+  auto-review). Lectura/búsqueda/listado son de solo lectura en
+  modo plan.
+  **C1 subagentes reales:** `subagent.js` — `runSubagent` con contexto
+  propio por kind (explore/review/general), 6 rondas y timeout de
+  120 s; allowlist de solo lectura (las 3 de archivo + `search_web`
+  y `lookup_wikipedia`): cualquier intento de escribir se le niega.
+  Tool nativa `delegate_task` + línea `Delegar:` (de solo lectura
+  en modo plan). Corre dentro del turno principal: sobrevive a la
+  desconexión (H2) y se cancela con él (el abort del padre se
+  propaga; el timeout y los fallos del proveedor son un resultado
+  honesto, no una muerte del turno). El generador se inyecta
+  (`streamToolsFn`) para no crear un require circular.
+  **C2 skills:** `skills.js` + `.baro/skills/<nombre>/SKILL.md`
+  (frontmatter: name, description, when, label, defaultTask).
+  Fuentes en orden de prioridad: `.baro/skills/` del repo,
+  `~/.baro/skills/` del usuario, `.baro/skills/` del proyecto.
+  Integradas: revisar, verificar, documentar. El turno inyecta
+  las descripciones en el prompt siempre y el cuerpo completo solo
+  de la activa: por invocación `/nombre` (con tarea por defecto si
+  viene solo) o por relevancia con el mensaje (umbral 3, máx. 2).
+  **C3 MCP:** `mcpClient.js` (JSON-RPC 2.0 por stdio NDJSON sin
+  shell y por HTTP JSON/SSE, sin OAuth, timeout por petición) +
+  `mcp.js` (lee y valida `.mcp.json` del workspace — ver
+  `.mcp.json.example`—, descubre tools y las expone como nativas
+  `mcp_<servidor>_<tool>`; un servidor caído no tumba el turno;
+  caché en la sesión 5 min). Despacho antes del traductor nativo,
+  bloqueado en modo plan; la cabecera visible usa el nombre
+  original de la herramienta, nunca el prefijo `mcp_`.
+  **REGLA DE UI (Lote 2):** nada de esto asoma en la vista del
+  usuario con nombres internos (subagente, skill, MCP, tool,
+  Read/Grep/Glob/Edit, proveedor/modelo, tokens, contexto): logs
+  y textos visibles solo en lenguaje normal.
 - **Firebase (validación de sesiones):** toda la API exige un token
   Firebase válido (`authMiddleware.js` + `firebaseTokenVerifier.js`,
   que verifica la firma RS256 contra las claves públicas de Google

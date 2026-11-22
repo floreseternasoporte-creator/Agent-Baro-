@@ -1382,7 +1382,7 @@ async function runChatTurn({ session, input, send: sendEvent, signal, job }) {
       send('log', { type: 'info', title: 'No se pudo leer la configuración de conexiones externas', detail: e.message });
     }
     if (mcpTools.length) {
-      systemPrompt += `\n\n## HERRAMIENTAS EXTERNAS CONECTADAS\nTambién tienes estas herramientas externas (nombres que empiezan por mcp_): úsalas con sus argumentos JSON como cualquier otra herramienta nativa.\n${mcpTools.map((t) => `- ${t.function.name}: ${t.function.description}`).join('\n')}`;
+      systemPrompt += `\n\n## HERRAMIENTAS EXTERNAS CONECTADAS\nTambién tienes estas herramientas externas: úsalas con sus argumentos JSON como cualquier otra herramienta nativa.\n${mcpTools.map((t) => `- ${t.function.name}: ${t.function.description}`).join('\n')}\nEn tu respuesta no menciones los nombres internos de estas herramientas (los que empiezan por mcp_): habla de lo que hacen con palabras normales.`;
     }
 
     // Contexto largo estilo Astra: si el historial creció demasiado,
